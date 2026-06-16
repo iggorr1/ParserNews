@@ -159,6 +159,9 @@ The UI shows source and status breakdowns. Use `Signals only` to hide rows
 where no positive or negative keyword matched.
 Use `Saved events` to view persisted detected events from the database.
 Use `Historical only` with `Saved events` to focus on imported old articles.
+Saved events also include manual review controls. You can correct the target
+ticker, mark whether the event is a valid deal or a false positive, and save a
+short note for later rule tuning.
 
 Score can still be `0` for real articles. That means the article was read,
 but none of the configured acquisition, take-private, offering, bankruptcy,
@@ -220,6 +223,7 @@ Ready now:
 - filter debt tender false positives such as Senior Notes or bonds
 - store news sources, raw articles, and detected events
 - expose persisted events at `GET /api/events`
+- manually validate saved events in the UI
 - run with PostgreSQL using the `db` profile and Docker Compose
 - use default public RSS feeds from GlobeNewswire and PR Newswire
 - print console alerts
@@ -253,7 +257,21 @@ GET /api/events
 GET /api/events?status=WATCHLIST
 GET /api/events?type=ACQUISITION
 GET /api/events?sourceType=HISTORICAL
+PATCH /api/events/{id}/review
 ```
+
+Review payload:
+
+```json
+{
+  "targetTicker": "OPEN",
+  "validationStatus": "VALID_DEAL",
+  "reviewNotes": "Confirmed public-company cash merger."
+}
+```
+
+Validation statuses are `UNREVIEWED`, `VALID_DEAL`, `FALSE_POSITIVE`,
+`NOT_PUBLIC_COMPANY`, and `TOO_LATE`.
 
 Current schema is created by JPA:
 

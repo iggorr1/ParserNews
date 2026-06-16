@@ -31,6 +31,9 @@ import java.util.regex.Pattern;
 public class RssNewsParser implements NewsSourceParser {
     private static final Pattern HTML_TAG = Pattern.compile("<[^>]+>");
     private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    private static final Pattern EXCHANGE_TICKER = Pattern.compile(
+            "(?i)(?:NYSE\\s+American|NYSEAMERICAN|NASDAQ|NYSE|AMEX|OTCQB|OTCQX|OTC|OTCMKTS|TSX|TSXV)\\s*:\\s*([A-Z][A-Z0-9.-]{0,9})"
+    );
 
     private final RssSettings settings;
     private final HttpClient httpClient;
@@ -127,10 +130,11 @@ public class RssNewsParser implements NewsSourceParser {
             String link = cleanText(textOfFirst(item, "link", feedUrl));
             Instant publishedAt = parsePublishedAt(textOfFirst(item, "pubDate", ""));
             String companyName = guessCompanyName(headline);
+            String ticker = guessTicker(headline + " " + body);
 
             if (!headline.isBlank()) {
                 events.add(new NewsEvent(
-                        "UNKNOWN",
+                        ticker,
                         companyName,
                         headline,
                         body,
@@ -202,5 +206,13 @@ public class RssNewsParser implements NewsSourceParser {
             return trimmed.substring(0, entersIndex).trim();
         }
         return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80).trim();
+    }
+
+    private String guessTicker(String text) {
+        java.util.regex.Matcher matcher = EXCHANGE_TICKER.matcher(text);
+        if (matcher.find()) {
+            return matcher.group(1).replace(".", "-").toUpperCase(Locale.ROOT);
+        }
+        return "UNKNOWN";
     }
 }

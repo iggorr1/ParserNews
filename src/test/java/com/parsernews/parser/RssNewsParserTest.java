@@ -48,8 +48,59 @@ class RssNewsParserTest {
         assertThat(events).hasSize(1);
         assertThat(events.getFirst().source()).isEqualTo("Test Feed");
         assertThat(events.getFirst().headline()).isEqualTo("Example Corp Enters Definitive Merger Agreement");
+        assertThat(events.getFirst().ticker()).isEqualTo("UNKNOWN");
         assertThat(events.getFirst().body()).contains("per share in cash");
         assertThat(events.getFirst().sourceUrl()).isEqualTo("https://example.com/news/1");
+    }
+
+    @Test
+    void extractsTickerFromExchangeLabel() {
+        RssNewsParser parser = new RssNewsParser(
+                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10),
+                new StubHttpClient("""
+                        <?xml version="1.0" encoding="utf-8"?>
+                        <rss version="2.0">
+                          <channel>
+                            <title>Test Feed</title>
+                            <item>
+                              <title>Open Lending Enters Into Merger Agreement</title>
+                              <link>https://example.com/news/open</link>
+                              <description>Open Lending Corporation (NYSE American: OPEN) will be acquired for cash.</description>
+                            </item>
+                          </channel>
+                        </rss>
+                        """)
+        );
+
+        List<NewsEvent> events = parser.readNews();
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().ticker()).isEqualTo("OPEN");
+    }
+
+    @Test
+    void doesNotTreatExchangeNameAsTickerWithoutColon() {
+        RssNewsParser parser = new RssNewsParser(
+                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10),
+                new StubHttpClient("""
+                        <?xml version="1.0" encoding="utf-8"?>
+                        <rss version="2.0">
+                          <channel>
+                            <title>Test Feed</title>
+                            <item>
+                              <title>Company Receives Notice from Nasdaq Regarding Listing Rule</title>
+                              <link>https://example.com/news/listing</link>
+                              <description>No ticker label is present in this article.</description>
+                            </item>
+                          </channel>
+                        </rss>
+                        """)
+        );
+
+        List<NewsEvent> events = parser.readNews();
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().ticker()).isEqualTo("UNKNOWN");
     }
 
     @Test

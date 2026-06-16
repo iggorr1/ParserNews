@@ -208,6 +208,21 @@
             color: var(--muted);
         }
 
+        .review-cell {
+            min-width: 260px;
+        }
+
+        .review-cell input,
+        .review-cell select {
+            width: 100%;
+            min-width: 0;
+            margin-bottom: 6px;
+        }
+
+        .review-cell button {
+            height: 30px;
+        }
+
         .status {
             font-weight: 700;
             white-space: nowrap;
@@ -302,6 +317,8 @@
                 <th>Source</th>
                 <th>Positive</th>
                 <th>Negative</th>
+                <th>Validation</th>
+                <th>Review</th>
                 <th>Expected</th>
                 <th>Link</th>
             </tr>
@@ -377,6 +394,9 @@
             score: item.confidenceScore,
             matchedPositiveKeywords: splitKeywords(item.matchedPositiveKeywords),
             matchedNegativeKeywords: splitKeywords(item.matchedNegativeKeywords),
+            validationStatus: item.validationStatus,
+            reviewNotes: item.reviewNotes,
+            id: item.id,
             expectedEventType: "",
             expectedStatus: "",
             matchesExpected: null,
@@ -466,6 +486,7 @@
         const expected = item.expectedEventType || item.expectedStatus
             ? `${escapeText(item.expectedEventType || "")} ${escapeText(item.expectedStatus || "")}`
             : "";
+        const review = item.id ? reviewTemplate(item) : "";
         return `
             <tr>
                 <td class="status ${escapeText(item.status)}">${escapeText(item.status)}</td>
@@ -477,11 +498,55 @@
                 <td>${escapeText(item.source)}</td>
                 <td class="keywords">${escapeText((item.matchedPositiveKeywords || []).join(", "))}</td>
                 <td class="keywords">${escapeText((item.matchedNegativeKeywords || []).join(", "))}</td>
+                <td>${escapeText(item.validationStatus || "")}</td>
+                <td class="review-cell">${review}</td>
                 <td>${expected}</td>
                 <td><a href="${escapeAttr(item.sourceUrl)}" target="_blank" rel="noreferrer">Open</a></td>
             </tr>
         `;
     }
+
+    function reviewTemplate(item) {
+        const id = escapeAttr(item.id);
+        return `
+            <input data-review-ticker="${id}" value="${escapeAttr(item.ticker)}" placeholder="Ticker">
+            <select data-review-status="${id}">
+                ${validationOption("UNREVIEWED", item.validationStatus)}
+                ${validationOption("VALID_DEAL", item.validationStatus)}
+                ${validationOption("FALSE_POSITIVE", item.validationStatus)}
+                ${validationOption("NOT_PUBLIC_COMPANY", item.validationStatus)}
+                ${validationOption("TOO_LATE", item.validationStatus)}
+            </select>
+            <input data-review-notes="${id}" value="${escapeAttr(item.reviewNotes)}" placeholder="Notes">
+            <button type="button" data-review-save="${id}">Save</button>
+        `;
+    }
+
+    function validationOption(value, current) {
+        const selected = value === current ? " selected" : "";
+        return `<option value="${escapeAttr(value)}"${selected}>${escapeText(value)}</option>`;
+    }
+
+    rows.addEventListener("click", async event => {
+        const button = event.target.closest("[data-review-save]");
+        if (!button) {
+            return;
+        }
+        const id = button.dataset.reviewSave;
+        button.disabled = true;
+        button.textContent = "Saving";
+        const payload = {
+            targetTicker: document.querySelector(`[data-review-ticker="${CSS.escape(id)}"]`).value,
+            validationStatus: document.querySelector(`[data-review-status="${CSS.escape(id)}"]`).value,
+            reviewNotes: document.querySelector(`[data-review-notes="${CSS.escape(id)}"]`).value
+        };
+        await fetch(`/api/events/${encodeURIComponent(id)}/review`, {
+            method: "PATCH",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(payload)
+        });
+        await loadReport();
+    });
 
     function escapeText(value) {
         return String(value ?? "")

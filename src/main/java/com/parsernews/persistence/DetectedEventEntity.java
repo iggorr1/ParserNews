@@ -33,6 +33,9 @@ public class DetectedEventEntity {
     @Column(nullable = false)
     private ReviewStatus reviewStatus;
 
+    @Enumerated(EnumType.STRING)
+    private ValidationStatus validationStatus = ValidationStatus.UNREVIEWED;
+
     @Column(nullable = false)
     private int confidenceScore;
 
@@ -60,6 +63,9 @@ public class DetectedEventEntity {
 
     @Column(length = 4096)
     private String explanation;
+
+    @Column(length = 2048)
+    private String reviewNotes;
 
     @Column(nullable = false)
     private Instant detectedAt = Instant.now();
@@ -107,6 +113,10 @@ public class DetectedEventEntity {
         return reviewStatus;
     }
 
+    public ValidationStatus getValidationStatus() {
+        return validationStatus == null ? ValidationStatus.UNREVIEWED : validationStatus;
+    }
+
     public int getConfidenceScore() {
         return confidenceScore;
     }
@@ -151,7 +161,24 @@ public class DetectedEventEntity {
         return explanation;
     }
 
+    public String getReviewNotes() {
+        return reviewNotes;
+    }
+
     public Instant getDetectedAt() {
         return detectedAt;
+    }
+
+    public void updateReview(String targetTicker, ValidationStatus validationStatus, String reviewNotes) {
+        this.targetTicker = normalizeBlank(targetTicker);
+        this.validationStatus = validationStatus == null ? ValidationStatus.UNREVIEWED : validationStatus;
+        this.reviewNotes = normalizeBlank(reviewNotes);
+    }
+
+    private String normalizeBlank(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

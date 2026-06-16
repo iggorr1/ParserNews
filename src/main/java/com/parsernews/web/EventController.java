@@ -5,10 +5,16 @@ import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
+import com.parsernews.persistence.ValidationStatus;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.util.List;
@@ -36,11 +42,21 @@ public class EventController {
                 .toList();
     }
 
+    @PatchMapping("/api/events/{id}/review")
+    @Transactional
+    public EventResponse updateReview(@PathVariable Long id, @RequestBody EventReviewRequest request) {
+        DetectedEventEntity event = eventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Event not found"));
+        event.updateReview(request.targetTicker(), request.validationStatus(), request.reviewNotes());
+        return EventResponse.from(event);
+    }
+
     public record EventResponse(
             Long id,
             DetectedEventType eventType,
             ReviewStatus reviewStatus,
             int confidenceScore,
+            ValidationStatus validationStatus,
             String targetCompany,
             String targetTicker,
             String headline,
@@ -52,7 +68,8 @@ public class EventController {
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String falsePositiveReasons,
-            String explanation
+            String explanation,
+            String reviewNotes
     ) {
         static EventResponse from(DetectedEventEntity event) {
             return new EventResponse(
@@ -60,6 +77,7 @@ public class EventController {
                     event.getEventType(),
                     event.getReviewStatus(),
                     event.getConfidenceScore(),
+                    event.getValidationStatus(),
                     event.getTargetCompany(),
                     event.getTargetTicker(),
                     event.getArticle().getHeadline(),
@@ -71,8 +89,16 @@ public class EventController {
                     event.getMatchedPositiveKeywords(),
                     event.getMatchedNegativeKeywords(),
                     event.getFalsePositiveReasons(),
-                    event.getExplanation()
+                    event.getExplanation(),
+                    event.getReviewNotes()
             );
         }
+    }
+
+    public record EventReviewRequest(
+            String targetTicker,
+            ValidationStatus validationStatus,
+            String reviewNotes
+    ) {
     }
 }
