@@ -173,7 +173,7 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            min-width: 1120px;
+            min-width: 1460px;
         }
 
         th,
@@ -232,6 +232,10 @@
             color: var(--danger);
         }
 
+        .HIGH_PRIORITY_SIGNAL {
+            color: #7a1f1f;
+        }
+
         .MANUAL_REVIEW {
             color: var(--warn);
         }
@@ -281,6 +285,7 @@
         <input id="search" type="search" placeholder="Search ticker, company, headline, source">
         <select id="status">
             <option value="">All statuses</option>
+            <option value="HIGH_PRIORITY_SIGNAL">High priority</option>
             <option value="IMPORTANT">Important</option>
             <option value="MANUAL_REVIEW">Manual review</option>
             <option value="WATCHLIST">Watchlist</option>
@@ -314,6 +319,10 @@
                 <th>Company</th>
                 <th>Headline</th>
                 <th>Type</th>
+                <th>Offer</th>
+                <th>Payment</th>
+                <th>Premium</th>
+                <th>Buyer</th>
                 <th>Source</th>
                 <th>Positive</th>
                 <th>Negative</th>
@@ -392,6 +401,10 @@
             eventType: item.eventType,
             status: item.reviewStatus,
             score: item.confidenceScore,
+            offerPrice: item.offerPrice,
+            cashOrStock: item.cashOrStock,
+            acquirer: item.acquirer,
+            premiumPercent: item.premiumPercent,
             matchedPositiveKeywords: splitKeywords(item.matchedPositiveKeywords),
             matchedNegativeKeywords: splitKeywords(item.matchedNegativeKeywords),
             validationStatus: item.validationStatus,
@@ -464,7 +477,11 @@
                 item.companyName,
                 item.headline,
                 item.source,
-                item.eventType
+                item.eventType,
+                item.offerPrice,
+                item.cashOrStock,
+                item.acquirer,
+                item.premiumPercent
             ].join(" ").toLowerCase();
             const statusOk = !status || item.status === status;
             const queryOk = !query || haystack.includes(query);
@@ -495,6 +512,10 @@
                 <td>${escapeText(item.companyName)}</td>
                 <td class="headline">${escapeText(item.headline)}</td>
                 <td>${escapeText(item.eventType)}</td>
+                <td>${escapeText(item.offerPrice)}</td>
+                <td>${escapeText(item.cashOrStock)}</td>
+                <td>${escapeText(item.premiumPercent)}</td>
+                <td>${escapeText(item.acquirer)}</td>
                 <td>${escapeText(item.source)}</td>
                 <td class="keywords">${escapeText((item.matchedPositiveKeywords || []).join(", "))}</td>
                 <td class="keywords">${escapeText((item.matchedNegativeKeywords || []).join(", "))}</td>

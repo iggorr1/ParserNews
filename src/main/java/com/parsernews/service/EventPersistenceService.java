@@ -79,7 +79,11 @@ public class EventPersistenceService {
                 mapReviewStatus(analysisResult.status()),
                 analysisResult.score(),
                 newsEvent.companyName(),
-                newsEvent.ticker(),
+                bestValue(analysisResult.targetTicker(), newsEvent.ticker()),
+                analysisResult.acquirer(),
+                analysisResult.offerPrice(),
+                analysisResult.cashOrStock(),
+                analysisResult.premiumPercent(),
                 join(analysisResult.matchedPositiveKeywords()),
                 join(analysisResult.matchedNegativeKeywords()),
                 join(falsePositiveFilter.reasons(newsEvent.fullText())),
@@ -131,6 +135,13 @@ public class EventPersistenceService {
 
     private String join(List<String> values) {
         return String.join("|", values);
+    }
+
+    private String bestValue(String extractedValue, String fallback) {
+        if (extractedValue != null && !extractedValue.isBlank()) {
+            return extractedValue;
+        }
+        return fallback;
     }
 
     private String sha256(String value) {

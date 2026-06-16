@@ -97,7 +97,8 @@ To print only more serious alerts to console while still exporting all rows:
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.news-file=file:data/historical-news.json --scanner.console-min-status=WATCHLIST"
 ```
 
-Allowed console status filters are `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, and `IMPORTANT`.
+Allowed console status filters are `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`,
+`IMPORTANT`, and `HIGH_PRIORITY_SIGNAL`.
 
 ## Run Public RSS Feed
 
@@ -182,6 +183,11 @@ False positives such as Senior Notes, bond tender offers, asset acquisitions,
 brand acquisitions, reverse mergers, financings, and public offerings stay
 ignored for takeover-opportunity purposes.
 
+`HIGH_PRIORITY_SIGNAL` is reserved for confirmed shareholder-deal language where
+the scanner can also extract stronger terms such as offer price plus cash
+consideration or a stated premium. The scanner does not yet calculate premium
+from live market prices; for now it only stores the premium stated in the article.
+
 Use custom HTTPS RSS feeds:
 
 ```powershell
@@ -224,6 +230,7 @@ Ready now:
 - store news sources, raw articles, and detected events
 - expose persisted events at `GET /api/events`
 - manually validate saved events in the UI
+- extract deal terms such as offer price, payment type, buyer, ticker, and stated premium
 - run with PostgreSQL using the `db` profile and Docker Compose
 - use default public RSS feeds from GlobeNewswire and PR Newswire
 - print console alerts

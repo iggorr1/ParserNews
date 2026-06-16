@@ -4,5 +4,6 @@ public enum ReviewStatus {
     IGNORED,
     WATCHLIST,
     MANUAL_REVIEW,
-    IMPORTANT
+    IMPORTANT,
+    HIGH_PRIORITY_SIGNAL
 }

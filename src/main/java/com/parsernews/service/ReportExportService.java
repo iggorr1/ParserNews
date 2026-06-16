@@ -67,6 +67,10 @@ public class ReportExportService {
                     "eventType",
                     "status",
                     "score",
+                    "offerPrice",
+                    "cashOrStock",
+                    "acquirer",
+                    "premiumPercent",
                     "expectedEventType",
                     "expectedStatus",
                     "matchesExpected",
@@ -102,6 +106,10 @@ public class ReportExportService {
         joiner.add(csv(result.eventType()));
         joiner.add(csv(result.status()));
         joiner.add(csv(result.score()));
+        joiner.add(csv(result.offerPrice()));
+        joiner.add(csv(result.cashOrStock()));
+        joiner.add(csv(result.acquirer()));
+        joiner.add(csv(result.premiumPercent()));
         joiner.add(csv(result.expectedEventType()));
         joiner.add(csv(result.expectedStatus()));
         joiner.add(csv(result.matchesExpected()));

@@ -26,14 +26,15 @@ public class DetectedEventEntity {
     private NewsArticleEntity article;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 64, columnDefinition = "varchar(64)")
     private DetectedEventType eventType;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, length = 64, columnDefinition = "varchar(64)")
     private ReviewStatus reviewStatus;
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 64, columnDefinition = "varchar(64)")
     private ValidationStatus validationStatus = ValidationStatus.UNREVIEWED;
 
     @Column(nullable = false)
@@ -51,6 +52,8 @@ public class DetectedEventEntity {
     private String transactionValue;
 
     private String cashOrStock;
+
+    private String premiumPercent;
 
     @Column(length = 2048)
     private String matchedPositiveKeywords;
@@ -80,6 +83,10 @@ public class DetectedEventEntity {
             int confidenceScore,
             String targetCompany,
             String targetTicker,
+            String acquirer,
+            String offerPrice,
+            String cashOrStock,
+            String premiumPercent,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String falsePositiveReasons,
@@ -91,6 +98,10 @@ public class DetectedEventEntity {
         this.confidenceScore = confidenceScore;
         this.targetCompany = targetCompany;
         this.targetTicker = targetTicker;
+        this.acquirer = acquirer;
+        this.offerPrice = offerPrice;
+        this.cashOrStock = cashOrStock;
+        this.premiumPercent = premiumPercent;
         this.matchedPositiveKeywords = matchedPositiveKeywords;
         this.matchedNegativeKeywords = matchedNegativeKeywords;
         this.falsePositiveReasons = falsePositiveReasons;
@@ -143,6 +154,10 @@ public class DetectedEventEntity {
 
     public String getCashOrStock() {
         return cashOrStock;
+    }
+
+    public String getPremiumPercent() {
+        return premiumPercent;
     }
 
     public String getMatchedPositiveKeywords() {

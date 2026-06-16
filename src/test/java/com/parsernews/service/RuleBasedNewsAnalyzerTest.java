@@ -17,7 +17,7 @@ class RuleBasedNewsAnalyzerTest {
     );
 
     @Test
-    void marksConfirmedTakePrivateCashDealAsImportant() {
+    void marksConfirmedTakePrivateCashDealAsHighPrioritySignal() {
         AnalysisResult result = analyzer.analyze(news(
                 "Company Enters Definitive Merger Agreement to Be Acquired by Private Equity Buyer",
                 "Shareholders will receive $10.00 per share in cash in an all-cash transaction. " +
@@ -25,7 +25,7 @@ class RuleBasedNewsAnalyzerTest {
         ));
 
         assertThat(result.eventType()).isEqualTo(EventType.TAKE_PRIVATE_CONFIRMED);
-        assertThat(result.status()).isEqualTo(EventStatus.IMPORTANT);
+        assertThat(result.status()).isEqualTo(EventStatus.HIGH_PRIORITY_SIGNAL);
         assertThat(result.score()).isGreaterThanOrEqualTo(76);
         assertThat(result.matchedPositiveKeywords())
                 .contains("definitive merger agreement", "per share in cash", "all-cash transaction");
@@ -124,10 +124,30 @@ class RuleBasedNewsAnalyzerTest {
         ));
 
         assertThat(result.eventType()).isEqualTo(EventType.CONFIRMED_DEAL);
-        assertThat(result.status()).isEqualTo(EventStatus.IMPORTANT);
+        assertThat(result.status()).isEqualTo(EventStatus.HIGH_PRIORITY_SIGNAL);
         assertThat(result.score()).isGreaterThan(0);
+        assertThat(result.offerPrice()).isEqualTo("$4.00");
+        assertThat(result.cashOrStock()).isEqualTo("CASH");
+        assertThat(result.acquirer()).isEqualTo("Buyer Corp");
+        assertThat(result.premiumPercent()).isEqualTo("35%");
         assertThat(result.matchedPositiveKeywords())
                 .contains("definitive agreement", "to be acquired by", "per share in cash", "premium of");
+    }
+
+    @Test
+    void extractsDealTermsFromConfirmedCashTakeover() {
+        AnalysisResult result = analyzer.analyze(news(
+                "Target Corp to be Acquired by Northstar Capital",
+                "Target Corp (NASDAQ: TGTX) entered into a definitive merger agreement. " +
+                        "Shareholders will receive $3.15 per share in cash, representing a premium of 44.5%."
+        ));
+
+        assertThat(result.status()).isEqualTo(EventStatus.HIGH_PRIORITY_SIGNAL);
+        assertThat(result.targetTicker()).isEqualTo("TGTX");
+        assertThat(result.offerPrice()).isEqualTo("$3.15");
+        assertThat(result.cashOrStock()).isEqualTo("CASH");
+        assertThat(result.acquirer()).isEqualTo("Northstar Capital");
+        assertThat(result.premiumPercent()).isEqualTo("44.5%");
     }
 
     @Test

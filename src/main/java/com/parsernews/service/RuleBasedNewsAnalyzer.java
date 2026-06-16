@@ -15,9 +15,27 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 public class RuleBasedNewsAnalyzer {
+    private static final Pattern EXCHANGE_TICKER = Pattern.compile(
+            "(?i)(?:NYSE\\s+American|NYSEAMERICAN|NASDAQ|NYSE|AMEX|OTCQB|OTCQX|OTC|OTCMKTS|TSX|TSXV)\\s*:\\s*([A-Z][A-Z0-9.-]{0,9})"
+    );
+    private static final Pattern OFFER_PRICE = Pattern.compile(
+            "(?i)(?:\\$|US\\$)\\s*([0-9]+(?:\\.[0-9]+)?)\\s*(?:per share|per common share)"
+    );
+    private static final Pattern PREMIUM_PERCENT = Pattern.compile(
+            "(?i)premium of\\s+([0-9]+(?:\\.[0-9]+)?)\\s*%"
+    );
+    private static final Pattern ACQUIRER_BY = Pattern.compile(
+            "(?i)\\b(?:to be|will be) acquired by\\s+([^,.]+?)(?=\\s+(?:for|in|under|at|through|shareholders|stockholders|will receive)\\b|[,.]|$)"
+    );
+    private static final Pattern ACQUIRER_AGREEMENT_WITH = Pattern.compile(
+            "(?i)\\b(?:definitive agreement|merger agreement)\\s+with\\s+([^,.]+?)(?=\\s+(?:for|in|under|at|through|shareholders|stockholders|will receive)\\b|[,.]|$)"
+    );
+
     private final AnalyzerRules rules;
     private final AnalyzerSettings settings;
     private final FalsePositiveFilter falsePositiveFilter;
@@ -81,10 +99,23 @@ public class RuleBasedNewsAnalyzer {
         if (!confirmedDealCandidate && isBroadMnaOnly(eventType)) {
             score = Math.min(score, 0);
         }
-        EventStatus status = determineStatus(score, confirmedDealCandidate);
-        String reason = buildReason(eventType, status, positives, negatives);
+        DealTerms dealTerms = extractDealTerms(event);
+        EventStatus status = determineStatus(score, confirmedDealCandidate, dealTerms);
+        String reason = buildReason(eventType, status, positives, negatives, dealTerms);
 
-        return new AnalysisResult(eventType, status, score, positives, negatives, reason);
+        return new AnalysisResult(
+                eventType,
+                status,
+                score,
+                dealTerms.targetTicker(),
+                dealTerms.offerPrice(),
+                dealTerms.cashOrStock(),
+                dealTerms.acquirer(),
+                dealTerms.premiumPercent(),
+                positives,
+                negatives,
+                reason
+        );
     }
 
     private String normalize(String keyword) {
@@ -232,7 +263,7 @@ public class RuleBasedNewsAnalyzer {
         return false;
     }
 
-    private EventStatus determineStatus(int score, boolean confirmedDealCandidate) {
+    private EventStatus determineStatus(int score, boolean confirmedDealCandidate, DealTerms dealTerms) {
         if (!confirmedDealCandidate) {
             return EventStatus.IGNORED;
         }
@@ -241,6 +272,9 @@ public class RuleBasedNewsAnalyzer {
         int manualReviewThreshold = threshold(settings.manualReviewThresholdOverride(), thresholds.manualReview());
         int watchlistThreshold = threshold(settings.watchlistThresholdOverride(), thresholds.watchlist());
 
+        if (score >= manualReviewThreshold && isHighPrioritySignal(dealTerms)) {
+            return EventStatus.HIGH_PRIORITY_SIGNAL;
+        }
         if (score >= importantThreshold) {
             return EventStatus.IMPORTANT;
         }
@@ -253,15 +287,145 @@ public class RuleBasedNewsAnalyzer {
         return EventStatus.IGNORED;
     }
 
+    private boolean isHighPrioritySignal(DealTerms dealTerms) {
+        boolean hasOfferPrice = dealTerms.offerPrice() != null;
+        boolean hasShareholderPaymentType = "CASH".equals(dealTerms.cashOrStock())
+                || "CASH_AND_STOCK".equals(dealTerms.cashOrStock());
+        boolean hasPremium = dealTerms.premiumPercent() != null;
+        return hasOfferPrice && (hasShareholderPaymentType || hasPremium);
+    }
+
     private int threshold(Integer override, int fallback) {
         return override == null ? fallback : override;
     }
 
-    private String buildReason(EventType eventType, EventStatus status, List<String> positives, List<String> negatives) {
+    private DealTerms extractDealTerms(NewsEvent event) {
+        String text = event.fullText();
+        String lower = text.toLowerCase(Locale.ROOT);
+        return new DealTerms(
+                firstTicker(EXCHANGE_TICKER.matcher(text)),
+                firstMoney(OFFER_PRICE.matcher(text)),
+                cashOrStock(lower),
+                extractAcquirer(event),
+                firstPercent(PREMIUM_PERCENT.matcher(text))
+        );
+    }
+
+    private String extractAcquirer(NewsEvent event) {
+        String fromHeadline = firstGroup(
+                ACQUIRER_BY.matcher(event.headline()),
+                ACQUIRER_AGREEMENT_WITH.matcher(event.headline())
+        );
+        if (fromHeadline != null) {
+            return cleanPartyName(fromHeadline);
+        }
+        String fromFullText = firstGroup(
+                ACQUIRER_BY.matcher(event.fullText()),
+                ACQUIRER_AGREEMENT_WITH.matcher(event.fullText())
+        );
+        return cleanPartyName(fromFullText);
+    }
+
+    private String firstTicker(Matcher matcher) {
+        if (matcher.find()) {
+            return matcher.group(1).replace(".", "-").trim().toUpperCase(Locale.ROOT);
+        }
+        return null;
+    }
+
+    private String firstGroup(Matcher... matchers) {
+        for (Matcher matcher : matchers) {
+            if (matcher.find()) {
+                return matcher.group(1).trim();
+            }
+        }
+        return null;
+    }
+
+    private String firstMoney(Matcher matcher) {
+        if (matcher.find()) {
+            return "$" + matcher.group(1);
+        }
+        return null;
+    }
+
+    private String firstPercent(Matcher matcher) {
+        if (matcher.find()) {
+            return matcher.group(1) + "%";
+        }
+        return null;
+    }
+
+    private String cleanPartyName(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        String cleaned = value.trim()
+                .replaceAll("(?i)\\s+(inc|corp|corporation|llc|ltd)\\s*$", " $1")
+                .replaceAll("\\s+", " ");
+        return cleaned.length() > 120 ? cleaned.substring(0, 120).trim() : cleaned;
+    }
+
+    private String cashOrStock(String text) {
+        boolean cash = text.contains("all-cash")
+                || text.contains("per share in cash")
+                || text.contains("cash consideration")
+                || text.contains("in cash");
+        boolean stock = text.contains("stock consideration")
+                || text.contains("stock-for-stock")
+                || text.contains("shares of")
+                || text.contains("common stock of");
+        if (cash && stock) {
+            return "CASH_AND_STOCK";
+        }
+        if (cash) {
+            return "CASH";
+        }
+        if (stock) {
+            return "STOCK";
+        }
+        return null;
+    }
+
+    private String buildReason(
+            EventType eventType,
+            EventStatus status,
+            List<String> positives,
+            List<String> negatives,
+            DealTerms dealTerms
+    ) {
         if (positives.isEmpty() && negatives.isEmpty()) {
             return "No configured acquisition or risk keywords matched.";
         }
+        String details = dealTerms.summary();
+        String suffix = details.isBlank() ? "" : " Extracted deal terms: " + details + ".";
         return "Classified as " + eventType + " with status " + status
-                + " from " + positives.size() + " positive and " + negatives.size() + " negative keyword matches.";
+                + " from " + positives.size() + " positive and " + negatives.size() + " negative keyword matches."
+                + suffix;
+    }
+
+    private record DealTerms(
+            String targetTicker,
+            String offerPrice,
+            String cashOrStock,
+            String acquirer,
+            String premiumPercent
+    ) {
+        String summary() {
+            List<String> values = new ArrayList<>();
+            if (offerPrice != null) {
+                values.add("offer price " + offerPrice);
+            }
+            if (cashOrStock != null) {
+                values.add("payment " + cashOrStock);
+            }
+            if (acquirer != null) {
+                values.add("buyer " + acquirer);
+            }
+            if (premiumPercent != null) {
+                values.add("premium " + premiumPercent);
+            }
+            return String.join(", ", values);
+        }
     }
 }

@@ -16,6 +16,10 @@ public class AlertService {
         System.out.println("Source: " + event.source());
         System.out.println("Event type: " + result.eventType());
         System.out.println("Score: " + result.score());
+        System.out.println("Offer price: " + valueOrUnknown(result.offerPrice()));
+        System.out.println("Payment: " + valueOrUnknown(result.cashOrStock()));
+        System.out.println("Buyer: " + valueOrUnknown(result.acquirer()));
+        System.out.println("Premium: " + valueOrUnknown(result.premiumPercent()));
         System.out.println("Positive keywords: " + result.matchedPositiveKeywords());
         System.out.println("Negative keywords: " + result.matchedNegativeKeywords());
         System.out.println("Reason: " + result.reason());
@@ -47,5 +51,9 @@ public class AlertService {
         boolean statusMatches = event.expectedStatus() == null
                 || event.expectedStatus() == result.status();
         return eventTypeMatches && statusMatches;
+    }
+
+    private String valueOrUnknown(String value) {
+        return value == null || value.isBlank() ? "UNKNOWN" : value;
     }
 }
