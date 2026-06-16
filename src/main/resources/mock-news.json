@@ -1,0 +1,50 @@
+[
+  {
+    "ticker": "ABCD",
+    "companyName": "ABCD Holdings, Inc.",
+    "headline": "ABCD Holdings Enters Definitive Merger Agreement to Be Acquired by Northstar Capital",
+    "body": "Shareholders will receive $4.25 per share in cash in an all-cash transaction. Following closing, ABCD will become privately held and its stock will no longer be publicly traded.",
+    "source": "Mock PR Newswire",
+    "sourceUrl": "https://example.com/news/abcd-take-private"
+  },
+  {
+    "ticker": "MXYZ",
+    "companyName": "MetroXYZ Corp.",
+    "headline": "MetroXYZ Receives Non-Binding Proposal from Investment Firm",
+    "body": "The board confirmed receipt of a non-binding proposal from an investment firm. Market chatter described the proposal as a possible take private rumor, but no agreement has been signed.",
+    "source": "Mock GlobeNewswire",
+    "sourceUrl": "https://example.com/news/mxyz-proposal"
+  },
+  {
+    "ticker": "TEND",
+    "companyName": "TenderTech Ltd.",
+    "headline": "TenderTech Announces Tender Offer by Apex Partners",
+    "body": "Apex Partners launched a tender offer for all outstanding shares with cash consideration of $8.10 per share.",
+    "source": "Mock Business Wire",
+    "sourceUrl": "https://example.com/news/tend-tender-offer"
+  },
+  {
+    "ticker": "DILU",
+    "companyName": "Dilution Labs Inc.",
+    "headline": "Dilution Labs Announces Registered Direct Offering",
+    "body": "The company announced a registered direct offering. Proceeds will fund working capital and may result in dilution.",
+    "source": "Mock Company News",
+    "sourceUrl": "https://example.com/news/dilu-offering"
+  },
+  {
+    "ticker": "BANK",
+    "companyName": "Bankruptcy Risk Systems",
+    "headline": "Bankruptcy Risk Systems Warns About Going Concern",
+    "body": "The company disclosed going concern risk and is evaluating liquidity options after receiving a delisting notice.",
+    "source": "Mock SEC Feed",
+    "sourceUrl": "https://example.com/news/bank-going-concern"
+  },
+  {
+    "ticker": "ALT",
+    "companyName": "Alternatives Software Group",
+    "headline": "Alternatives Software Group Announces Review of Strategic Alternatives",
+    "body": "The board is reviewing strategic alternatives, including a potential merger, sale, or minority investment.",
+    "source": "Mock GlobeNewswire",
+    "sourceUrl": "https://example.com/news/alt-strategic-alternatives"
+  }
+]

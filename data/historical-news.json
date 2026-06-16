@@ -1,0 +1,35 @@
+[
+  {
+    "ticker": "HIST1",
+    "companyName": "Historical Systems Inc.",
+    "headline": "Historical Systems Enters Definitive Merger Agreement with Stonebridge Partners",
+    "body": "Shareholders will receive $6.50 per share in cash. The all-cash transaction is expected to close in the third quarter. Following closing, Historical Systems will become privately held.",
+    "source": "Historical Sample",
+    "sourceUrl": "https://example.com/history/hist1",
+    "expectedEventType": "TAKE_PRIVATE_CONFIRMED",
+    "expectedStatus": "IMPORTANT",
+    "notes": "Clean historical take-private style article."
+  },
+  {
+    "ticker": "HIST2",
+    "companyName": "Old Rumor Corp.",
+    "headline": "Old Rumor Corp. Shares Rise on Take Private Speculation",
+    "body": "The company did not confirm any transaction. Reports described the matter as rumor and speculation after a non-binding proposal from an investment firm.",
+    "source": "Historical Sample",
+    "sourceUrl": "https://example.com/history/hist2",
+    "expectedEventType": "TAKE_PRIVATE_RUMOR",
+    "expectedStatus": "IGNORED",
+    "notes": "Rumor should not become an important alert."
+  },
+  {
+    "ticker": "HIST3",
+    "companyName": "Capital Raise Corp.",
+    "headline": "Capital Raise Corp. Announces Public Offering",
+    "body": "The company announced a registered direct offering and warned that the transaction may result in dilution to existing shareholders.",
+    "source": "Historical Sample",
+    "sourceUrl": "https://example.com/history/hist3",
+    "expectedEventType": "OFFERING_OR_DILUTION",
+    "expectedStatus": "IGNORED",
+    "notes": "Negative example for dilution/offering articles."
+  }
+]

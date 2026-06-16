@@ -1,0 +1,35 @@
+{
+  "positiveRules": [
+    { "keyword": "definitive merger agreement", "score": 30 },
+    { "keyword": "per share in cash", "score": 30 },
+    { "keyword": "all-cash transaction", "score": 25 },
+    { "keyword": "cash consideration", "score": 20 },
+    { "keyword": "shareholders will receive", "score": 20 },
+    { "keyword": "going private", "score": 25 },
+    { "keyword": "take private", "score": 25 },
+    { "keyword": "tender offer", "score": 20 },
+    { "keyword": "private equity", "score": 15 },
+    { "keyword": "investment firm", "score": 10 },
+    { "keyword": "to be acquired by", "score": 20 },
+    { "keyword": "premium of", "score": 10 }
+  ],
+  "negativeRules": [
+    { "keyword": "non-binding proposal", "score": -20 },
+    { "keyword": "rumor", "score": -25 },
+    { "keyword": "speculation", "score": -25 },
+    { "keyword": "asset acquisition", "score": -30 },
+    { "keyword": "minority investment", "score": -25 },
+    { "keyword": "joint venture", "score": -20 },
+    { "keyword": "public offering", "score": -40 },
+    { "keyword": "registered direct offering", "score": -40 },
+    { "keyword": "dilution", "score": -40 },
+    { "keyword": "bankruptcy", "score": -35 },
+    { "keyword": "going concern", "score": -35 },
+    { "keyword": "delisting notice", "score": -30 }
+  ],
+  "statusThresholds": {
+    "watchlist": 31,
+    "manualReview": 56,
+    "important": 76
+  }
+}
