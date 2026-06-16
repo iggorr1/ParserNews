@@ -35,6 +35,18 @@ Each historical item can include optional labels:
 When expected labels are present, console alerts print whether the analyzer matched them.
 At the end of each run, the app also prints a scan summary with total articles,
 duplicates skipped, labeled articles, and matched or mismatched expected results.
+It also writes reports to:
+
+```text
+output/scan-results.json
+output/scan-results.csv
+```
+
+You can override paths:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.news-file=file:data/historical-news.json --scanner.report-json=output/history.json --scanner.report-csv=output/history.csv"
+```
 
 ## Tune Rules
 
