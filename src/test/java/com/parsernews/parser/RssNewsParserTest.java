@@ -4,6 +4,7 @@ import com.parsernews.config.RssSettings;
 import com.parsernews.model.NewsEvent;
 import org.junit.jupiter.api.Test;
 
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpClient.Version;
@@ -12,7 +13,9 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
 import javax.net.ssl.SSLSession;
@@ -61,6 +64,38 @@ class RssNewsParserTest {
                 .hasRootCauseMessage("Only HTTPS RSS feeds are allowed: http://example.com/feed.xml");
     }
 
+    @Test
+    void continuesWhenOneFeedFails() {
+        RssNewsParser parser = new RssNewsParser(
+                new RssSettings(List.of(
+                        "https://example.com/broken.xml",
+                        "https://example.com/healthy.xml"
+                ), 5, 10),
+                new UriAwareStubHttpClient(
+                        Map.of("https://example.com/healthy.xml", """
+                                <?xml version="1.0" encoding="utf-8"?>
+                                <rss version="2.0">
+                                  <channel>
+                                    <title>Healthy Feed</title>
+                                    <item>
+                                      <title>Target Corp to be acquired by Sponsor LLC</title>
+                                      <link>https://example.com/news/2</link>
+                                      <description>All-cash transaction.</description>
+                                    </item>
+                                  </channel>
+                                </rss>
+                                """),
+                        Set.of("https://example.com/broken.xml")
+                )
+        );
+
+        List<NewsEvent> events = parser.readNews();
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().source()).isEqualTo("Healthy Feed");
+        assertThat(events.getFirst().headline()).contains("acquired");
+    }
+
     private static class StubHttpClient extends HttpClient {
         private final String body;
 
@@ -69,7 +104,7 @@ class RssNewsParserTest {
         }
 
         @Override
-        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) {
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) throws IOException {
             return new StubHttpResponse<>((T) body, request.uri());
         }
 
@@ -163,6 +198,26 @@ class RssNewsParserTest {
         @Override
         public Version version() {
             return Version.HTTP_2;
+        }
+    }
+
+    private static class UriAwareStubHttpClient extends StubHttpClient {
+        private final Map<String, String> responses;
+        private final Set<String> brokenUrls;
+
+        private UriAwareStubHttpClient(Map<String, String> responses, Set<String> brokenUrls) {
+            super("<rss />");
+            this.responses = responses;
+            this.brokenUrls = brokenUrls;
+        }
+
+        @Override
+        public <T> HttpResponse<T> send(HttpRequest request, HttpResponse.BodyHandler<T> responseBodyHandler) throws IOException {
+            String url = request.uri().toString();
+            if (brokenUrls.contains(url)) {
+                throw new IOException("Feed unavailable");
+            }
+            return new StubHttpResponse<>((T) responses.getOrDefault(url, "<rss />"), request.uri());
         }
     }
 }

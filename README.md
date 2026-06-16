@@ -84,16 +84,39 @@ Allowed console status filters are `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, and 
 
 The first internet mode reads public RSS/XML feeds only. It does not scrape article pages.
 
-Default RSS URL:
+Default RSS feeds:
 
 ```text
 https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions
+https://www.globenewswire.com/RssFeed/subjectcode/47-Bankruptcy/feedTitle/GlobeNewswire%20-%20Bankruptcy
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/acquisitions-mergers-and-takeovers-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/bankruptcy-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/stock-offering-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/joint-ventures-list.rss
 ```
 
 Run:
 
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.source=rss --scanner.safety.real-web-parsing-enabled=true --scanner.console-min-status=WATCHLIST --scanner.rss.max-items-per-feed=10"
+```
+
+Run with the live profile:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=live"
+```
+
+In IntelliJ IDEA, set Active profiles to:
+
+```text
+live
+```
+
+Then run `StockScannerApplication` and open:
+
+```text
+http://localhost:8080
 ```
 
 Use custom HTTPS RSS feeds:
@@ -106,6 +129,14 @@ Or use the helper script:
 
 ```powershell
 .\scripts\run-live-rss.ps1
+```
+
+By default the helper script refreshes `output/scan-results.json` once and exits.
+If the UI is already open, refresh `http://localhost:8080` after the script finishes.
+To keep a dedicated UI server running from the RSS command:
+
+```powershell
+.\scripts\run-live-rss.ps1 -KeepUiServer
 ```
 
 If Windows blocks local PowerShell scripts, run:
@@ -126,6 +157,7 @@ Ready now:
 
 - read public HTTPS RSS feeds
 - analyze headlines and RSS descriptions with explainable rules
+- use default public RSS feeds from GlobeNewswire and PR Newswire
 - print console alerts
 - view latest results in a browser at `http://localhost:8080`
 - export JSON, CSV, and mismatch CSV reports

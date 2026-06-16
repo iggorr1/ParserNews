@@ -48,16 +48,31 @@ public class RssNewsParser implements NewsSourceParser {
     @Override
     public List<NewsEvent> readNews() {
         List<NewsEvent> events = new ArrayList<>();
+        int failedFeeds = 0;
+
         for (String url : settings.urls()) {
-            events.addAll(readFeed(url));
+            try {
+                events.addAll(readFeed(url));
+            } catch (IllegalArgumentException exception) {
+                throw new IllegalStateException("Invalid RSS feed configuration: " + url, exception);
+            } catch (IllegalStateException exception) {
+                failedFeeds++;
+                System.err.println("Warning: skipped RSS feed because it could not be read: " + url);
+                System.err.println("Reason: " + exception.getMessage());
+            }
+        }
+
+        if (events.isEmpty() && failedFeeds == settings.urls().size()) {
+            throw new IllegalStateException("All configured RSS feeds failed.");
         }
         return events;
     }
 
     private List<NewsEvent> readFeed(String url) {
+        URI uri = URI.create(url);
+        validateUri(uri);
+
         try {
-            URI uri = URI.create(url);
-            validateUri(uri);
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofSeconds(settings.timeoutSeconds()))
                     .header("Accept", "application/rss+xml, application/xml, text/xml")
@@ -94,7 +109,10 @@ public class RssNewsParser implements NewsSourceParser {
         DocumentBuilder builder = factory.newDocumentBuilder();
         Document document = builder.parse(new InputSource(new StringReader(xml)));
 
-        String source = textOfFirst(document.getDocumentElement(), "title", "RSS Feed");
+        String source = cleanText(textOfFirst(document.getDocumentElement(), "title", ""));
+        if (source.isBlank()) {
+            source = sourceFromUrl(feedUrl);
+        }
         NodeList items = document.getElementsByTagName("item");
         List<NewsEvent> events = new ArrayList<>();
         int limit = Math.min(items.getLength(), settings.maxItemsPerFeed());
@@ -138,6 +156,15 @@ public class RssNewsParser implements NewsSourceParser {
                 .replace("&quot;", "\"")
                 .replace("&#39;", "'");
         return WHITESPACE.matcher(decoded).replaceAll(" ").trim();
+    }
+
+    private String sourceFromUrl(String feedUrl) {
+        try {
+            URI uri = URI.create(feedUrl);
+            return uri.getHost() == null ? "RSS Feed" : uri.getHost();
+        } catch (IllegalArgumentException exception) {
+            return "RSS Feed";
+        }
     }
 
     private String guessCompanyName(String headline) {
