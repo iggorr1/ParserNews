@@ -1,6 +1,7 @@
 package com.parsernews.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.parsernews.config.AnalyzerSettings;
 import com.parsernews.config.RulesConfigLoader;
 import com.parsernews.model.AnalysisResult;
 import com.parsernews.model.EventStatus;
@@ -93,6 +94,21 @@ class RuleBasedNewsAnalyzerTest {
         assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
         assertThat(result.score()).isGreaterThan(0);
         assertThat(result.matchedPositiveKeywords()).contains("to acquire", "acquisition");
+    }
+
+    @Test
+    void canLowerWatchlistThresholdForLiveDiscovery() {
+        RuleBasedNewsAnalyzer liveAnalyzer = new RuleBasedNewsAnalyzer(
+                new RulesConfigLoader(new ObjectMapper()).loadRules(),
+                new AnalyzerSettings(1, null, null)
+        );
+
+        AnalysisResult result = liveAnalyzer.analyze(news(
+                "Buyer Corp to Acquire Target Corp",
+                "The companies announced an acquisition."
+        ));
+
+        assertThat(result.status()).isEqualTo(EventStatus.WATCHLIST);
     }
 
     private NewsEvent news(String headline, String body) {

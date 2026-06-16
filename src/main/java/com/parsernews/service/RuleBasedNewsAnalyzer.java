@@ -1,6 +1,7 @@
 package com.parsernews.service;
 
 import com.parsernews.config.AnalyzerRules;
+import com.parsernews.config.AnalyzerSettings;
 import com.parsernews.config.KeywordRule;
 import com.parsernews.config.RulesConfigLoader;
 import com.parsernews.config.StatusThresholds;
@@ -18,14 +19,24 @@ import java.util.Locale;
 @Service
 public class RuleBasedNewsAnalyzer {
     private final AnalyzerRules rules;
+    private final AnalyzerSettings settings;
 
     @Autowired
+    public RuleBasedNewsAnalyzer(RulesConfigLoader rulesConfigLoader, AnalyzerSettings settings) {
+        this(rulesConfigLoader.loadRules(), settings);
+    }
+
+    public RuleBasedNewsAnalyzer(AnalyzerRules rules) {
+        this(rules, new AnalyzerSettings(null, null, null));
+    }
+
     public RuleBasedNewsAnalyzer(RulesConfigLoader rulesConfigLoader) {
         this(rulesConfigLoader.loadRules());
     }
 
-    public RuleBasedNewsAnalyzer(AnalyzerRules rules) {
+    public RuleBasedNewsAnalyzer(AnalyzerRules rules, AnalyzerSettings settings) {
         this.rules = rules;
+        this.settings = settings;
     }
 
     public AnalysisResult analyze(NewsEvent event) {
@@ -122,16 +133,24 @@ public class RuleBasedNewsAnalyzer {
 
     private EventStatus determineStatus(int score) {
         StatusThresholds thresholds = rules.statusThresholds();
-        if (score >= thresholds.important()) {
+        int importantThreshold = threshold(settings.importantThresholdOverride(), thresholds.important());
+        int manualReviewThreshold = threshold(settings.manualReviewThresholdOverride(), thresholds.manualReview());
+        int watchlistThreshold = threshold(settings.watchlistThresholdOverride(), thresholds.watchlist());
+
+        if (score >= importantThreshold) {
             return EventStatus.IMPORTANT;
         }
-        if (score >= thresholds.manualReview()) {
+        if (score >= manualReviewThreshold) {
             return EventStatus.MANUAL_REVIEW;
         }
-        if (score >= thresholds.watchlist()) {
+        if (score >= watchlistThreshold) {
             return EventStatus.WATCHLIST;
         }
         return EventStatus.IGNORED;
+    }
+
+    private int threshold(Integer override, int fallback) {
+        return override == null ? fallback : override;
     }
 
     private String buildReason(EventType eventType, EventStatus status, List<String> positives, List<String> negatives) {

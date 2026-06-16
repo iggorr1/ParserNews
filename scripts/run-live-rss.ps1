@@ -6,7 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$runArguments = "--scanner.source=rss --scanner.safety.real-web-parsing-enabled=true --scanner.console-min-status=$MinStatus --scanner.rss.max-items-per-feed=$MaxItems"
+$runArguments = "--spring.profiles.active=live --scanner.console-min-status=$MinStatus --scanner.rss.max-items-per-feed=$MaxItems"
 
 if (-not $KeepUiServer) {
     $runArguments = "$runArguments --spring.main.web-application-type=none"
