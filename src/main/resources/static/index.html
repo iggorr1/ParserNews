@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>OTC News Scanner</title>
+    <style>
+        :root {
+            --bg: #f6f7f9;
+            --panel: #ffffff;
+            --text: #20242a;
+            --muted: #69717d;
+            --line: #d9dee6;
+            --accent: #16735f;
+            --warn: #945b00;
+            --danger: #9f2f2f;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 14px;
+        }
+
+        header {
+            background: var(--panel);
+            border-bottom: 1px solid var(--line);
+            padding: 18px 24px 14px;
+        }
+
+        h1 {
+            margin: 0 0 6px;
+            font-size: 22px;
+            font-weight: 700;
+            letter-spacing: 0;
+        }
+
+        .subtle {
+            color: var(--muted);
+        }
+
+        main {
+            padding: 18px 24px 28px;
+        }
+
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
+        .metric {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 12px;
+        }
+
+        .metric strong {
+            display: block;
+            font-size: 22px;
+            margin-bottom: 4px;
+        }
+
+        .toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        input,
+        select,
+        button,
+        a.button {
+            height: 34px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--panel);
+            color: var(--text);
+            padding: 0 10px;
+            font: inherit;
+        }
+
+        input {
+            min-width: min(360px, 100%);
+            flex: 1;
+        }
+
+        button,
+        a.button {
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .table-wrap {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            overflow: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 1120px;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid var(--line);
+            padding: 10px;
+            text-align: left;
+            vertical-align: top;
+        }
+
+        th {
+            position: sticky;
+            top: 0;
+            background: #eef1f5;
+            font-size: 12px;
+            text-transform: uppercase;
+            color: #4f5966;
+            z-index: 1;
+        }
+
+        tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .headline {
+            max-width: 360px;
+            font-weight: 700;
+        }
+
+        .keywords {
+            max-width: 260px;
+            color: var(--muted);
+        }
+
+        .status {
+            font-weight: 700;
+            white-space: nowrap;
+        }
+
+        .IMPORTANT {
+            color: var(--danger);
+        }
+
+        .MANUAL_REVIEW {
+            color: var(--warn);
+        }
+
+        .WATCHLIST {
+            color: var(--accent);
+        }
+
+        .IGNORED {
+            color: var(--muted);
+        }
+
+        .empty {
+            padding: 24px;
+            color: var(--muted);
+        }
+    </style>
+</head>
+<body>
+<header>
+    <h1>OTC Take-Private News Scanner</h1>
+    <div class="subtle">Console scanner results viewer</div>
+</header>
+<main>
+    <section class="summary" id="summary"></section>
+    <section class="toolbar">
+        <input id="search" type="search" placeholder="Search ticker, company, headline, source">
+        <select id="status">
+            <option value="">All statuses</option>
+            <option value="IMPORTANT">Important</option>
+            <option value="MANUAL_REVIEW">Manual review</option>
+            <option value="WATCHLIST">Watchlist</option>
+            <option value="IGNORED">Ignored</option>
+        </select>
+        <select id="match">
+            <option value="">All labels</option>
+            <option value="true">Matched</option>
+            <option value="false">Mismatched</option>
+            <option value="unlabeled">Unlabeled</option>
+        </select>
+        <button id="refresh" type="button">Refresh</button>
+        <a class="button" href="/api/report.csv">CSV</a>
+        <a class="button" href="/api/mismatches.csv">Mismatches</a>
+    </section>
+    <section class="table-wrap">
+        <table>
+            <thead>
+            <tr>
+                <th>Status</th>
+                <th>Score</th>
+                <th>Ticker</th>
+                <th>Company</th>
+                <th>Headline</th>
+                <th>Type</th>
+                <th>Source</th>
+                <th>Positive</th>
+                <th>Negative</th>
+                <th>Expected</th>
+                <th>Link</th>
+            </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+        </table>
+        <div class="empty" id="empty" hidden>No rows match the current filters.</div>
+    </section>
+</main>
+<script>
+    const state = {results: [], summary: {}};
+    const statusFilter = document.querySelector("#status");
+    const matchFilter = document.querySelector("#match");
+    const searchInput = document.querySelector("#search");
+    const rows = document.querySelector("#rows");
+    const empty = document.querySelector("#empty");
+
+    document.querySelector("#refresh").addEventListener("click", loadReport);
+    statusFilter.addEventListener("change", renderRows);
+    matchFilter.addEventListener("change", renderRows);
+    searchInput.addEventListener("input", renderRows);
+
+    async function loadReport() {
+        const response = await fetch("/api/report", {cache: "no-store"});
+        const data = await response.json();
+        state.summary = data.summary || {};
+        state.results = data.results || [];
+        renderSummary();
+        renderRows();
+    }
+
+    function renderSummary() {
+        const items = [
+            ["Total read", state.summary.totalRead],
+            ["Analyzed", state.summary.analyzed],
+            ["Duplicates", state.summary.duplicatesSkipped],
+            ["Labeled", state.summary.labeled],
+            ["Matched", state.summary.matchedExpected],
+            ["Mismatched", state.summary.mismatchedExpected]
+        ];
+        document.querySelector("#summary").innerHTML = items.map(([label, value]) => `
+            <div class="metric">
+                <strong>${value ?? 0}</strong>
+                <span class="subtle">${label}</span>
+            </div>
+        `).join("");
+    }
+
+    function renderRows() {
+        const query = searchInput.value.trim().toLowerCase();
+        const status = statusFilter.value;
+        const match = matchFilter.value;
+        const filtered = state.results.filter(item => {
+            const haystack = [
+                item.ticker,
+                item.companyName,
+                item.headline,
+                item.source,
+                item.eventType
+            ].join(" ").toLowerCase();
+            const statusOk = !status || item.status === status;
+            const queryOk = !query || haystack.includes(query);
+            const matchOk = !match
+                || String(item.matchesExpected) === match
+                || (match === "unlabeled" && item.matchesExpected === null);
+            return statusOk && queryOk && matchOk;
+        });
+
+        rows.innerHTML = filtered.map(rowTemplate).join("");
+        empty.hidden = filtered.length > 0;
+    }
+
+    function rowTemplate(item) {
+        const expected = item.expectedEventType || item.expectedStatus
+            ? `${escapeText(item.expectedEventType || "")} ${escapeText(item.expectedStatus || "")}`
+            : "";
+        return `
+            <tr>
+                <td class="status ${escapeText(item.status)}">${escapeText(item.status)}</td>
+                <td>${escapeText(item.score)}</td>
+                <td>${escapeText(item.ticker)}</td>
+                <td>${escapeText(item.companyName)}</td>
+                <td class="headline">${escapeText(item.headline)}</td>
+                <td>${escapeText(item.eventType)}</td>
+                <td>${escapeText(item.source)}</td>
+                <td class="keywords">${escapeText((item.matchedPositiveKeywords || []).join(", "))}</td>
+                <td class="keywords">${escapeText((item.matchedNegativeKeywords || []).join(", "))}</td>
+                <td>${expected}</td>
+                <td><a href="${escapeAttr(item.sourceUrl)}" target="_blank" rel="noreferrer">Open</a></td>
+            </tr>
+        `;
+    }
+
+    function escapeText(value) {
+        return String(value ?? "")
+            .replaceAll("&", "&amp;")
+            .replaceAll("<", "&lt;")
+            .replaceAll(">", "&gt;")
+            .replaceAll('"', "&quot;")
+            .replaceAll("'", "&#039;");
+    }
+
+    function escapeAttr(value) {
+        return escapeText(value).replaceAll("`", "&#096;");
+    }
+
+    loadReport();
+</script>
+</body>
+</html>

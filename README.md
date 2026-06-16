@@ -25,6 +25,12 @@ The only internet mode currently allowed is public RSS reading, and it must be e
 .\mvnw.cmd spring-boot:run
 ```
 
+Open the local UI:
+
+```text
+http://localhost:8080
+```
+
 ## Run Historical Articles
 
 Put old articles into `data/historical-news.json`, then run:
@@ -121,6 +127,7 @@ Ready now:
 - read public HTTPS RSS feeds
 - analyze headlines and RSS descriptions with explainable rules
 - print console alerts
+- view latest results in a browser at `http://localhost:8080`
 - export JSON, CSV, and mismatch CSV reports
 - run historical labeled datasets locally
 - block broker, wallet, exchange, and trading integrations
