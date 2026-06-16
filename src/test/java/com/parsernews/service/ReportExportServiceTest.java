@@ -27,7 +27,8 @@ class ReportExportServiceTest {
         ReportExportService service = new ReportExportService(
                 new ObjectMapper(),
                 jsonPath.toString(),
-                csvPath.toString()
+                csvPath.toString(),
+                tempDir.resolve("mismatches.csv").toString()
         );
 
         ScanResult result = ScanResult.from(
@@ -59,5 +60,50 @@ class ReportExportServiceTest {
         assertThat(csvPath).exists();
         assertThat(Files.readString(jsonPath)).contains("\"ticker\" : \"TEST\"");
         assertThat(Files.readString(csvPath)).contains("\"TEST\"");
+    }
+
+    @Test
+    void writesOnlyFalseMatchesToMismatchReport() throws Exception {
+        Path mismatchPath = tempDir.resolve("mismatches.csv");
+        ReportExportService service = new ReportExportService(
+                new ObjectMapper(),
+                tempDir.resolve("scan-results.json").toString(),
+                tempDir.resolve("scan-results.csv").toString(),
+                mismatchPath.toString()
+        );
+
+        ScanResult match = result("GOOD", true);
+        ScanResult mismatch = result("BAD", false);
+
+        service.export(List.of(match, mismatch), new ScanSummary(2, 2, 0, 2, 1, 1));
+
+        String csv = Files.readString(mismatchPath);
+        assertThat(csv).contains("\"BAD\"");
+        assertThat(csv).doesNotContain("\"GOOD\"");
+    }
+
+    private ScanResult result(String ticker, boolean matchesExpected) {
+        return ScanResult.from(
+                new NewsEvent(
+                        ticker,
+                        "Test Company",
+                        "Company Enters Definitive Merger Agreement",
+                        "Shareholders will receive $5.00 per share in cash.",
+                        "Test Source",
+                        "https://example.com/" + ticker,
+                        EventType.TAKE_PRIVATE_CONFIRMED,
+                        EventStatus.IMPORTANT,
+                        "Expected label"
+                ),
+                new AnalysisResult(
+                        EventType.TAKE_PRIVATE_CONFIRMED,
+                        matchesExpected ? EventStatus.IMPORTANT : EventStatus.WATCHLIST,
+                        80,
+                        List.of("definitive merger agreement"),
+                        List.of(),
+                        "Matched test"
+                ),
+                matchesExpected
+        );
     }
 }

@@ -56,6 +56,7 @@ It also writes reports to:
 ```text
 output/scan-results.json
 output/scan-results.csv
+output/mismatches.csv
 ```
 
 You can override paths:
@@ -63,6 +64,14 @@ You can override paths:
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.news-file=file:data/historical-news.json --scanner.report-json=output/history.json --scanner.report-csv=output/history.csv"
 ```
+
+To print only more serious alerts to console while still exporting all rows:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.news-file=file:data/historical-news.json --scanner.console-min-status=WATCHLIST"
+```
+
+Allowed console status filters are `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, and `IMPORTANT`.
 
 ## Tune Rules
 

@@ -19,22 +19,27 @@ public class ReportExportService {
     private final ObjectMapper objectMapper;
     private final Path jsonPath;
     private final Path csvPath;
+    private final Path mismatchCsvPath;
 
     public ReportExportService(
             ObjectMapper objectMapper,
             @Value("${scanner.report-json:output/scan-results.json}") String jsonPath,
-            @Value("${scanner.report-csv:output/scan-results.csv}") String csvPath
+            @Value("${scanner.report-csv:output/scan-results.csv}") String csvPath,
+            @Value("${scanner.mismatch-report-csv:output/mismatches.csv}") String mismatchCsvPath
     ) {
         this.objectMapper = objectMapper.copy().enable(SerializationFeature.INDENT_OUTPUT);
         this.jsonPath = Path.of(jsonPath);
         this.csvPath = Path.of(csvPath);
+        this.mismatchCsvPath = Path.of(mismatchCsvPath);
     }
 
     public void export(List<ScanResult> results, ScanSummary summary) {
         writeJson(new ScanReport(summary, results));
         writeCsv(results);
+        writeCsv(mismatchesOnly(results), mismatchCsvPath);
         System.out.println("Report JSON: " + jsonPath.toAbsolutePath());
         System.out.println("Report CSV: " + csvPath.toAbsolutePath());
+        System.out.println("Mismatch CSV: " + mismatchCsvPath.toAbsolutePath());
     }
 
     private void writeJson(ScanReport report) {
@@ -47,8 +52,12 @@ public class ReportExportService {
     }
 
     private void writeCsv(List<ScanResult> results) {
+        writeCsv(results, csvPath);
+    }
+
+    private void writeCsv(List<ScanResult> results, Path path) {
         try {
-            createParentDirectories(csvPath);
+            createParentDirectories(path);
             StringBuilder csv = new StringBuilder();
             csv.append(String.join(",",
                     "ticker",
@@ -72,10 +81,16 @@ public class ReportExportService {
                 csv.append(toCsvLine(result)).append(System.lineSeparator());
             }
 
-            Files.writeString(csvPath, csv.toString(), StandardCharsets.UTF_8);
+            Files.writeString(path, csv.toString(), StandardCharsets.UTF_8);
         } catch (IOException exception) {
-            throw new IllegalStateException("Cannot write CSV report to " + csvPath, exception);
+            throw new IllegalStateException("Cannot write CSV report to " + path, exception);
         }
+    }
+
+    private List<ScanResult> mismatchesOnly(List<ScanResult> results) {
+        return results.stream()
+                .filter(result -> Boolean.FALSE.equals(result.matchesExpected()))
+                .toList();
     }
 
     private String toCsvLine(ScanResult result) {

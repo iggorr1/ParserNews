@@ -1,6 +1,8 @@
 package com.parsernews.service;
 
+import com.parsernews.config.ConsoleSettings;
 import com.parsernews.model.AnalysisResult;
+import com.parsernews.model.EventStatus;
 import com.parsernews.model.NewsEvent;
 import com.parsernews.model.ScanResult;
 import com.parsernews.model.ScanSummary;
@@ -17,19 +19,22 @@ public class NewsScannerService {
     private final AlertService alertService;
     private final DuplicateNewsFilter duplicateNewsFilter;
     private final ReportExportService reportExportService;
+    private final ConsoleSettings consoleSettings;
 
     public NewsScannerService(
             NewsSourceParser newsSourceParser,
             RuleBasedNewsAnalyzer analyzer,
             AlertService alertService,
             DuplicateNewsFilter duplicateNewsFilter,
-            ReportExportService reportExportService
+            ReportExportService reportExportService,
+            ConsoleSettings consoleSettings
     ) {
         this.newsSourceParser = newsSourceParser;
         this.analyzer = analyzer;
         this.alertService = alertService;
         this.duplicateNewsFilter = duplicateNewsFilter;
         this.reportExportService = reportExportService;
+        this.consoleSettings = consoleSettings;
     }
 
     public void scan() {
@@ -60,7 +65,9 @@ public class NewsScannerService {
                 }
             }
             results.add(ScanResult.from(event, result, matchesExpected));
-            alertService.printAlert(event, result);
+            if (shouldPrintToConsole(result)) {
+                alertService.printAlert(event, result);
+            }
         }
 
         ScanSummary summary = new ScanSummary(
@@ -74,5 +81,10 @@ public class NewsScannerService {
 
         alertService.printSummary(summary);
         reportExportService.export(results, summary);
+    }
+
+    private boolean shouldPrintToConsole(AnalysisResult result) {
+        EventStatus minimumStatus = consoleSettings.consoleMinStatus();
+        return minimumStatus == null || result.status().isAtLeast(minimumStatus);
     }
 }
