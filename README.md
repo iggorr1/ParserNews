@@ -96,6 +96,44 @@ Use custom HTTPS RSS feeds:
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.source=rss --scanner.safety.real-web-parsing-enabled=true --scanner.rss.urls=https://example.com/feed.xml"
 ```
 
+Or use the helper script:
+
+```powershell
+.\scripts\run-live-rss.ps1
+```
+
+If Windows blocks local PowerShell scripts, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run-live-rss.ps1
+```
+
+With options:
+
+```powershell
+.\scripts\run-live-rss.ps1 -MinStatus IGNORED -MaxItems 50
+```
+
+## First Live Version Status
+
+Ready now:
+
+- read public HTTPS RSS feeds
+- analyze headlines and RSS descriptions with explainable rules
+- print console alerts
+- export JSON, CSV, and mismatch CSV reports
+- run historical labeled datasets locally
+- block broker, wallet, exchange, and trading integrations
+
+Still missing for a stronger first production-like version:
+
+- persistent duplicate detection across runs
+- more real historical examples for tuning
+- better ticker/company extraction from RSS items
+- more RSS sources, such as PR Newswire categories
+- scheduled repeated runs
+- optional storage, such as PostgreSQL, after the console version is stable
+
 ## Tune Rules
 
 Edit keyword weights and status thresholds in:
