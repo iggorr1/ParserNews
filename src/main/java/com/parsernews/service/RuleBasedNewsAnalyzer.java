@@ -72,11 +72,16 @@ public class RuleBasedNewsAnalyzer {
         }
 
         EventType eventType = determineEventType(text, positives, negatives);
-        if (eventType == EventType.DEBT_TENDER_OFFER) {
+        if (eventType == EventType.DEBT_TENDER_OFFER || shouldSuppressAsFalsePositive(eventType, text)) {
+            eventType = eventType == EventType.DEBT_TENDER_OFFER ? eventType : EventType.NOISE;
             score = Math.min(score, 0);
             negatives.addAll(falsePositiveFilter.reasons(text));
         }
-        EventStatus status = determineStatus(score);
+        boolean confirmedDealCandidate = isConfirmedDealCandidate(text, positives, negatives, eventType);
+        if (!confirmedDealCandidate && isBroadMnaOnly(eventType)) {
+            score = Math.min(score, 0);
+        }
+        EventStatus status = determineStatus(score, confirmedDealCandidate);
         String reason = buildReason(eventType, status, positives, negatives);
 
         return new AnalysisResult(eventType, status, score, positives, negatives, reason);
@@ -121,6 +126,9 @@ public class RuleBasedNewsAnalyzer {
         if (text.contains("take private") || text.contains("going private") || text.contains("become privately held")) {
             return EventType.TAKE_PRIVATE_CONFIRMED;
         }
+        if (isConfirmedDealText(text)) {
+            return EventType.CONFIRMED_DEAL;
+        }
         if (text.contains("definitive merger agreement") || text.contains("merger agreement") || text.contains("merger")) {
             return EventType.MERGER_CONFIRMED;
         }
@@ -139,6 +147,82 @@ public class RuleBasedNewsAnalyzer {
         return positives.isEmpty() ? EventType.NOISE : EventType.UNKNOWN;
     }
 
+    private boolean isConfirmedDealCandidate(
+            String text,
+            List<String> positives,
+            List<String> negatives,
+            EventType eventType
+    ) {
+        if (eventType == EventType.DEBT_TENDER_OFFER || falsePositiveFilter.isNonBuyoutAcquisition(text)) {
+            return false;
+        }
+        if (containsAny(negatives, "rumor", "speculation", "non-binding proposal")) {
+            return false;
+        }
+
+        boolean dealCommitment = isConfirmedDealText(text)
+                || containsAny(positives,
+                "definitive merger agreement",
+                "definitive agreement",
+                "to be acquired by",
+                "going private",
+                "take private",
+                "shareholders will receive",
+                "per share in cash");
+        boolean shareholderConsideration = text.contains("per share")
+                || text.contains("shareholders will receive")
+                || text.contains("stockholders will receive")
+                || text.contains("cash consideration")
+                || text.contains("all-cash transaction")
+                || text.contains("premium of")
+                || text.contains("outstanding shares")
+                || text.contains("common stock");
+        boolean publicCompanyContext = text.contains("shareholders")
+                || text.contains("stockholders")
+                || text.contains("publicly traded")
+                || text.contains("listed")
+                || text.contains("common stock")
+                || text.contains("outstanding shares")
+                || text.contains("will no longer be publicly traded");
+
+        return (dealCommitment && shareholderConsideration)
+                || (dealCommitment && publicCompanyContext)
+                || eventType == EventType.TAKE_PRIVATE_CONFIRMED;
+    }
+
+    private boolean isConfirmedDealText(String text) {
+        return text.contains("entered into a definitive agreement")
+                || text.contains("enters definitive agreement")
+                || text.contains("enters into definitive agreement")
+                || text.contains("definitive agreement to be acquired")
+                || text.contains("definitive merger agreement")
+                || text.contains("to be acquired by")
+                || text.contains("will be acquired by")
+                || text.contains("will acquire all outstanding shares")
+                || text.contains("acquire all outstanding shares")
+                || text.contains("shareholders will receive")
+                || text.contains("stockholders will receive")
+                || text.contains("will become privately held")
+                || text.contains("will no longer be publicly traded");
+    }
+
+    private boolean isBroadMnaOnly(EventType eventType) {
+        return eventType == EventType.ACQUISITION_CONFIRMED
+                || eventType == EventType.MERGER_CONFIRMED
+                || eventType == EventType.CONFIRMED_DEAL
+                || eventType == EventType.TENDER_OFFER
+                || eventType == EventType.UNKNOWN;
+    }
+
+    private boolean shouldSuppressAsFalsePositive(EventType eventType, String text) {
+        if (!falsePositiveFilter.isNonBuyoutAcquisition(text)) {
+            return false;
+        }
+        return eventType != EventType.OFFERING_OR_DILUTION
+                && eventType != EventType.BANKRUPTCY_RISK
+                && eventType != EventType.STRATEGIC_ALTERNATIVES;
+    }
+
     private boolean containsAny(List<String> values, String... expectedValues) {
         for (String expectedValue : expectedValues) {
             if (values.contains(expectedValue)) {
@@ -148,7 +232,10 @@ public class RuleBasedNewsAnalyzer {
         return false;
     }
 
-    private EventStatus determineStatus(int score) {
+    private EventStatus determineStatus(int score, boolean confirmedDealCandidate) {
+        if (!confirmedDealCandidate) {
+            return EventStatus.IGNORED;
+        }
         StatusThresholds thresholds = rules.statusThresholds();
         int importantThreshold = threshold(settings.importantThresholdOverride(), thresholds.important());
         int manualReviewThreshold = threshold(settings.manualReviewThresholdOverride(), thresholds.manualReview());

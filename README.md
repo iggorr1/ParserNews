@@ -164,6 +164,21 @@ Score can still be `0` for real articles. That means the article was read,
 but none of the configured acquisition, take-private, offering, bankruptcy,
 or risk keywords appeared in the headline or RSS description.
 
+`WATCHLIST`, `MANUAL_REVIEW`, and `IMPORTANT` are intentionally strict. Broad
+M&A headlines such as `Company A acquires assets` or `Company B to acquire
+private company C` are not enough. A row needs confirmed-deal signals such as:
+
+- definitive agreement / definitive merger agreement
+- to be acquired by / will be acquired by
+- shareholders or stockholders will receive consideration
+- per-share cash or stock consideration
+- premium to market price
+- going-private or take-private language
+
+False positives such as Senior Notes, bond tender offers, asset acquisitions,
+brand acquisitions, reverse mergers, financings, and public offerings stay
+ignored for takeover-opportunity purposes.
+
 Use custom HTTPS RSS feeds:
 
 ```powershell

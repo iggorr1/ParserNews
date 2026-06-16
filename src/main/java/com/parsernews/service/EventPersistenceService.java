@@ -64,7 +64,12 @@ public class EventPersistenceService {
                         newsEvent.publishedAt()
                 )));
 
-        if (!shouldPersistDetectedEvent(analysisResult) || eventRepository.existsByArticle(article)) {
+        eventRepository.findByArticle(article).ifPresent(existingEvent -> {
+            eventRepository.delete(existingEvent);
+            eventRepository.flush();
+        });
+
+        if (!shouldPersistDetectedEvent(analysisResult)) {
             return;
         }
 
@@ -108,6 +113,7 @@ public class EventPersistenceService {
         return switch (eventType) {
             case TAKE_PRIVATE_CONFIRMED -> DetectedEventType.GOING_PRIVATE;
             case TAKE_PRIVATE_RUMOR, ACQUISITION_RUMOR -> DetectedEventType.PROPOSAL;
+            case CONFIRMED_DEAL -> DetectedEventType.DEFINITIVE_AGREEMENT;
             case MERGER_CONFIRMED -> DetectedEventType.MERGER;
             case ACQUISITION_CONFIRMED -> DetectedEventType.ACQUISITION;
             case TENDER_OFFER -> DetectedEventType.TENDER_OFFER;

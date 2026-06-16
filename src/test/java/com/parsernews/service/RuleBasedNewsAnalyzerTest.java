@@ -84,7 +84,7 @@ class RuleBasedNewsAnalyzerTest {
     }
 
     @Test
-    void givesSmallScoreToWeakAcquisitionHeadline() {
+    void ignoresWeakAcquisitionHeadlineWithoutShareholderDealTerms() {
         AnalysisResult result = analyzer.analyze(news(
                 "Buyer Corp to Acquire Target Corp",
                 "The companies announced an acquisition."
@@ -92,12 +92,12 @@ class RuleBasedNewsAnalyzerTest {
 
         assertThat(result.eventType()).isEqualTo(EventType.ACQUISITION_CONFIRMED);
         assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
-        assertThat(result.score()).isGreaterThan(0);
+        assertThat(result.score()).isEqualTo(0);
         assertThat(result.matchedPositiveKeywords()).contains("to acquire", "acquisition");
     }
 
     @Test
-    void canLowerWatchlistThresholdForLiveDiscovery() {
+    void liveDiscoveryDoesNotPromoteWeakAcquisitionWithoutDealTerms() {
         RuleBasedNewsAnalyzer liveAnalyzer = new RuleBasedNewsAnalyzer(
                 new RulesConfigLoader(new ObjectMapper()).loadRules(),
                 new AnalyzerSettings(1, null, null)
@@ -108,7 +108,26 @@ class RuleBasedNewsAnalyzerTest {
                 "The companies announced an acquisition."
         ));
 
-        assertThat(result.status()).isEqualTo(EventStatus.WATCHLIST);
+        assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
+    }
+
+    @Test
+    void marksConfirmedShareholderDealAsWatchlistInLiveDiscovery() {
+        RuleBasedNewsAnalyzer liveAnalyzer = new RuleBasedNewsAnalyzer(
+                new RulesConfigLoader(new ObjectMapper()).loadRules(),
+                new AnalyzerSettings(1, null, null)
+        );
+
+        AnalysisResult result = liveAnalyzer.analyze(news(
+                "Target Corp Enters Definitive Agreement to Be Acquired by Buyer Corp",
+                "Target shareholders will receive $4.00 per share in cash, representing a premium of 35%."
+        ));
+
+        assertThat(result.eventType()).isEqualTo(EventType.CONFIRMED_DEAL);
+        assertThat(result.status()).isEqualTo(EventStatus.IMPORTANT);
+        assertThat(result.score()).isGreaterThan(0);
+        assertThat(result.matchedPositiveKeywords())
+                .contains("definitive agreement", "to be acquired by", "per share in cash", "premium of");
     }
 
     @Test
@@ -127,6 +146,58 @@ class RuleBasedNewsAnalyzerTest {
         assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
         assertThat(result.score()).isLessThanOrEqualTo(0);
         assertThat(result.matchedNegativeKeywords()).contains("senior notes");
+    }
+
+    @Test
+    void ignoresAssetAcquisitionEvenWhenAcquisitionKeywordMatches() {
+        RuleBasedNewsAnalyzer liveAnalyzer = new RuleBasedNewsAnalyzer(
+                new RulesConfigLoader(new ObjectMapper()).loadRules(),
+                new AnalyzerSettings(1, null, null)
+        );
+
+        AnalysisResult result = liveAnalyzer.analyze(news(
+                "Buyer Completes Acquisition of Manufacturing Assets",
+                "The asset acquisition does not involve buying public company shares."
+        ));
+
+        assertThat(result.eventType()).isEqualTo(EventType.NOISE);
+        assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
+        assertThat(result.score()).isLessThanOrEqualTo(0);
+        assertThat(result.matchedNegativeKeywords()).contains("asset acquisition");
+    }
+
+    @Test
+    void ignoresFacilitySaleEvenWithDefinitiveAgreementLanguage() {
+        RuleBasedNewsAnalyzer liveAnalyzer = new RuleBasedNewsAnalyzer(
+                new RulesConfigLoader(new ObjectMapper()).loadRules(),
+                new AnalyzerSettings(1, null, null)
+        );
+
+        AnalysisResult result = liveAnalyzer.analyze(news(
+                "Company Announces Strategic Exit With Sale of Facility",
+                "The company entered into a definitive agreement and will receive cash consideration for the sale of facility."
+        ));
+
+        assertThat(result.eventType()).isEqualTo(EventType.NOISE);
+        assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
+        assertThat(result.matchedNegativeKeywords()).contains("sale of facility", "strategic exit");
+    }
+
+    @Test
+    void ignoresCompletedTakePrivateBecauseItIsNotAnEarlySignal() {
+        RuleBasedNewsAnalyzer liveAnalyzer = new RuleBasedNewsAnalyzer(
+                new RulesConfigLoader(new ObjectMapper()).loadRules(),
+                new AnalyzerSettings(1, null, null)
+        );
+
+        AnalysisResult result = liveAnalyzer.analyze(news(
+                "Buyer Announces Completion of Take-Private Transaction",
+                "Shareholders received $10.00 per share in cash."
+        ));
+
+        assertThat(result.eventType()).isEqualTo(EventType.NOISE);
+        assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
+        assertThat(result.matchedNegativeKeywords()).contains("completion of");
     }
 
     private NewsEvent news(String headline, String body) {

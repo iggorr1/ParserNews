@@ -3,6 +3,7 @@ package com.parsernews.model;
 public enum EventType {
     TAKE_PRIVATE_CONFIRMED,
     TAKE_PRIVATE_RUMOR,
+    CONFIRMED_DEAL,
     MERGER_CONFIRMED,
     ACQUISITION_CONFIRMED,
     ACQUISITION_RUMOR,

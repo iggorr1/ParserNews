@@ -19,6 +19,34 @@ public class FalsePositiveFilter {
             "exchange offer",
             "debt tender offer"
     );
+    private static final List<String> NON_BUYOUT_TERMS = List.of(
+            "asset acquisition",
+            "assets acquisition",
+            "acquisition of assets",
+            "acquires assets",
+            "acquires the assets",
+            "brand acquisition",
+            "acquires brand",
+            "franchise acquisition",
+            "franchisor business",
+            "property acquisition",
+            "real estate acquisition",
+            "sale of facility",
+            "sale of assets",
+            "sale of substantially all assets",
+            "strategic exit",
+            "reverse merger",
+            "announces completion",
+            "completion of",
+            "completed acquisition",
+            "completes acquisition",
+            "private placement",
+            "public offering",
+            "registered direct offering",
+            "credit facility",
+            "financing agreement",
+            "joint venture"
+    );
 
     public boolean isDebtTenderOffer(String text) {
         String lower = text.toLowerCase(Locale.ROOT);
@@ -29,12 +57,21 @@ public class FalsePositiveFilter {
     }
 
     public List<String> reasons(String text) {
-        if (!isDebtTenderOffer(text)) {
-            return List.of();
-        }
         String lower = text.toLowerCase(Locale.ROOT);
-        return DEBT_TENDER_TERMS.stream()
+        List<String> reasons = new java.util.ArrayList<>();
+        if (isDebtTenderOffer(text)) {
+            reasons.addAll(DEBT_TENDER_TERMS.stream()
+                    .filter(lower::contains)
+                    .toList());
+        }
+        reasons.addAll(NON_BUYOUT_TERMS.stream()
                 .filter(lower::contains)
-                .toList();
+                .toList());
+        return reasons;
+    }
+
+    public boolean isNonBuyoutAcquisition(String text) {
+        String lower = text.toLowerCase(Locale.ROOT);
+        return NON_BUYOUT_TERMS.stream().anyMatch(lower::contains);
     }
 }
