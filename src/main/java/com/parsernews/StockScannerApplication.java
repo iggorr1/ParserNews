@@ -1,6 +1,7 @@
 package com.parsernews;
 
 import com.parsernews.service.NewsScannerService;
+import com.parsernews.service.SafetyGuardService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -8,9 +9,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 @SpringBootApplication
 public class StockScannerApplication implements CommandLineRunner {
     private final NewsScannerService newsScannerService;
+    private final SafetyGuardService safetyGuardService;
 
-    public StockScannerApplication(NewsScannerService newsScannerService) {
+    public StockScannerApplication(
+            NewsScannerService newsScannerService,
+            SafetyGuardService safetyGuardService
+    ) {
         this.newsScannerService = newsScannerService;
+        this.safetyGuardService = safetyGuardService;
     }
 
     public static void main(String[] args) {
@@ -19,6 +25,7 @@ public class StockScannerApplication implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
+        safetyGuardService.validateStartupSafety();
         newsScannerService.scan();
     }
 }

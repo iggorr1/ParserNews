@@ -2,6 +2,22 @@
 
 Console MVP for scanning mock or historical news articles with explainable keyword rules.
 
+## Safety Scope
+
+This project is a research/news scanner only.
+
+It does not:
+
+- connect to brokers
+- connect to wallets
+- connect to exchanges
+- execute trades
+- place orders
+- scrape the internet in the current MVP
+
+Startup safety flags are disabled by default in `src/main/resources/application.properties`.
+If trading, broker, wallet, exchange, or real web parsing flags are enabled, the app fails fast.
+
 ## Run
 
 ```powershell
