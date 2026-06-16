@@ -122,6 +122,8 @@ Stored event API lives in:
 - Mock news scanning.
 - Historical JSON scanning.
 - Public HTTPS RSS scanning.
+- Scheduled RSS polling for live monitoring.
+- Manual scan endpoint at `POST /api/scan`.
 - Rule-based event classification.
 - False-positive filtering for debt tender offers, senior notes, bonds, offerings, asset acquisitions, reverse mergers, and other non-takeover noise.
 - Event statuses: `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, `IMPORTANT`, `HIGH_PRIORITY_SIGNAL`.
@@ -138,15 +140,15 @@ Stored event API lives in:
 - PostgreSQL profile with Docker Compose.
 - REST API for reports and saved events.
 - Browser UI for scan results, saved events, filtering, manual review, and extracted terms.
+- Optional full article text fetching for whitelisted RSS article hosts.
 
 ## Current Limitations
 
-- RSS mode reads feed title/description only; it does not yet fetch full article pages.
+- Full article fetching is limited to whitelisted hosts and likely M&A candidate teasers.
 - Ticker can be `UNKNOWN` when RSS text does not include an exchange/ticker label.
 - Premium is only extracted when stated in the article. It is not yet calculated from market price.
 - No market data snapshots yet.
 - No price charts yet.
-- No scheduler yet.
 - No Telegram alerts yet.
 - No AI/Ollama/OpenAI analysis yet.
 - No production auth.

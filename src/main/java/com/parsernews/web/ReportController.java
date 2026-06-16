@@ -2,6 +2,8 @@ package com.parsernews.web;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.parsernews.model.ScanSummary;
+import com.parsernews.service.NewsScannerService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
@@ -21,20 +23,28 @@ import java.util.Map;
 @RequestMapping("/api")
 public class ReportController {
     private final ObjectMapper objectMapper;
+    private final NewsScannerService newsScannerService;
     private final Path jsonPath;
     private final Path csvPath;
     private final Path mismatchCsvPath;
 
     public ReportController(
             ObjectMapper objectMapper,
+            NewsScannerService newsScannerService,
             @Value("${scanner.report-json:output/scan-results.json}") String jsonPath,
             @Value("${scanner.report-csv:output/scan-results.csv}") String csvPath,
             @Value("${scanner.mismatch-report-csv:output/mismatches.csv}") String mismatchCsvPath
     ) {
         this.objectMapper = objectMapper;
+        this.newsScannerService = newsScannerService;
         this.jsonPath = Path.of(jsonPath);
         this.csvPath = Path.of(csvPath);
         this.mismatchCsvPath = Path.of(mismatchCsvPath);
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/scan")
+    public ScanSummary scan() {
+        return newsScannerService.scan();
     }
 
     @GetMapping("/report")

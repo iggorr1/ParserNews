@@ -51,7 +51,7 @@ public class EventPersistenceService {
                         newsEvent.sourceUrl()
                 )));
 
-        String urlHash = sha256(newsEvent.sourceUrl());
+        String urlHash = urlHash(newsEvent.sourceUrl());
         NewsArticleEntity article = articleRepository.findByUrlHash(urlHash)
                 .orElseGet(() -> articleRepository.save(new NewsArticleEntity(
                         source,
@@ -144,7 +144,7 @@ public class EventPersistenceService {
         return fallback;
     }
 
-    private String sha256(String value) {
+    public static String urlHash(String value) {
         try {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));

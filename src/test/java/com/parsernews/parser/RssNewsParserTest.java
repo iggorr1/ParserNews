@@ -27,7 +27,7 @@ class RssNewsParserTest {
     @Test
     void parsesRssItemsIntoNewsEvents() {
         RssNewsParser parser = new RssNewsParser(
-                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10),
+                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, false, List.of()),
                 new StubHttpClient("""
                         <?xml version="1.0" encoding="utf-8"?>
                         <rss version="2.0">
@@ -56,7 +56,7 @@ class RssNewsParserTest {
     @Test
     void extractsTickerFromExchangeLabel() {
         RssNewsParser parser = new RssNewsParser(
-                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10),
+                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, false, List.of()),
                 new StubHttpClient("""
                         <?xml version="1.0" encoding="utf-8"?>
                         <rss version="2.0">
@@ -81,7 +81,7 @@ class RssNewsParserTest {
     @Test
     void doesNotTreatExchangeNameAsTickerWithoutColon() {
         RssNewsParser parser = new RssNewsParser(
-                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10),
+                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, false, List.of()),
                 new StubHttpClient("""
                         <?xml version="1.0" encoding="utf-8"?>
                         <rss version="2.0">
@@ -106,7 +106,7 @@ class RssNewsParserTest {
     @Test
     void rejectsNonHttpsFeeds() {
         RssNewsParser parser = new RssNewsParser(
-                new RssSettings(List.of("http://example.com/feed.xml"), 5, 10),
+                new RssSettings(List.of("http://example.com/feed.xml"), 5, 10, false, List.of()),
                 new StubHttpClient("<rss />")
         );
 
@@ -121,7 +121,7 @@ class RssNewsParserTest {
                 new RssSettings(List.of(
                         "https://example.com/broken.xml",
                         "https://example.com/healthy.xml"
-                ), 5, 10),
+                ), 5, 10, false, List.of()),
                 new UriAwareStubHttpClient(
                         Map.of("https://example.com/healthy.xml", """
                                 <?xml version="1.0" encoding="utf-8"?>
@@ -145,6 +145,40 @@ class RssNewsParserTest {
         assertThat(events).hasSize(1);
         assertThat(events.getFirst().source()).isEqualTo("Healthy Feed");
         assertThat(events.getFirst().headline()).contains("acquired");
+    }
+
+    @Test
+    void fetchesFullArticleTextForWhitelistedHosts() {
+        RssNewsParser parser = new RssNewsParser(
+                new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, true, List.of("example.com")),
+                new UriAwareStubHttpClient(
+                        Map.of(
+                                "https://example.com/feed.xml", """
+                                        <?xml version="1.0" encoding="utf-8"?>
+                                        <rss version="2.0">
+                                          <channel>
+                                            <title>Test Feed</title>
+                                            <item>
+                                              <title>Target Corp to be Acquired by Buyer LLC</title>
+                                              <link>https://example.com/news/full</link>
+                                              <description>Short RSS description.</description>
+                                            </item>
+                                          </channel>
+                                        </rss>
+                                        """,
+                                "https://example.com/news/full", """
+                                        <html><body>Target Corp (NASDAQ: TGTX) shareholders will receive $3.15 per share in cash.</body></html>
+                                        """
+                        ),
+                        Set.of()
+                )
+        );
+
+        List<NewsEvent> events = parser.readNews();
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().ticker()).isEqualTo("TGTX");
+        assertThat(events.getFirst().body()).contains("$3.15 per share in cash");
     }
 
     private static class StubHttpClient extends HttpClient {

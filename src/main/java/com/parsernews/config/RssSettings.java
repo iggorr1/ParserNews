@@ -8,6 +8,8 @@ import java.util.List;
 public record RssSettings(
         List<String> urls,
         int maxItemsPerFeed,
-        int timeoutSeconds
+        int timeoutSeconds,
+        boolean fetchFullArticleText,
+        List<String> articleWhitelistHosts
 ) {
 }

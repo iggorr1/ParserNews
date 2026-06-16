@@ -128,16 +128,17 @@ public class RssNewsParser implements NewsSourceParser {
             String headline = cleanText(textOfFirst(item, "title", ""));
             String body = cleanText(textOfFirst(item, "description", ""));
             String link = cleanText(textOfFirst(item, "link", feedUrl));
+            String articleBody = fetchFullArticleText(link, headline + " " + body).orElse(body);
             Instant publishedAt = parsePublishedAt(textOfFirst(item, "pubDate", ""));
             String companyName = guessCompanyName(headline);
-            String ticker = guessTicker(headline + " " + body);
+            String ticker = guessTicker(headline + " " + articleBody);
 
             if (!headline.isBlank()) {
                 events.add(new NewsEvent(
                         ticker,
                         companyName,
                         headline,
-                        body,
+                        articleBody,
                         source,
                         link,
                         publishedAt,
@@ -149,6 +150,55 @@ public class RssNewsParser implements NewsSourceParser {
         }
 
         return events;
+    }
+
+    private java.util.Optional<String> fetchFullArticleText(String link, String teaserText) {
+        if (!settings.fetchFullArticleText() || link == null || link.isBlank() || !shouldFetchArticleText(teaserText)) {
+            return java.util.Optional.empty();
+        }
+        try {
+            URI uri = URI.create(link);
+            validateUri(uri);
+            if (!isWhitelistedArticleHost(uri)) {
+                return java.util.Optional.empty();
+            }
+            HttpRequest request = HttpRequest.newBuilder(uri)
+                    .timeout(Duration.ofSeconds(settings.timeoutSeconds()))
+                    .header("Accept", "text/html, application/xhtml+xml")
+                    .header("User-Agent", "ParserNews/1.0 research-news-scanner")
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return java.util.Optional.empty();
+            }
+            return java.util.Optional.of(cleanText(response.body()));
+        } catch (Exception exception) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private boolean shouldFetchArticleText(String text) {
+        String lower = text.toLowerCase(Locale.ROOT);
+        return lower.contains("merger")
+                || lower.contains("acquired")
+                || lower.contains("acquire")
+                || lower.contains("take private")
+                || lower.contains("going private")
+                || lower.contains("tender offer")
+                || lower.contains("shareholders will receive")
+                || lower.contains("stockholders will receive");
+    }
+
+    private boolean isWhitelistedArticleHost(URI uri) {
+        String host = uri.getHost();
+        if (host == null || settings.articleWhitelistHosts() == null) {
+            return false;
+        }
+        String normalizedHost = host.toLowerCase(Locale.ROOT);
+        return settings.articleWhitelistHosts().stream()
+                .map(allowedHost -> allowedHost.toLowerCase(Locale.ROOT))
+                .anyMatch(allowedHost -> normalizedHost.equals(allowedHost) || normalizedHost.endsWith("." + allowedHost));
     }
 
     private String textOfFirst(Element element, String tagName, String fallback) {
