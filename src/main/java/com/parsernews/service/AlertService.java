@@ -2,6 +2,7 @@ package com.parsernews.service;
 
 import com.parsernews.model.AnalysisResult;
 import com.parsernews.model.NewsEvent;
+import com.parsernews.model.ScanSummary;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -29,7 +30,18 @@ public class AlertService {
         System.out.println("URL: " + event.sourceUrl());
     }
 
-    private boolean matchesExpected(NewsEvent event, AnalysisResult result) {
+    public void printSummary(ScanSummary summary) {
+        System.out.println("============================================================");
+        System.out.println("Scan summary");
+        System.out.println("Total read: " + summary.totalRead());
+        System.out.println("Analyzed: " + summary.analyzed());
+        System.out.println("Duplicates skipped: " + summary.duplicatesSkipped());
+        System.out.println("Labeled articles: " + summary.labeled());
+        System.out.println("Matched expected: " + summary.matchedExpected());
+        System.out.println("Mismatched expected: " + summary.mismatchedExpected());
+    }
+
+    public boolean matchesExpected(NewsEvent event, AnalysisResult result) {
         boolean eventTypeMatches = event.expectedEventType() == null
                 || event.expectedEventType() == result.eventType();
         boolean statusMatches = event.expectedStatus() == null
