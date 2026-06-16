@@ -1,5 +1,7 @@
 target/
 output/
+data/*.mv.db
+data/*.trace.db
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
@@ -9,6 +11,7 @@ output/
 .idea/jarRepositories.xml
 .idea/compiler.xml
 .idea/libraries/
+.idea/encodings.xml
 *.iws
 *.iml
 *.ipr

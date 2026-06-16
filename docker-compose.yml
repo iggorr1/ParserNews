@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: parsernews-postgres
+    environment:
+      POSTGRES_DB: parsernews
+      POSTGRES_USER: parsernews
+      POSTGRES_PASSWORD: parsernews
+    ports:
+      - "5432:5432"
+    volumes:
+      - parsernews-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  parsernews-postgres-data:

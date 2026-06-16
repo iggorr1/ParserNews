@@ -18,6 +18,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.time.Instant;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -122,6 +125,7 @@ public class RssNewsParser implements NewsSourceParser {
             String headline = cleanText(textOfFirst(item, "title", ""));
             String body = cleanText(textOfFirst(item, "description", ""));
             String link = cleanText(textOfFirst(item, "link", feedUrl));
+            Instant publishedAt = parsePublishedAt(textOfFirst(item, "pubDate", ""));
             String companyName = guessCompanyName(headline);
 
             if (!headline.isBlank()) {
@@ -131,7 +135,11 @@ public class RssNewsParser implements NewsSourceParser {
                         headline,
                         body,
                         source,
-                        link
+                        link,
+                        publishedAt,
+                        null,
+                        null,
+                        null
                 ));
             }
         }
@@ -145,6 +153,18 @@ public class RssNewsParser implements NewsSourceParser {
             return fallback;
         }
         return nodes.item(0).getTextContent();
+    }
+
+    private Instant parsePublishedAt(String value) {
+        String cleaned = cleanText(value);
+        if (cleaned.isBlank()) {
+            return null;
+        }
+        try {
+            return ZonedDateTime.parse(cleaned, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant();
+        } catch (RuntimeException exception) {
+            return null;
+        }
     }
 
     private String cleanText(String value) {

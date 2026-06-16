@@ -20,14 +20,19 @@ import java.util.Locale;
 public class RuleBasedNewsAnalyzer {
     private final AnalyzerRules rules;
     private final AnalyzerSettings settings;
+    private final FalsePositiveFilter falsePositiveFilter;
 
     @Autowired
-    public RuleBasedNewsAnalyzer(RulesConfigLoader rulesConfigLoader, AnalyzerSettings settings) {
-        this(rulesConfigLoader.loadRules(), settings);
+    public RuleBasedNewsAnalyzer(
+            RulesConfigLoader rulesConfigLoader,
+            AnalyzerSettings settings,
+            FalsePositiveFilter falsePositiveFilter
+    ) {
+        this(rulesConfigLoader.loadRules(), settings, falsePositiveFilter);
     }
 
     public RuleBasedNewsAnalyzer(AnalyzerRules rules) {
-        this(rules, new AnalyzerSettings(null, null, null));
+        this(rules, new AnalyzerSettings(null, null, null), new FalsePositiveFilter());
     }
 
     public RuleBasedNewsAnalyzer(RulesConfigLoader rulesConfigLoader) {
@@ -35,8 +40,13 @@ public class RuleBasedNewsAnalyzer {
     }
 
     public RuleBasedNewsAnalyzer(AnalyzerRules rules, AnalyzerSettings settings) {
+        this(rules, settings, new FalsePositiveFilter());
+    }
+
+    public RuleBasedNewsAnalyzer(AnalyzerRules rules, AnalyzerSettings settings, FalsePositiveFilter falsePositiveFilter) {
         this.rules = rules;
         this.settings = settings;
+        this.falsePositiveFilter = falsePositiveFilter;
     }
 
     public AnalysisResult analyze(NewsEvent event) {
@@ -62,6 +72,10 @@ public class RuleBasedNewsAnalyzer {
         }
 
         EventType eventType = determineEventType(text, positives, negatives);
+        if (eventType == EventType.DEBT_TENDER_OFFER) {
+            score = Math.min(score, 0);
+            negatives.addAll(falsePositiveFilter.reasons(text));
+        }
         EventStatus status = determineStatus(score);
         String reason = buildReason(eventType, status, positives, negatives);
 
@@ -86,6 +100,9 @@ public class RuleBasedNewsAnalyzer {
     }
 
     private EventType determineEventType(String text, List<String> positives, List<String> negatives) {
+        if (falsePositiveFilter.isDebtTenderOffer(text)) {
+            return EventType.DEBT_TENDER_OFFER;
+        }
         if (text.contains("registered direct offering") || text.contains("public offering") || text.contains("dilution")) {
             return EventType.OFFERING_OR_DILUTION;
         }

@@ -259,6 +259,10 @@
         </div>
     </section>
     <section class="toolbar">
+        <select id="viewMode">
+            <option value="report">Scan report</option>
+            <option value="events">Saved events</option>
+        </select>
         <input id="search" type="search" placeholder="Search ticker, company, headline, source">
         <select id="status">
             <option value="">All statuses</option>
@@ -276,6 +280,10 @@
         <label class="checkbox">
             <input id="signalsOnly" type="checkbox">
             Signals only
+        </label>
+        <label class="checkbox">
+            <input id="historicalOnly" type="checkbox">
+            Historical only
         </label>
         <button id="refresh" type="button">Refresh</button>
         <a class="button" href="/api/report.csv">CSV</a>
@@ -305,9 +313,11 @@
 </main>
 <script>
     const state = {results: [], summary: {}};
+    const viewMode = document.querySelector("#viewMode");
     const statusFilter = document.querySelector("#status");
     const matchFilter = document.querySelector("#match");
     const signalsOnlyFilter = document.querySelector("#signalsOnly");
+    const historicalOnlyFilter = document.querySelector("#historicalOnly");
     const searchInput = document.querySelector("#search");
     const rows = document.querySelector("#rows");
     const empty = document.querySelector("#empty");
@@ -315,19 +325,67 @@
     const sourceBreakdown = document.querySelector("#sourceBreakdown");
 
     document.querySelector("#refresh").addEventListener("click", loadReport);
+    viewMode.addEventListener("change", loadReport);
     statusFilter.addEventListener("change", renderRows);
     matchFilter.addEventListener("change", renderRows);
     signalsOnlyFilter.addEventListener("change", renderRows);
+    historicalOnlyFilter.addEventListener("change", loadReport);
     searchInput.addEventListener("input", renderRows);
 
     async function loadReport() {
-        const response = await fetch("/api/report", {cache: "no-store"});
+        const response = viewMode.value === "events"
+            ? await fetch(eventsUrl(), {cache: "no-store"})
+            : await fetch("/api/report", {cache: "no-store"});
         const data = await response.json();
-        state.summary = data.summary || {};
-        state.results = data.results || [];
+        if (viewMode.value === "events") {
+            state.results = data.map(eventToRow);
+            state.summary = {
+                totalRead: data.length,
+                analyzed: data.length,
+                duplicatesSkipped: 0,
+                labeled: 0,
+                matchedExpected: 0,
+                mismatchedExpected: 0
+            };
+        } else {
+            state.summary = data.summary || {};
+            state.results = data.results || [];
+        }
         renderSummary();
         renderBreakdowns();
         renderRows();
+    }
+
+    function eventsUrl() {
+        const params = new URLSearchParams();
+        if (historicalOnlyFilter.checked) {
+            params.set("sourceType", "HISTORICAL");
+        }
+        const query = params.toString();
+        return query ? `/api/events?${query}` : "/api/events";
+    }
+
+    function eventToRow(item) {
+        return {
+            ticker: item.targetTicker,
+            companyName: item.targetCompany,
+            headline: item.headline,
+            source: item.source,
+            sourceUrl: item.sourceUrl,
+            eventType: item.eventType,
+            status: item.reviewStatus,
+            score: item.confidenceScore,
+            matchedPositiveKeywords: splitKeywords(item.matchedPositiveKeywords),
+            matchedNegativeKeywords: splitKeywords(item.matchedNegativeKeywords),
+            expectedEventType: "",
+            expectedStatus: "",
+            matchesExpected: null,
+            reason: item.explanation
+        };
+    }
+
+    function splitKeywords(value) {
+        return value ? String(value).split("|").filter(Boolean) : [];
     }
 
     function renderSummary() {

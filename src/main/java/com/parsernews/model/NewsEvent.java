@@ -1,5 +1,7 @@
 package com.parsernews.model;
 
+import java.time.Instant;
+
 public record NewsEvent(
         String ticker,
         String companyName,
@@ -7,6 +9,7 @@ public record NewsEvent(
         String body,
         String source,
         String sourceUrl,
+        Instant publishedAt,
         EventType expectedEventType,
         EventStatus expectedStatus,
         String notes
@@ -19,7 +22,21 @@ public record NewsEvent(
             String source,
             String sourceUrl
     ) {
-        this(ticker, companyName, headline, body, source, sourceUrl, null, null, null);
+        this(ticker, companyName, headline, body, source, sourceUrl, null, null, null, null);
+    }
+
+    public NewsEvent(
+            String ticker,
+            String companyName,
+            String headline,
+            String body,
+            String source,
+            String sourceUrl,
+            EventType expectedEventType,
+            EventStatus expectedStatus,
+            String notes
+    ) {
+        this(ticker, companyName, headline, body, source, sourceUrl, null, expectedEventType, expectedStatus, notes);
     }
 
     public String fullText() {

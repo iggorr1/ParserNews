@@ -1,0 +1,17 @@
+package com.parsernews.persistence;
+
+public enum DetectedEventType {
+    PROPOSAL,
+    DEFINITIVE_AGREEMENT,
+    GOING_PRIVATE,
+    MERGER,
+    ACQUISITION,
+    BOARD_REJECTION,
+    ACTIVIST_CAMPAIGN,
+    TENDER_OFFER,
+    DEBT_TENDER_OFFER,
+    STRATEGIC_ALTERNATIVES,
+    OFFERING_OR_DILUTION,
+    BANKRUPTCY_RISK,
+    OTHER
+}

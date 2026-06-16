@@ -1,6 +1,8 @@
-# OTC Take-Private News Scanner
+# M&A Event Intelligence Platform
 
-Console MVP for scanning mock or historical news articles with explainable keyword rules.
+Research-first Spring Boot project for collecting corporate news, detecting M&A /
+takeover / going-private events, filtering false positives, and storing events for
+later historical market-movement analysis.
 
 ## Safety Scope
 
@@ -29,6 +31,23 @@ Open the local UI:
 
 ```text
 http://localhost:8080
+```
+
+The app stores raw articles and detected events. By default it uses a local H2
+database file for easy development. For PostgreSQL, start Docker and use the
+`db` profile:
+
+```powershell
+docker compose up -d
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=db"
+```
+
+PostgreSQL defaults:
+
+```text
+database: parsernews
+user: parsernews
+password: parsernews
 ```
 
 ## Run Historical Articles
@@ -138,6 +157,8 @@ http://localhost:8080
 
 The UI shows source and status breakdowns. Use `Signals only` to hide rows
 where no positive or negative keyword matched.
+Use `Saved events` to view persisted detected events from the database.
+Use `Historical only` with `Saved events` to focus on imported old articles.
 
 Score can still be `0` for real articles. That means the article was read,
 but none of the configured acquisition, take-private, offering, bankruptcy,
@@ -181,6 +202,10 @@ Ready now:
 
 - read public HTTPS RSS feeds
 - analyze headlines and RSS descriptions with explainable rules
+- filter debt tender false positives such as Senior Notes or bonds
+- store news sources, raw articles, and detected events
+- expose persisted events at `GET /api/events`
+- run with PostgreSQL using the `db` profile and Docker Compose
 - use default public RSS feeds from GlobeNewswire and PR Newswire
 - print console alerts
 - view latest results in a browser at `http://localhost:8080`
@@ -190,12 +215,13 @@ Ready now:
 
 Still missing for a stronger first production-like version:
 
-- persistent duplicate detection across runs
+- persistent duplicate detection across runs beyond URL hash storage
 - more real historical examples for tuning
 - better ticker/company extraction from RSS items
 - more RSS sources, such as PR Newswire categories
 - scheduled repeated runs
-- optional storage, such as PostgreSQL, after the console version is stable
+- market data snapshots after events
+- statistical return analysis
 
 ## Tune Rules
 
@@ -204,3 +230,21 @@ Edit keyword weights and status thresholds in:
 ```text
 src/main/resources/analyzer-rules.json
 ```
+
+## Stored Event API
+
+```text
+GET /api/events
+GET /api/events?status=WATCHLIST
+GET /api/events?type=ACQUISITION
+GET /api/events?sourceType=HISTORICAL
+```
+
+Current schema is created by JPA:
+
+- `news_sources`
+- `news_articles`
+- `detected_events`
+
+This is intentionally small. Market data snapshots and statistical analysis come
+after the event data model is stable.

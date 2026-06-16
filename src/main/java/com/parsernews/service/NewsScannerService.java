@@ -19,6 +19,7 @@ public class NewsScannerService {
     private final AlertService alertService;
     private final DuplicateNewsFilter duplicateNewsFilter;
     private final ReportExportService reportExportService;
+    private final EventPersistenceService eventPersistenceService;
     private final ConsoleSettings consoleSettings;
 
     public NewsScannerService(
@@ -27,6 +28,7 @@ public class NewsScannerService {
             AlertService alertService,
             DuplicateNewsFilter duplicateNewsFilter,
             ReportExportService reportExportService,
+            EventPersistenceService eventPersistenceService,
             ConsoleSettings consoleSettings
     ) {
         this.newsSourceParser = newsSourceParser;
@@ -34,6 +36,7 @@ public class NewsScannerService {
         this.alertService = alertService;
         this.duplicateNewsFilter = duplicateNewsFilter;
         this.reportExportService = reportExportService;
+        this.eventPersistenceService = eventPersistenceService;
         this.consoleSettings = consoleSettings;
     }
 
@@ -52,6 +55,7 @@ public class NewsScannerService {
                 continue;
             }
             AnalysisResult result = analyzer.analyze(event);
+            eventPersistenceService.save(event, result);
             Boolean matchesExpected = null;
             analyzed++;
             if (event.hasExpectedResult()) {

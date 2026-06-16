@@ -111,6 +111,24 @@ class RuleBasedNewsAnalyzerTest {
         assertThat(result.status()).isEqualTo(EventStatus.WATCHLIST);
     }
 
+    @Test
+    void filtersDebtTenderOfferForSeniorNotes() {
+        RuleBasedNewsAnalyzer liveAnalyzer = new RuleBasedNewsAnalyzer(
+                new RulesConfigLoader(new ObjectMapper()).loadRules(),
+                new AnalyzerSettings(1, null, null)
+        );
+
+        AnalysisResult result = liveAnalyzer.analyze(news(
+                "Fiserv Announces Launch of Tender Offers for Senior Notes due 2027",
+                "The company launched tender offers for debt securities and bonds."
+        ));
+
+        assertThat(result.eventType()).isEqualTo(EventType.DEBT_TENDER_OFFER);
+        assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
+        assertThat(result.score()).isLessThanOrEqualTo(0);
+        assertThat(result.matchedNegativeKeywords()).contains("senior notes");
+    }
+
     private NewsEvent news(String headline, String body) {
         return new NewsEvent("TEST", "Test Company", headline, body, "Test Source", "https://example.com/test");
     }
