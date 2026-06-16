@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.parsernews.model.NewsEvent;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.stereotype.Component;
@@ -12,6 +13,7 @@ import java.io.IOException;
 import java.util.List;
 
 @Component
+@ConditionalOnProperty(name = "scanner.source", havingValue = "mock", matchIfMissing = true)
 public class MockNewsParser implements NewsSourceParser {
     private final ObjectMapper objectMapper;
     private final ResourceLoader resourceLoader;

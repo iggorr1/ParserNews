@@ -15,7 +15,7 @@ class SafetyGuardServiceTest {
                 false,
                 false,
                 false
-        ));
+        ), "mock");
 
         assertThatCode(service::validateStartupSafety).doesNotThrowAnyException();
     }
@@ -28,7 +28,7 @@ class SafetyGuardServiceTest {
                 false,
                 false,
                 false
-        ));
+        ), "mock");
 
         assertThatThrownBy(service::validateStartupSafety)
                 .isInstanceOf(IllegalStateException.class)
@@ -36,17 +36,30 @@ class SafetyGuardServiceTest {
     }
 
     @Test
-    void rejectsRealWebParsingForCurrentMvp() {
+    void allowsRealWebParsingForPublicRssFeeds() {
         SafetyGuardService service = new SafetyGuardService(new SafetySettings(
                 false,
                 false,
                 false,
                 false,
                 true
-        ));
+        ), "rss");
+
+        assertThatCode(service::validateStartupSafety).doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsRssSourceWhenRealWebParsingFlagIsNotEnabled() {
+        SafetyGuardService service = new SafetyGuardService(new SafetySettings(
+                false,
+                false,
+                false,
+                false,
+                false
+        ), "rss");
 
         assertThatThrownBy(service::validateStartupSafety)
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("real web parsing is disabled");
+                .hasMessageContaining("RSS source requires");
     }
 }

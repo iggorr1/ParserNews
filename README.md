@@ -13,10 +13,11 @@ It does not:
 - connect to exchanges
 - execute trades
 - place orders
-- scrape the internet in the current MVP
+- scrape arbitrary HTML pages
 
 Startup safety flags are disabled by default in `src/main/resources/application.properties`.
-If trading, broker, wallet, exchange, or real web parsing flags are enabled, the app fails fast.
+If trading, broker, wallet, or exchange flags are enabled, the app fails fast.
+The only internet mode currently allowed is public RSS reading, and it must be enabled explicitly.
 
 ## Run
 
@@ -72,6 +73,28 @@ To print only more serious alerts to console while still exporting all rows:
 ```
 
 Allowed console status filters are `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, and `IMPORTANT`.
+
+## Run Public RSS Feed
+
+The first internet mode reads public RSS/XML feeds only. It does not scrape article pages.
+
+Default RSS URL:
+
+```text
+https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions
+```
+
+Run:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.source=rss --scanner.safety.real-web-parsing-enabled=true --scanner.console-min-status=WATCHLIST --scanner.rss.max-items-per-feed=10"
+```
+
+Use custom HTTPS RSS feeds:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.source=rss --scanner.safety.real-web-parsing-enabled=true --scanner.rss.urls=https://example.com/feed.xml"
+```
 
 ## Tune Rules
 

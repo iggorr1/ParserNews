@@ -1,0 +1,159 @@
+package com.parsernews.parser;
+
+import com.parsernews.config.RssSettings;
+import com.parsernews.model.NewsEvent;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.stereotype.Component;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import java.io.StringReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
+
+@Component
+@ConditionalOnProperty(name = "scanner.source", havingValue = "rss")
+public class RssNewsParser implements NewsSourceParser {
+    private static final Pattern HTML_TAG = Pattern.compile("<[^>]+>");
+    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+
+    private final RssSettings settings;
+    private final HttpClient httpClient;
+
+    @Autowired
+    public RssNewsParser(RssSettings settings) {
+        this(settings, HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(settings.timeoutSeconds()))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build());
+    }
+
+    RssNewsParser(RssSettings settings, HttpClient httpClient) {
+        this.settings = settings;
+        this.httpClient = httpClient;
+    }
+
+    @Override
+    public List<NewsEvent> readNews() {
+        List<NewsEvent> events = new ArrayList<>();
+        for (String url : settings.urls()) {
+            events.addAll(readFeed(url));
+        }
+        return events;
+    }
+
+    private List<NewsEvent> readFeed(String url) {
+        try {
+            URI uri = URI.create(url);
+            validateUri(uri);
+            HttpRequest request = HttpRequest.newBuilder(uri)
+                    .timeout(Duration.ofSeconds(settings.timeoutSeconds()))
+                    .header("Accept", "application/rss+xml, application/xml, text/xml")
+                    .header("User-Agent", "ParserNews/1.0 research-news-scanner")
+                    .GET()
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("RSS feed returned status " + response.statusCode() + ": " + url);
+            }
+
+            return parseRss(response.body(), url);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while reading RSS feed " + url, exception);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot read RSS feed " + url, exception);
+        }
+    }
+
+    private void validateUri(URI uri) {
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IllegalArgumentException("Only HTTPS RSS feeds are allowed: " + uri);
+        }
+    }
+
+    private List<NewsEvent> parseRss(String xml, String feedUrl) throws Exception {
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+        factory.setFeature("http://xml.org/sax/features/external-general-entities", false);
+        factory.setFeature("http://xml.org/sax/features/external-parameter-entities", false);
+        factory.setExpandEntityReferences(false);
+        DocumentBuilder builder = factory.newDocumentBuilder();
+        Document document = builder.parse(new InputSource(new StringReader(xml)));
+
+        String source = textOfFirst(document.getDocumentElement(), "title", "RSS Feed");
+        NodeList items = document.getElementsByTagName("item");
+        List<NewsEvent> events = new ArrayList<>();
+        int limit = Math.min(items.getLength(), settings.maxItemsPerFeed());
+
+        for (int index = 0; index < limit; index++) {
+            Element item = (Element) items.item(index);
+            String headline = cleanText(textOfFirst(item, "title", ""));
+            String body = cleanText(textOfFirst(item, "description", ""));
+            String link = cleanText(textOfFirst(item, "link", feedUrl));
+            String companyName = guessCompanyName(headline);
+
+            if (!headline.isBlank()) {
+                events.add(new NewsEvent(
+                        "UNKNOWN",
+                        companyName,
+                        headline,
+                        body,
+                        source,
+                        link
+                ));
+            }
+        }
+
+        return events;
+    }
+
+    private String textOfFirst(Element element, String tagName, String fallback) {
+        NodeList nodes = element.getElementsByTagName(tagName);
+        if (nodes.getLength() == 0 || nodes.item(0).getTextContent() == null) {
+            return fallback;
+        }
+        return nodes.item(0).getTextContent();
+    }
+
+    private String cleanText(String value) {
+        String withoutTags = HTML_TAG.matcher(value).replaceAll(" ");
+        String decoded = withoutTags
+                .replace("&amp;", "&")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#39;", "'");
+        return WHITESPACE.matcher(decoded).replaceAll(" ").trim();
+    }
+
+    private String guessCompanyName(String headline) {
+        String trimmed = headline.trim();
+        if (trimmed.isBlank()) {
+            return "Unknown Company";
+        }
+        String lower = trimmed.toLowerCase(Locale.ROOT);
+        int announcesIndex = lower.indexOf(" announces ");
+        if (announcesIndex > 0) {
+            return trimmed.substring(0, announcesIndex).trim();
+        }
+        int entersIndex = lower.indexOf(" enters ");
+        if (entersIndex > 0) {
+            return trimmed.substring(0, entersIndex).trim();
+        }
+        return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80).trim();
+    }
+}
