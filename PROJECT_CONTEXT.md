@@ -163,6 +163,16 @@ Stored event API lives in:
 - Do not replace the simple UI with a large frontend framework unless the user asks.
 - Do not loosen false-positive filters for debt, notes, bonds, offerings, or asset acquisitions without tests.
 
+## Working Rules For Future Changes
+
+- First read `PROJECT_CONTEXT.md`.
+- Do not scan the whole repository unless necessary.
+- Work only with files related to the current task.
+- Do not refactor unrelated code.
+- Do not change formatting or style outside edited lines.
+- Before editing, explain the minimal plan and list target files.
+- After editing, show the diff summary and commands/tests run.
+
 ## Best Next Steps
 
 1. Fetch full article text for whitelisted sources after RSS discovery.
