@@ -93,10 +93,14 @@ public class RuleBasedNewsAnalyzer {
         if (text.contains("take private") || text.contains("going private") || text.contains("become privately held")) {
             return EventType.TAKE_PRIVATE_CONFIRMED;
         }
-        if (text.contains("definitive merger agreement") || text.contains("merger agreement")) {
+        if (text.contains("definitive merger agreement") || text.contains("merger agreement") || text.contains("merger")) {
             return EventType.MERGER_CONFIRMED;
         }
-        if (text.contains("to be acquired by")) {
+        if (text.contains("to be acquired by")
+                || text.contains("to acquire")
+                || text.contains("acquires")
+                || text.contains("acquisition")
+                || text.contains("sale to")) {
             return containsAny(negatives, "rumor", "speculation", "non-binding proposal")
                     ? EventType.ACQUISITION_RUMOR
                     : EventType.ACQUISITION_CONFIRMED;

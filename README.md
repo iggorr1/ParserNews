@@ -88,11 +88,28 @@ Default RSS feeds:
 
 ```text
 https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions
-https://www.globenewswire.com/RssFeed/subjectcode/47-Bankruptcy/feedTitle/GlobeNewswire%20-%20Bankruptcy
+https://www.globenewswire.com/RssFeed/subjectcode/17-Financing%20Agreements/feedTitle/GlobeNewswire%20-%20Financing%20Agreements
+https://www.globenewswire.com/RssFeed/subjectcode/23-Joint%20Venture/feedTitle/GlobeNewswire%20-%20Joint%20Venture
+https://www.globenewswire.com/RssFeed/subjectcode/37-Restructuring%202f%20Recapitalization/feedTitle/GlobeNewswire%20-%20Restructuring%20%2C%20Recapitalization
+https://www.globenewswire.com/RssFeed/subjectcode/5-Bankruptcy/feedTitle/GlobeNewswire%20-%20Bankruptcy
+https://www.globenewswire.com/RssFeed/subjectcode/57-Changes%20In%20Share%20Capital%20And%20Votes/feedTitle/GlobeNewswire%20-%20Changes%20In%20Share%20Capital%20And%20Votes
+https://www.globenewswire.com/RssFeed/subjectcode/61-Corporate%20Action/feedTitle/GlobeNewswire%20-%20Corporate%20Action
+https://www.globenewswire.com/RssFeed/subjectcode/72-Press%20Releases/feedTitle/GlobeNewswire%20-%20Press%20Releases
 https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/acquisitions-mergers-and-takeovers-list.rss
 https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/bankruptcy-list.rss
 https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/stock-offering-list.rss
 https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/joint-ventures-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/financing-agreements-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/private-placement-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/restructuring-recapitalization-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/shareholder-activism-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/shareholder-meetings-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/venture-capital-list.rss
+https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/banking-financial-services-list.rss
+https://www.prnewswire.com/rss/news-releases/general-business-latest-news/contracts-list.rss
+https://www.prnewswire.com/rss/news-releases/general-business-latest-news/corporate-expansion-list.rss
+https://www.prnewswire.com/rss/all-news-releases-from-PR-newswire-news.rss
+https://www.sec.gov/news/pressreleases.rss
 ```
 
 Run:
@@ -118,6 +135,13 @@ Then run `StockScannerApplication` and open:
 ```text
 http://localhost:8080
 ```
+
+The UI shows source and status breakdowns. Use `Signals only` to hide rows
+where no positive or negative keyword matched.
+
+Score can still be `0` for real articles. That means the article was read,
+but none of the configured acquisition, take-private, offering, bankruptcy,
+or risk keywords appeared in the headline or RSS description.
 
 Use custom HTTPS RSS feeds:
 

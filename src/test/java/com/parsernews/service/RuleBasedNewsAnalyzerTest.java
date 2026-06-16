@@ -82,6 +82,19 @@ class RuleBasedNewsAnalyzerTest {
         assertThat(result.matchedNegativeKeywords()).contains("bankruptcy", "going concern", "delisting notice");
     }
 
+    @Test
+    void givesSmallScoreToWeakAcquisitionHeadline() {
+        AnalysisResult result = analyzer.analyze(news(
+                "Buyer Corp to Acquire Target Corp",
+                "The companies announced an acquisition."
+        ));
+
+        assertThat(result.eventType()).isEqualTo(EventType.ACQUISITION_CONFIRMED);
+        assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
+        assertThat(result.score()).isGreaterThan(0);
+        assertThat(result.matchedPositiveKeywords()).contains("to acquire", "acquisition");
+    }
+
     private NewsEvent news(String headline, String body) {
         return new NewsEvent("TEST", "Test Company", headline, body, "Test Source", "https://example.com/test");
     }

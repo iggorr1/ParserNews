@@ -12,7 +12,14 @@ class RulesConfigLoaderTest {
     void readsAnalyzerRulesFromJsonResource() {
         AnalyzerRules rules = loader.loadRules();
 
-        assertThat(rules.positiveRules()).hasSize(12);
+        assertThat(rules.positiveRules())
+                .extracting(KeywordRule::keyword)
+                .contains(
+                        "definitive merger agreement",
+                        "to be acquired by",
+                        "to acquire",
+                        "acquisition"
+                );
         assertThat(rules.negativeRules()).hasSize(12);
         assertThat(rules.statusThresholds().watchlist()).isEqualTo(31);
         assertThat(rules.statusThresholds().manualReview()).isEqualTo(56);

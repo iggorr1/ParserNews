@@ -11,6 +11,13 @@
     { "keyword": "private equity", "score": 15 },
     { "keyword": "investment firm", "score": 10 },
     { "keyword": "to be acquired by", "score": 20 },
+    { "keyword": "definitive agreement", "score": 15 },
+    { "keyword": "to acquire", "score": 12 },
+    { "keyword": "acquires", "score": 8 },
+    { "keyword": "acquisition", "score": 6 },
+    { "keyword": "sale to", "score": 8 },
+    { "keyword": "merger", "score": 8 },
+    { "keyword": "strategic review", "score": 8 },
     { "keyword": "premium of", "score": 10 }
   ],
   "negativeRules": [

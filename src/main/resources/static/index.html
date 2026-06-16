@@ -56,6 +56,13 @@
             margin-bottom: 16px;
         }
 
+        .breakdowns {
+            display: grid;
+            grid-template-columns: minmax(220px, 1fr) minmax(260px, 2fr);
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+
         .metric {
             background: var(--panel);
             border: 1px solid var(--line);
@@ -67,6 +74,44 @@
             display: block;
             font-size: 22px;
             margin-bottom: 4px;
+        }
+
+        .breakdown {
+            background: var(--panel);
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            padding: 12px;
+            min-width: 0;
+        }
+
+        .breakdown h2 {
+            margin: 0 0 8px;
+            font-size: 13px;
+            text-transform: uppercase;
+            color: #4f5966;
+            letter-spacing: 0;
+        }
+
+        .breakdown-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            border-top: 1px solid var(--line);
+            padding: 7px 0;
+        }
+
+        .breakdown-row:first-of-type {
+            border-top: 0;
+        }
+
+        .breakdown-row span:first-child {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .breakdown-row strong {
+            flex: 0 0 auto;
         }
 
         .toolbar {
@@ -93,6 +138,21 @@
         input {
             min-width: min(360px, 100%);
             flex: 1;
+        }
+
+        label.checkbox {
+            height: 34px;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            color: var(--text);
+        }
+
+        label.checkbox input {
+            min-width: 0;
+            width: 16px;
+            height: 16px;
+            flex: 0 0 auto;
         }
 
         button,
@@ -173,6 +233,12 @@
             padding: 24px;
             color: var(--muted);
         }
+
+        @media (max-width: 780px) {
+            .breakdowns {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -182,6 +248,16 @@
 </header>
 <main>
     <section class="summary" id="summary"></section>
+    <section class="breakdowns">
+        <div class="breakdown">
+            <h2>Status mix</h2>
+            <div id="statusBreakdown"></div>
+        </div>
+        <div class="breakdown">
+            <h2>Sources seen</h2>
+            <div id="sourceBreakdown"></div>
+        </div>
+    </section>
     <section class="toolbar">
         <input id="search" type="search" placeholder="Search ticker, company, headline, source">
         <select id="status">
@@ -197,6 +273,10 @@
             <option value="false">Mismatched</option>
             <option value="unlabeled">Unlabeled</option>
         </select>
+        <label class="checkbox">
+            <input id="signalsOnly" type="checkbox">
+            Signals only
+        </label>
         <button id="refresh" type="button">Refresh</button>
         <a class="button" href="/api/report.csv">CSV</a>
         <a class="button" href="/api/mismatches.csv">Mismatches</a>
@@ -227,13 +307,17 @@
     const state = {results: [], summary: {}};
     const statusFilter = document.querySelector("#status");
     const matchFilter = document.querySelector("#match");
+    const signalsOnlyFilter = document.querySelector("#signalsOnly");
     const searchInput = document.querySelector("#search");
     const rows = document.querySelector("#rows");
     const empty = document.querySelector("#empty");
+    const statusBreakdown = document.querySelector("#statusBreakdown");
+    const sourceBreakdown = document.querySelector("#sourceBreakdown");
 
     document.querySelector("#refresh").addEventListener("click", loadReport);
     statusFilter.addEventListener("change", renderRows);
     matchFilter.addEventListener("change", renderRows);
+    signalsOnlyFilter.addEventListener("change", renderRows);
     searchInput.addEventListener("input", renderRows);
 
     async function loadReport() {
@@ -242,6 +326,7 @@
         state.summary = data.summary || {};
         state.results = data.results || [];
         renderSummary();
+        renderBreakdowns();
         renderRows();
     }
 
@@ -262,10 +347,39 @@
         `).join("");
     }
 
+    function renderBreakdowns() {
+        statusBreakdown.innerHTML = renderCountRows(countBy(state.results, "status"), 6);
+        sourceBreakdown.innerHTML = renderCountRows(countBy(state.results, "source"), 10);
+    }
+
+    function countBy(items, field) {
+        return items.reduce((counts, item) => {
+            const key = item[field] || "Unknown";
+            counts[key] = (counts[key] || 0) + 1;
+            return counts;
+        }, {});
+    }
+
+    function renderCountRows(counts, limit) {
+        const rows = Object.entries(counts)
+            .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+            .slice(0, limit);
+        if (rows.length === 0) {
+            return `<div class="subtle">No data yet</div>`;
+        }
+        return rows.map(([label, count]) => `
+            <div class="breakdown-row">
+                <span title="${escapeAttr(label)}">${escapeText(label)}</span>
+                <strong>${escapeText(count)}</strong>
+            </div>
+        `).join("");
+    }
+
     function renderRows() {
         const query = searchInput.value.trim().toLowerCase();
         const status = statusFilter.value;
         const match = matchFilter.value;
+        const signalsOnly = signalsOnlyFilter.checked;
         const filtered = state.results.filter(item => {
             const haystack = [
                 item.ticker,
@@ -279,7 +393,11 @@
             const matchOk = !match
                 || String(item.matchesExpected) === match
                 || (match === "unlabeled" && item.matchesExpected === null);
-            return statusOk && queryOk && matchOk;
+            const signalOk = !signalsOnly
+                || item.score !== 0
+                || (item.matchedPositiveKeywords || []).length > 0
+                || (item.matchedNegativeKeywords || []).length > 0;
+            return statusOk && queryOk && matchOk && signalOk;
         });
 
         rows.innerHTML = filtered.map(rowTemplate).join("");
