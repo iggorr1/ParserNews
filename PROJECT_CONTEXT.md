@@ -128,6 +128,7 @@ Stored event API lives in:
 - Saved article read API at `GET /api/articles` and `GET /api/articles/candidates`.
 - Deterministic candidate scoring with score, strength, and reason.
 - Alert eligibility and queue foundation at `GET /api/alerts/candidates`.
+- Local/admin candidate backfill at `POST /api/admin/recompute-candidates`.
 - Rule-based event classification.
 - False-positive filtering for debt tender offers, senior notes, bonds, offerings, asset acquisitions, reverse mergers, and other non-takeover noise.
 - Event statuses: `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, `IMPORTANT`, `HIGH_PRIORITY_SIGNAL`.

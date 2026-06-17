@@ -245,6 +245,17 @@ public class DetectedEventEntity {
         this.alertEligible = false;
     }
 
+    public void updateCandidateScore(int candidateScore, CandidateStrength candidateStrength, String candidateReason) {
+        this.candidateScore = candidateScore;
+        this.candidateStrength = candidateStrength == null ? CandidateStrength.NONE : candidateStrength;
+        this.candidateReason = candidateReason;
+    }
+
+    public void updateAlertEligibility(boolean alertEligible, String alertReason) {
+        this.alertEligible = alertEligible;
+        this.alertReason = alertReason;
+    }
+
     private String normalizeBlank(String value) {
         if (value == null || value.isBlank()) {
             return null;
