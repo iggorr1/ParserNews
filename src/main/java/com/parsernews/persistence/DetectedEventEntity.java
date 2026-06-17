@@ -64,6 +64,13 @@ public class DetectedEventEntity {
     @Column(length = 1024)
     private String candidateReason;
 
+    private Boolean alertEligible = false;
+
+    private Instant alertQueuedAt;
+
+    @Column(length = 1024)
+    private String alertReason;
+
     @Column(length = 2048)
     private String matchedPositiveKeywords;
 
@@ -99,6 +106,8 @@ public class DetectedEventEntity {
             int candidateScore,
             CandidateStrength candidateStrength,
             String candidateReason,
+            boolean alertEligible,
+            String alertReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String falsePositiveReasons,
@@ -117,6 +126,8 @@ public class DetectedEventEntity {
         this.candidateScore = candidateScore;
         this.candidateStrength = candidateStrength == null ? CandidateStrength.NONE : candidateStrength;
         this.candidateReason = candidateReason;
+        this.alertEligible = alertEligible;
+        this.alertReason = alertReason;
         this.matchedPositiveKeywords = matchedPositiveKeywords;
         this.matchedNegativeKeywords = matchedNegativeKeywords;
         this.falsePositiveReasons = falsePositiveReasons;
@@ -187,6 +198,18 @@ public class DetectedEventEntity {
         return candidateReason;
     }
 
+    public boolean isAlertEligible() {
+        return Boolean.TRUE.equals(alertEligible);
+    }
+
+    public Instant getAlertQueuedAt() {
+        return alertQueuedAt;
+    }
+
+    public String getAlertReason() {
+        return alertReason;
+    }
+
     public String getMatchedPositiveKeywords() {
         return matchedPositiveKeywords;
     }
@@ -215,6 +238,11 @@ public class DetectedEventEntity {
         this.targetTicker = normalizeBlank(targetTicker);
         this.validationStatus = validationStatus == null ? ValidationStatus.UNREVIEWED : validationStatus;
         this.reviewNotes = normalizeBlank(reviewNotes);
+    }
+
+    public void markAlertQueued() {
+        this.alertQueuedAt = Instant.now();
+        this.alertEligible = false;
     }
 
     private String normalizeBlank(String value) {

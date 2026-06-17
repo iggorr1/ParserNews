@@ -126,6 +126,8 @@ class ArticleControllerTest {
                 candidateScore,
                 candidateStrength,
                 "Matched " + candidateStrength + " candidate signal: definitive agreement.",
+                candidateStrength == CandidateStrength.HIGH,
+                "HIGH candidate from trusted source with positive score.",
                 "definitive agreement|per share in cash",
                 "",
                 "",

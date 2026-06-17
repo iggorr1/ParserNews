@@ -30,19 +30,22 @@ public class EventPersistenceService {
     private final DetectedEventRepository eventRepository;
     private final FalsePositiveFilter falsePositiveFilter;
     private final CandidateScoringService candidateScoringService;
+    private final AlertEligibilityService alertEligibilityService;
 
     public EventPersistenceService(
             NewsSourceRepository sourceRepository,
             NewsArticleRepository articleRepository,
             DetectedEventRepository eventRepository,
             FalsePositiveFilter falsePositiveFilter,
-            CandidateScoringService candidateScoringService
+            CandidateScoringService candidateScoringService,
+            AlertEligibilityService alertEligibilityService
     ) {
         this.sourceRepository = sourceRepository;
         this.articleRepository = articleRepository;
         this.eventRepository = eventRepository;
         this.falsePositiveFilter = falsePositiveFilter;
         this.candidateScoringService = candidateScoringService;
+        this.alertEligibilityService = alertEligibilityService;
     }
 
     @Transactional
@@ -80,6 +83,12 @@ public class EventPersistenceService {
                 newsEvent.headline(),
                 newsEvent.body()
         );
+        AlertEligibilityService.AlertEligibility alertEligibility = alertEligibilityService.evaluate(
+                candidateScore.strength(),
+                candidateScore.score(),
+                newsEvent.sourceUrl(),
+                false
+        );
         eventRepository.save(new DetectedEventEntity(
                 article,
                 mapEventType(analysisResult.eventType()),
@@ -94,6 +103,8 @@ public class EventPersistenceService {
                 candidateScore.score(),
                 candidateScore.strength(),
                 candidateScore.reason(),
+                alertEligibility.eligible(),
+                alertEligibility.reason(),
                 join(analysisResult.matchedPositiveKeywords()),
                 join(analysisResult.matchedNegativeKeywords()),
                 join(falsePositiveFilter.reasons(newsEvent.fullText())),
