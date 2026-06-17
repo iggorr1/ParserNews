@@ -217,7 +217,22 @@ class RuleBasedNewsAnalyzerTest {
 
         assertThat(result.eventType()).isEqualTo(EventType.NOISE);
         assertThat(result.status()).isEqualTo(EventStatus.IGNORED);
-        assertThat(result.matchedNegativeKeywords()).contains("completion of");
+        assertThat(result.matchedNegativeKeywords()).contains("completion of take-private transaction");
+    }
+
+    @Test
+    void doesNotIgnoreRealAcquisitionOfferOnlyBecauseTextMentionsCompletionOfTransaction() {
+        AnalysisResult result = analyzer.analyze(news(
+                "Diana Shipping Inc. Raises Offer to Acquire Genco Shipping & Trading",
+                "The company entered into a definitive agreement and shareholders will receive $17.25 per share in cash. " +
+                        "The parties expect completion of the transaction after customary closing conditions."
+        ));
+
+        assertThat(result.status()).isNotEqualTo(EventStatus.IGNORED);
+        assertThat(result.score()).isGreaterThan(0);
+        assertThat(result.matchedPositiveKeywords())
+                .contains("definitive agreement", "to acquire", "shareholders will receive", "per share in cash");
+        assertThat(result.matchedNegativeKeywords()).doesNotContain("completion of");
     }
 
     private NewsEvent news(String headline, String body) {
