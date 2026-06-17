@@ -125,6 +125,7 @@ Stored event API lives in:
 - Scheduled RSS polling for live monitoring.
 - Manual scan endpoint at `POST /api/scan`.
 - Persistent scan run history at `GET /api/scan-runs`.
+- Saved article read API at `GET /api/articles` and `GET /api/articles/candidates`.
 - Rule-based event classification.
 - False-positive filtering for debt tender offers, senior notes, bonds, offerings, asset acquisitions, reverse mergers, and other non-takeover noise.
 - Event statuses: `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, `IMPORTANT`, `HIGH_PRIORITY_SIGNAL`.
