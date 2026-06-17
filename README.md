@@ -85,6 +85,14 @@ Do not commit generated local database files.
 This reads configured public RSS feeds. It does not enable alert dispatch or
 Telegram sending by itself.
 
+Current live RSS coverage includes GlobeNewswire, PR Newswire, SEC press
+releases, and TMX Newsfile public RSS feeds. TMX Newsfile is included through
+its public last-25-stories feed and Banking/Financial Services industry feed.
+Business Wire M&A is a useful candidate source, but it is not enabled yet
+because the public M&A page does not expose a simple RSS URL in the current
+scanner format; adding it should wait for either a stable RSS endpoint or a
+small source-specific parser.
+
 ## Live RSS Smoke Check
 
 Start the app in live mode first:
