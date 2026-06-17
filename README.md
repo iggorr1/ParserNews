@@ -1,48 +1,98 @@
-# M&A Event Intelligence Platform
+# ParserNews
 
-Research-first Spring Boot project for collecting corporate news, detecting M&A /
-takeover / going-private events, filtering false positives, and storing events for
-later historical market-movement analysis.
+ParserNews is a research-first Java/Spring Boot backend for monitoring corporate
+news and detecting public-company M&A, takeover, merger, and take-private
+signals.
 
-## Safety Scope
+It is not a trading bot. It does not connect to brokers, wallets, exchanges, or
+place orders. The current MVP only collects news, stores articles/events,
+classifies signals with deterministic rules, and prepares human-reviewable
+alerts.
 
-This project is a research/news scanner only.
+## Current MVP
 
-It does not:
+- Mock, historical JSON, and public RSS news input.
+- Persistent URL deduplication.
+- Manual scan endpoint and optional scan scheduler.
+- Scan run history.
+- Saved article API.
+- M&A candidate API.
+- Rule-based candidate scoring:
+  - `candidateScore`
+  - `candidateStrength`: `HIGH`, `MEDIUM`, `LOW`, `NONE`
+  - `candidateReason`
+- False-positive filtering for Senior Notes, bonds, debt tender offers,
+  offerings, asset acquisitions, and other non-takeover noise.
+- Candidate recompute/backfill for old local/dev data.
+- Alert eligibility, preview, dry-run, manual queue, manual send foundation, and
+  dispatch scheduler.
+- Telegram notifier foundation, disabled by default.
+- Backend operational status endpoint.
+- H2 local database by default; PostgreSQL profile via Docker Compose.
 
-- connect to brokers
-- connect to wallets
-- connect to exchanges
-- execute trades
-- place orders
-- scrape arbitrary HTML pages
+## Safe Defaults
 
-Startup safety flags are disabled by default in `src/main/resources/application.properties`.
-If trading, broker, wallet, or exchange flags are enabled, the app fails fast.
-The only internet mode currently allowed is public RSS reading, and it must be enabled explicitly.
+Local development is safe by default:
 
-## Run
+- `alerts.telegram.enabled=false`
+- `alerts.dispatch.enabled=false`
+- `scanner.monitoring.enabled=false`
+- no real Telegram messages are sent unless explicitly enabled and configured
+- no trading, broker, wallet, or exchange integration exists
+- no real tokens should be committed
+
+If Telegram is disabled, alert send/dispatch paths return no-op responses and do
+not mark candidates as queued/sent.
+
+## Requirements
+
+- Java 24, as currently used by the project
+- Maven Wrapper from this repository
+- Optional: Docker for PostgreSQL mode
+
+## Run Tests
+
+```powershell
+.\mvnw.cmd test
+```
+
+## Start Local Mock Mode
 
 ```powershell
 .\mvnw.cmd spring-boot:run
 ```
 
-Open the local UI:
+Open:
 
 ```text
 http://localhost:8080
 ```
 
-The app stores raw articles and detected events. By default it uses a local H2
-database file for easy development. For PostgreSQL, start Docker and use the
-`db` profile:
+The default local database is H2:
+
+```text
+data/parsernews-dev
+```
+
+Do not commit generated local database files.
+
+## Start Live RSS Mode
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=live"
+```
+
+This reads configured public RSS feeds. It does not enable alert dispatch or
+Telegram sending by itself.
+
+## PostgreSQL Mode
 
 ```powershell
 docker compose up -d
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=db"
 ```
 
-PostgreSQL defaults:
+Default local PostgreSQL values:
 
 ```text
 database: parsernews
@@ -50,15 +100,263 @@ user: parsernews
 password: parsernews
 ```
 
-## Run Historical Articles
+## Main Manual Flow
 
-Put old articles into `data/historical-news.json`, then run:
+Run a scan:
+
+```powershell
+curl.exe -X POST http://localhost:8080/api/scan
+```
+
+Check system status:
+
+```powershell
+curl.exe http://localhost:8080/api/status
+```
+
+View latest scan runs:
+
+```powershell
+curl.exe http://localhost:8080/api/scan-runs
+```
+
+View saved articles:
+
+```powershell
+curl.exe http://localhost:8080/api/articles
+```
+
+View detected M&A candidates:
+
+```powershell
+curl.exe http://localhost:8080/api/articles/candidates
+```
+
+View eligible alert candidates:
+
+```powershell
+curl.exe http://localhost:8080/api/alerts/candidates
+```
+
+Preview all current alert messages without sending:
+
+```powershell
+curl.exe -X POST http://localhost:8080/api/alerts/dry-run
+```
+
+Run one alert dispatch cycle manually:
+
+```powershell
+curl.exe -X POST http://localhost:8080/api/alerts/dispatch
+```
+
+With default config this returns a disabled/no-op response and sends nothing.
+
+## Recommended Local Verification Flow
+
+1. Start the app in mock mode:
+
+```powershell
+.\mvnw.cmd spring-boot:run
+```
+
+2. Confirm the backend is healthy:
+
+```powershell
+curl.exe http://localhost:8080/api/status
+```
+
+3. Trigger one scan:
+
+```powershell
+curl.exe -X POST http://localhost:8080/api/scan
+```
+
+4. Check scan history:
+
+```powershell
+curl.exe http://localhost:8080/api/scan-runs
+```
+
+5. Check saved articles and candidates:
+
+```powershell
+curl.exe http://localhost:8080/api/articles
+curl.exe http://localhost:8080/api/articles/candidates
+```
+
+6. Backfill candidate metadata if using an old local database:
+
+```powershell
+curl.exe -X POST http://localhost:8080/api/admin/recompute-candidates
+```
+
+7. Preview alert text without sending:
+
+```powershell
+curl.exe -X POST http://localhost:8080/api/alerts/dry-run
+```
+
+8. Run manual dispatch and verify it is disabled/no-op by default:
+
+```powershell
+curl.exe -X POST http://localhost:8080/api/alerts/dispatch
+```
+
+## API Endpoints
+
+### Scanner
+
+```text
+POST /api/scan
+```
+
+Runs one scanner cycle manually and returns the existing scan summary.
+
+```text
+GET /api/scan-runs
+GET /api/scan-runs/{id}
+```
+
+Returns persisted scan run history and one scan run by id.
+
+### Articles And Candidates
+
+```text
+GET /api/articles
+GET /api/articles/{id}
+GET /api/articles/candidates
+```
+
+Returns saved articles, one saved article by id, and saved M&A candidates.
+List endpoints do not return huge full article text.
+
+### Alerts
+
+```text
+GET /api/alerts/candidates
+```
+
+Returns alert-eligible candidates that are not already queued.
+
+```text
+GET /api/alerts/candidates/{id}/preview
+```
+
+Returns the formatted alert message for one eligible candidate without sending.
+
+```text
+POST /api/alerts/dry-run
+```
+
+Returns formatted alert previews for all current eligible/non-queued candidates.
+Does not send messages and does not mark candidates queued.
+
+```text
+POST /api/alerts/candidates/{id}/queue
+```
+
+Marks one eligible candidate as queued for future alerting.
+
+```text
+POST /api/alerts/candidates/{id}/send
+```
+
+Runs the notifier flow for one eligible candidate. With Telegram disabled, this
+returns a no-op result and does not mark the candidate queued. If a real notifier
+is enabled and reports success, the candidate is marked queued/sent.
+
+```text
+POST /api/alerts/dispatch
+```
+
+Runs one alert dispatch cycle manually. With dispatch disabled, this returns a
+disabled/no-op response and sends nothing.
+
+### Admin / Maintenance
+
+```text
+POST /api/admin/recompute-candidates
+```
+
+Recomputes candidate score, strength, reason, and alert eligibility for already
+persisted detected events. This is useful for old H2/dev databases where URL
+dedupe prevents already-saved articles from being reprocessed.
+
+It does not rescan RSS feeds, create duplicate articles, reset `alertQueuedAt`,
+or make already queued candidates eligible again.
+
+### Status
+
+```text
+GET /api/status
+```
+
+Returns a compact operational summary:
+
+- `status`: `OK` or `WARN`
+- scanner monitoring enabled
+- alert dispatch enabled
+- Telegram enabled
+- Telegram configured true/false, without exposing token or chat id
+- latest scan run summary
+- article/candidate counts
+- alert eligible and already queued counts
+
+`WARN` is returned when the latest scan failed, or when monitoring is enabled
+but no scan has ever run.
+
+## Configuration Flags
+
+### Scanner Monitoring
+
+```properties
+scanner.monitoring.enabled=false
+scanner.monitoring.initial-delay-ms=60000
+scanner.monitoring.poll-delay-ms=300000
+```
+
+Enables scheduled scanner polling when set to `true`.
+
+### Telegram
+
+```properties
+alerts.telegram.enabled=false
+alerts.telegram.bot-token=
+alerts.telegram.chat-id=
+```
+
+Telegram is disabled by default. Do not commit real tokens or chat ids. Use
+environment-specific local configuration if real alert sending is tested later.
+
+### Alert Dispatch
+
+```properties
+alerts.dispatch.enabled=false
+alerts.dispatch.fixed-delay-ms=300000
+alerts.dispatch.batch-size=5
+```
+
+Alert dispatch is disabled by default. When enabled, the scheduler processes up
+to `alerts.dispatch.batch-size` eligible/non-queued candidates per cycle. A
+candidate is marked queued/sent only when the notifier reports a real successful
+send.
+
+## Historical JSON Mode
+
+Put old articles into:
+
+```text
+data/historical-news.json
+```
+
+Run:
 
 ```powershell
 .\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.news-file=file:data/historical-news.json"
 ```
 
-Each historical item can include optional labels:
+Example item:
 
 ```json
 {
@@ -74,217 +372,23 @@ Each historical item can include optional labels:
 }
 ```
 
-When expected labels are present, console alerts print whether the analyzer matched them.
-At the end of each run, the app also prints a scan summary with total articles,
-duplicates skipped, labeled articles, and matched or mismatched expected results.
-It also writes reports to:
+## Rule Tuning
 
-```text
-output/scan-results.json
-output/scan-results.csv
-output/mismatches.csv
-```
-
-You can override paths:
-
-```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.news-file=file:data/historical-news.json --scanner.report-json=output/history.json --scanner.report-csv=output/history.csv"
-```
-
-To print only more serious alerts to console while still exporting all rows:
-
-```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.news-file=file:data/historical-news.json --scanner.console-min-status=WATCHLIST"
-```
-
-Allowed console status filters are `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`,
-`IMPORTANT`, and `HIGH_PRIORITY_SIGNAL`.
-
-## Run Public RSS Feed
-
-The first internet mode reads public RSS/XML feeds only. It does not scrape article pages.
-
-Default RSS feeds:
-
-```text
-https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions
-https://www.globenewswire.com/RssFeed/subjectcode/17-Financing%20Agreements/feedTitle/GlobeNewswire%20-%20Financing%20Agreements
-https://www.globenewswire.com/RssFeed/subjectcode/23-Joint%20Venture/feedTitle/GlobeNewswire%20-%20Joint%20Venture
-https://www.globenewswire.com/RssFeed/subjectcode/37-Restructuring%202f%20Recapitalization/feedTitle/GlobeNewswire%20-%20Restructuring%20%2C%20Recapitalization
-https://www.globenewswire.com/RssFeed/subjectcode/5-Bankruptcy/feedTitle/GlobeNewswire%20-%20Bankruptcy
-https://www.globenewswire.com/RssFeed/subjectcode/57-Changes%20In%20Share%20Capital%20And%20Votes/feedTitle/GlobeNewswire%20-%20Changes%20In%20Share%20Capital%20And%20Votes
-https://www.globenewswire.com/RssFeed/subjectcode/61-Corporate%20Action/feedTitle/GlobeNewswire%20-%20Corporate%20Action
-https://www.globenewswire.com/RssFeed/subjectcode/72-Press%20Releases/feedTitle/GlobeNewswire%20-%20Press%20Releases
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/acquisitions-mergers-and-takeovers-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/bankruptcy-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/stock-offering-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/joint-ventures-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/financing-agreements-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/private-placement-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/restructuring-recapitalization-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/shareholder-activism-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/shareholder-meetings-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/venture-capital-list.rss
-https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/banking-financial-services-list.rss
-https://www.prnewswire.com/rss/news-releases/general-business-latest-news/contracts-list.rss
-https://www.prnewswire.com/rss/news-releases/general-business-latest-news/corporate-expansion-list.rss
-https://www.prnewswire.com/rss/all-news-releases-from-PR-newswire-news.rss
-https://www.sec.gov/news/pressreleases.rss
-```
-
-Run:
-
-```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.source=rss --scanner.safety.real-web-parsing-enabled=true --scanner.console-min-status=WATCHLIST --scanner.rss.max-items-per-feed=10"
-```
-
-Run with the live profile:
-
-```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=live"
-```
-
-In IntelliJ IDEA, set Active profiles to:
-
-```text
-live
-```
-
-Then run `StockScannerApplication` and open:
-
-```text
-http://localhost:8080
-```
-
-The UI shows source and status breakdowns. Use `Signals only` to hide rows
-where no positive or negative keyword matched.
-Use `Saved events` to view persisted detected events from the database.
-Use `Historical only` with `Saved events` to focus on imported old articles.
-Saved events also include manual review controls. You can correct the target
-ticker, mark whether the event is a valid deal or a false positive, and save a
-short note for later rule tuning.
-
-Score can still be `0` for real articles. That means the article was read,
-but none of the configured acquisition, take-private, offering, bankruptcy,
-or risk keywords appeared in the headline or RSS description.
-
-`WATCHLIST`, `MANUAL_REVIEW`, and `IMPORTANT` are intentionally strict. Broad
-M&A headlines such as `Company A acquires assets` or `Company B to acquire
-private company C` are not enough. A row needs confirmed-deal signals such as:
-
-- definitive agreement / definitive merger agreement
-- to be acquired by / will be acquired by
-- shareholders or stockholders will receive consideration
-- per-share cash or stock consideration
-- premium to market price
-- going-private or take-private language
-
-False positives such as Senior Notes, bond tender offers, asset acquisitions,
-brand acquisitions, reverse mergers, financings, and public offerings stay
-ignored for takeover-opportunity purposes.
-
-`HIGH_PRIORITY_SIGNAL` is reserved for confirmed shareholder-deal language where
-the scanner can also extract stronger terms such as offer price plus cash
-consideration or a stated premium. The scanner does not yet calculate premium
-from live market prices; for now it only stores the premium stated in the article.
-
-Use custom HTTPS RSS feeds:
-
-```powershell
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.arguments=--scanner.source=rss --scanner.safety.real-web-parsing-enabled=true --scanner.rss.urls=https://example.com/feed.xml"
-```
-
-Or use the helper script:
-
-```powershell
-.\scripts\run-live-rss.ps1
-```
-
-By default the helper script refreshes `output/scan-results.json` once and exits.
-If the UI is already open, refresh `http://localhost:8080` after the script finishes.
-To keep a dedicated UI server running from the RSS command:
-
-```powershell
-.\scripts\run-live-rss.ps1 -KeepUiServer
-```
-
-If Windows blocks local PowerShell scripts, run:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\run-live-rss.ps1
-```
-
-With options:
-
-```powershell
-.\scripts\run-live-rss.ps1 -MinStatus IGNORED -MaxItems 50
-```
-
-## First Live Version Status
-
-Ready now:
-
-- read public HTTPS RSS feeds
-- analyze headlines and RSS descriptions with explainable rules
-- filter debt tender false positives such as Senior Notes or bonds
-- store news sources, raw articles, and detected events
-- expose persisted events at `GET /api/events`
-- manually validate saved events in the UI
-- extract deal terms such as offer price, payment type, buyer, ticker, and stated premium
-- run with PostgreSQL using the `db` profile and Docker Compose
-- use default public RSS feeds from GlobeNewswire and PR Newswire
-- print console alerts
-- view latest results in a browser at `http://localhost:8080`
-- export JSON, CSV, and mismatch CSV reports
-- run historical labeled datasets locally
-- block broker, wallet, exchange, and trading integrations
-
-Still missing for a stronger first production-like version:
-
-- persistent duplicate detection across runs beyond URL hash storage
-- more real historical examples for tuning
-- better ticker/company extraction from RSS items
-- more RSS sources, such as PR Newswire categories
-- scheduled repeated runs
-- market data snapshots after events
-- statistical return analysis
-
-## Tune Rules
-
-Edit keyword weights and status thresholds in:
+Rule weights and thresholds live in:
 
 ```text
 src/main/resources/analyzer-rules.json
 ```
 
-## Stored Event API
+Keep rule output explainable. Alerts and candidate records should continue to
+show matched keywords, score, strength, and reason.
 
-```text
-GET /api/events
-GET /api/events?status=WATCHLIST
-GET /api/events?type=ACQUISITION
-GET /api/events?sourceType=HISTORICAL
-PATCH /api/events/{id}/review
-```
+## Current Limitations
 
-Review payload:
-
-```json
-{
-  "targetTicker": "OPEN",
-  "validationStatus": "VALID_DEAL",
-  "reviewNotes": "Confirmed public-company cash merger."
-}
-```
-
-Validation statuses are `UNREVIEWED`, `VALID_DEAL`, `FALSE_POSITIVE`,
-`NOT_PUBLIC_COMPANY`, and `TOO_LATE`.
-
-Current schema is created by JPA:
-
-- `news_sources`
-- `news_articles`
-- `detected_events`
-
-This is intentionally small. Market data snapshots and statistical analysis come
-after the event data model is stable.
+- No market data snapshots yet.
+- No price charts yet.
+- No statistical return analysis yet.
+- No production auth.
+- No AI/Ollama/OpenAI classifier yet.
+- No trading, broker, wallet, or exchange integration.
+- Telegram and alert dispatch are foundations only and disabled by default.
