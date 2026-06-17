@@ -2,6 +2,7 @@ package com.parsernews.service;
 
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.NewsArticleEntity;
+import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -23,16 +24,19 @@ public class AlertMessageFormatter {
                 "Reason: " + safe(event.getCandidateReason()),
                 "Published at: " + formatInstant(article.getPublishedAt()),
                 "Discovered at: " + formatInstant(article.getCollectedAt()),
-                "Snippet: " + snippet(article.getArticleText()),
+                "Snippet: " + snippet(article.getArticleText(), article.getHeadline()),
                 "URL: " + safe(article.getUrl())
         );
     }
 
-    private String snippet(String text) {
+    private String snippet(String text, String fallback) {
         if (text == null || text.isBlank()) {
             return "N/A";
         }
-        String normalized = text.replaceAll("\\s+", " ").trim();
+        String normalized = ArticleTextCleaner.cleanTextForSnippet(text, fallback).replaceAll("\\s+", " ").trim();
+        if (normalized.isBlank()) {
+            return "N/A";
+        }
         if (normalized.length() <= SNIPPET_LIMIT) {
             return normalized;
         }

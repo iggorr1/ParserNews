@@ -94,7 +94,36 @@ class ArticleControllerTest {
                 .hasMessageContaining("404 NOT_FOUND");
     }
 
+    @Test
+    void detailResponseCleansLegacyDirtyFullText() {
+        NewsArticleEntity article = articleWithText(
+                6L,
+                "Readable merger headline",
+                "(function (w, d, s, l, i) { w[l] = w[l] || []; })(window, document, 'script', 'dataLayer', 'GTM'); *,::after,::before{box-sizing:border-box}"
+        );
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(articleRepository.findById(6L)).thenReturn(Optional.of(article));
+        when(eventRepository.findByArticle(article)).thenReturn(Optional.empty());
+        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+
+        ArticleController.ArticleDetailResponse response = controller.article(6L);
+
+        assertThat(response.fullText()).isEqualTo("Readable merger headline");
+        assertThat(response.fullText()).doesNotContain("dataLayer");
+        assertThat(response.fullText()).doesNotContain("function (w, d, s, l, i)");
+        assertThat(response.fullText()).doesNotContain("box-sizing");
+    }
+
     private NewsArticleEntity article(Long id, String headline, String url) {
+        return article(id, headline, "Shareholders will receive $5.00 per share in cash.", url);
+    }
+
+    private NewsArticleEntity articleWithText(Long id, String headline, String articleText) {
+        return article(id, headline, articleText, "https://example.com/" + id);
+    }
+
+    private NewsArticleEntity article(Long id, String headline, String articleText, String url) {
         NewsSourceEntity source = new NewsSourceEntity("Test Source", NewsSourceType.RSS, "https://example.com/feed");
         setId(source, id + 100);
         NewsArticleEntity article = new NewsArticleEntity(
@@ -103,7 +132,7 @@ class ArticleControllerTest {
                 "TEST",
                 "Test Company",
                 headline,
-                "Shareholders will receive $5.00 per share in cash.",
+                articleText,
                 url,
                 Instant.parse("2026-06-17T08:00:00Z")
         );

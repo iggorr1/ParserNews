@@ -2,6 +2,7 @@ package com.parsernews.parser;
 
 import com.parsernews.config.RssSettings;
 import com.parsernews.model.NewsEvent;
+import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -29,8 +30,6 @@ import java.util.regex.Pattern;
 @Component
 @ConditionalOnProperty(name = "scanner.source", havingValue = "rss")
 public class RssNewsParser implements NewsSourceParser {
-    private static final Pattern HTML_TAG = Pattern.compile("<[^>]+>");
-    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
     private static final Pattern EXCHANGE_TICKER = Pattern.compile(
             "(?i)(?:NYSE\\s+American|NYSEAMERICAN|NASDAQ|NYSE|AMEX|OTCQB|OTCQX|OTC|OTCMKTS|TSX|TSXV)\\s*:\\s*([A-Z][A-Z0-9.-]{0,9})"
     );
@@ -172,7 +171,7 @@ public class RssNewsParser implements NewsSourceParser {
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 return java.util.Optional.empty();
             }
-            return java.util.Optional.of(cleanText(response.body()));
+            return ArticleTextCleaner.cleanFetchedHtml(response.body());
         } catch (Exception exception) {
             return java.util.Optional.empty();
         }
@@ -222,14 +221,7 @@ public class RssNewsParser implements NewsSourceParser {
     }
 
     private String cleanText(String value) {
-        String withoutTags = HTML_TAG.matcher(value).replaceAll(" ");
-        String decoded = withoutTags
-                .replace("&amp;", "&")
-                .replace("&lt;", "<")
-                .replace("&gt;", ">")
-                .replace("&quot;", "\"")
-                .replace("&#39;", "'");
-        return WHITESPACE.matcher(decoded).replaceAll(" ").trim();
+        return ArticleTextCleaner.cleanText(value);
     }
 
     private String sourceFromUrl(String feedUrl) {

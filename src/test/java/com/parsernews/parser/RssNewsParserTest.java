@@ -181,6 +181,59 @@ class RssNewsParserTest {
         assertThat(events.getFirst().body()).contains("$3.15 per share in cash");
     }
 
+    @Test
+    void cleansFetchedArticleHtmlBeforeStoringFullText() {
+        RssNewsParser parser = new RssNewsParser(
+                new RssSettings(List.of("https://www.globenewswire.com/feed.xml"), 5, 10, true, List.of("globenewswire.com")),
+                new UriAwareStubHttpClient(
+                        Map.of(
+                                "https://www.globenewswire.com/feed.xml", """
+                                        <?xml version="1.0" encoding="utf-8"?>
+                                        <rss version="2.0">
+                                          <channel>
+                                            <title>GlobeNewswire - Mergers and Acquisitions</title>
+                                            <item>
+                                              <title>Target Corp to be Acquired by Buyer LLC</title>
+                                              <link>https://www.globenewswire.com/news/full</link>
+                                              <description>Short RSS description with merger agreement.</description>
+                                            </item>
+                                          </channel>
+                                        </rss>
+                                        """,
+                                "https://www.globenewswire.com/news/full", """
+                                        <html>
+                                          <head>
+                                            <script>
+                                              (function (w, d, s, l, i) {
+                                                w[l] = w[l] || [];
+                                                w[l].push({'gtm.start': new Date().getTime(), event: 'gtm.js'});
+                                              })(window, document, 'script', 'dataLayer', 'GTM-123');
+                                            </script>
+                                            <style>* { box-sizing: border-box; }</style>
+                                          </head>
+                                          <body>
+                                            <noscript>googletagmanager iframe</noscript>
+                                            <div class="article-body">
+                                              <p>Target Corp shareholders will receive $3.15 per share in cash under the merger agreement.</p>
+                                            </div>
+                                          </body>
+                                        </html>
+                                        """
+                        ),
+                        Set.of()
+                )
+        );
+
+        List<NewsEvent> events = parser.readNews();
+
+        assertThat(events).hasSize(1);
+        assertThat(events.getFirst().body()).contains("Target Corp shareholders will receive $3.15 per share in cash");
+        assertThat(events.getFirst().body()).doesNotContain("googletagmanager");
+        assertThat(events.getFirst().body()).doesNotContain("dataLayer");
+        assertThat(events.getFirst().body()).doesNotContain("function (w, d, s, l, i)");
+        assertThat(events.getFirst().body()).doesNotContain("box-sizing");
+    }
+
     private static class StubHttpClient extends HttpClient {
         private final String body;
 

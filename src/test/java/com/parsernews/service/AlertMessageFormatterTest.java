@@ -31,7 +31,47 @@ class AlertMessageFormatterTest {
         assertThat(message).contains("Shareholders will receive $5.00 per share in cash.");
     }
 
+    @Test
+    void previewSnippetUsesReadableTextInsteadOfScriptBoilerplate() {
+        DetectedEventEntity event = event("""
+                <script>
+                  (function (w, d, s, l, i) { w[l] = w[l] || []; })(window, document, 'script', 'dataLayer', 'GTM');
+                </script>
+                <style>* { box-sizing: border-box; }</style>
+                <p>Readable article sentence starts here with merger agreement details.</p>
+                """);
+        AlertMessageFormatter formatter = new AlertMessageFormatter();
+
+        String message = formatter.format(event);
+
+        assertThat(message).contains("Snippet: Readable article sentence starts here");
+        assertThat(message).doesNotContain("googletagmanager");
+        assertThat(message).doesNotContain("dataLayer");
+        assertThat(message).doesNotContain("function (w, d, s, l, i)");
+        assertThat(message).doesNotContain("box-sizing");
+    }
+
+    @Test
+    void previewSnippetFallsBackToHeadlineForLegacyPlainBoilerplateText() {
+        DetectedEventEntity event = event("""
+                (function (w, d, s, l, i) { w[l] = w[l] || []; })(window, document, 'script', 'dataLayer', 'GTM');
+                *,::after,::before{box-sizing:border-box}body{margin:0;font-family:Arial}
+                """);
+        AlertMessageFormatter formatter = new AlertMessageFormatter();
+
+        String message = formatter.format(event);
+
+        assertThat(message).contains("Snippet: Test Company enters merger agreement");
+        assertThat(message).doesNotContain("dataLayer");
+        assertThat(message).doesNotContain("function (w, d, s, l, i)");
+        assertThat(message).doesNotContain("box-sizing");
+    }
+
     private DetectedEventEntity event() {
+        return event("Shareholders will receive $5.00 per share in cash.");
+    }
+
+    private DetectedEventEntity event(String articleText) {
         NewsSourceEntity source = new NewsSourceEntity("Test Source", NewsSourceType.RSS, "https://example.com/feed");
         NewsArticleEntity article = new NewsArticleEntity(
                 source,
@@ -39,7 +79,7 @@ class AlertMessageFormatterTest {
                 "TEST",
                 "Test Company",
                 "Test Company enters merger agreement",
-                "Shareholders will receive $5.00 per share in cash.",
+                articleText,
                 "https://example.com/news/test-company",
                 Instant.parse("2026-06-17T08:00:00Z")
         );

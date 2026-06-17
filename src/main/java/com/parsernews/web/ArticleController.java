@@ -8,6 +8,7 @@ import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
+import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -122,7 +123,7 @@ public class ArticleController {
                     event == null ? "No detected M&A candidate event." : event.getCandidateReason(),
                     event == null ? null : event.getMatchedPositiveKeywords(),
                     event == null ? null : event.getMatchedNegativeKeywords(),
-                    buildSnippet(text),
+                    buildSnippet(text, article.getHeadline()),
                     text != null && !text.isBlank(),
                     text == null ? 0 : text.length()
             );
@@ -170,16 +171,16 @@ public class ArticleController {
                     event == null ? null : event.getMatchedNegativeKeywords(),
                     event == null ? null : event.getFalsePositiveReasons(),
                     event == null ? null : event.getExplanation(),
-                    article.getArticleText()
+                    ArticleTextCleaner.cleanTextForSnippet(article.getArticleText(), article.getHeadline())
             );
         }
     }
 
-    private static String buildSnippet(String text) {
+    private static String buildSnippet(String text, String fallback) {
         if (text == null || text.isBlank()) {
             return "";
         }
-        String trimmed = text.trim();
+        String trimmed = ArticleTextCleaner.cleanTextForSnippet(text, fallback).trim();
         return trimmed.length() <= 240 ? trimmed : trimmed.substring(0, 240).trim();
     }
 
