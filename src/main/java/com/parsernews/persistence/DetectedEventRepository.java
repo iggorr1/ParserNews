@@ -9,4 +9,8 @@ public interface DetectedEventRepository extends JpaRepository<DetectedEventEnti
     List<DetectedEventEntity> findTop200ByOrderByDetectedAtDesc();
     boolean existsByArticle(NewsArticleEntity article);
     Optional<DetectedEventEntity> findByArticle(NewsArticleEntity article);
+    long countByCandidateStrengthNot(CandidateStrength candidateStrength);
+    long countByCandidateStrength(CandidateStrength candidateStrength);
+    long countByAlertEligibleTrue();
+    long countByAlertQueuedAtIsNotNull();
 }
