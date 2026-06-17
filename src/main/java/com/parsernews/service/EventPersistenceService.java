@@ -25,6 +25,8 @@ import java.util.Locale;
 
 @Service
 public class EventPersistenceService {
+    public static final int MAX_ARTICLE_TEXT_LENGTH = 10000;
+
     private final NewsSourceRepository sourceRepository;
     private final NewsArticleRepository articleRepository;
     private final DetectedEventRepository eventRepository;
@@ -65,7 +67,7 @@ public class EventPersistenceService {
                         newsEvent.ticker(),
                         newsEvent.companyName(),
                         newsEvent.headline(),
-                        newsEvent.body(),
+                        truncateArticleText(newsEvent.body()),
                         newsEvent.sourceUrl(),
                         newsEvent.publishedAt()
                 )));
@@ -163,6 +165,13 @@ public class EventPersistenceService {
             return extractedValue;
         }
         return fallback;
+    }
+
+    private String truncateArticleText(String value) {
+        if (value == null || value.length() <= MAX_ARTICLE_TEXT_LENGTH) {
+            return value;
+        }
+        return value.substring(0, MAX_ARTICLE_TEXT_LENGTH);
     }
 
     public static String urlHash(String value) {
