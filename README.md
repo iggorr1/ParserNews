@@ -85,6 +85,41 @@ Do not commit generated local database files.
 This reads configured public RSS feeds. It does not enable alert dispatch or
 Telegram sending by itself.
 
+## Live RSS Smoke Check
+
+Start the app in live mode first:
+
+```powershell
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=live"
+```
+
+Then, in a second PowerShell window, run:
+
+```powershell
+.\scripts\live-smoke.ps1
+```
+
+The smoke script is a manual local verification helper, not a deterministic unit
+test. It checks the current backend against real RSS sources and runs:
+
+- `GET /api/status`
+- `POST /api/scan`
+- `GET /api/scan-runs`
+- `GET /api/articles?limit=5`
+- `GET /api/articles/candidates?limit=5`
+- `POST /api/alerts/dry-run`
+- `GET /api/status`
+
+It does not require Telegram credentials, does not call alert dispatch, does not
+send external notifications, and does not enable trading or broker behavior.
+Telegram and alert dispatch should remain disabled for this smoke check.
+
+If Windows blocks local PowerShell scripts, run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\live-smoke.ps1
+```
+
 ## PostgreSQL Mode
 
 ```powershell
