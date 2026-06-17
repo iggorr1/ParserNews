@@ -3,6 +3,7 @@ package com.parsernews.web;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
+import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceEntity;
@@ -37,12 +38,14 @@ class ArticleControllerTest {
                 .containsExactly(2L, 1L);
         assertThat(response.getFirst().title()).isEqualTo("Latest merger article");
         assertThat(response.getFirst().snippet()).contains("Shareholders will receive");
+        assertThat(response.getFirst().candidateScore()).isZero();
+        assertThat(response.getFirst().candidateStrength()).isEqualTo(CandidateStrength.NONE);
     }
 
     @Test
     void returnsOnlyCandidateArticles() {
         NewsArticleEntity candidateArticle = article(5L, "Target to be acquired", "https://example.com/candidate");
-        DetectedEventEntity event = event(candidateArticle);
+        DetectedEventEntity event = event(candidateArticle, 90, CandidateStrength.HIGH);
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(event));
@@ -55,6 +58,28 @@ class ArticleControllerTest {
         assertThat(response.getFirst().candidate()).isTrue();
         assertThat(response.getFirst().eventType()).isEqualTo(DetectedEventType.DEFINITIVE_AGREEMENT);
         assertThat(response.getFirst().matchedPositiveKeywords()).contains("definitive agreement");
+        assertThat(response.getFirst().candidateScore()).isEqualTo(90);
+        assertThat(response.getFirst().candidateStrength()).isEqualTo(CandidateStrength.HIGH);
+        assertThat(response.getFirst().candidateReason()).contains("HIGH");
+    }
+
+    @Test
+    void candidateArticlesPreferStrongerCandidates() {
+        NewsArticleEntity lowArticle = article(1L, "Target rumor", "https://example.com/low");
+        NewsArticleEntity highArticle = article(2L, "Target merger agreement", "https://example.com/high");
+        NewsArticleEntity noneArticle = article(3L, "Regular article", "https://example.com/none");
+        DetectedEventEntity low = event(lowArticle, 30, CandidateStrength.LOW);
+        DetectedEventEntity high = event(highArticle, 90, CandidateStrength.HIGH);
+        DetectedEventEntity none = event(noneArticle, 0, CandidateStrength.NONE);
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(low, none, high));
+        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+
+        List<ArticleController.ArticleListResponse> response = controller.candidateArticles(200);
+
+        assertThat(response).extracting(ArticleController.ArticleListResponse::id)
+                .containsExactly(2L, 1L);
     }
 
     @Test
@@ -86,7 +111,7 @@ class ArticleControllerTest {
         return article;
     }
 
-    private DetectedEventEntity event(NewsArticleEntity article) {
+    private DetectedEventEntity event(NewsArticleEntity article, int candidateScore, CandidateStrength candidateStrength) {
         DetectedEventEntity event = new DetectedEventEntity(
                 article,
                 DetectedEventType.DEFINITIVE_AGREEMENT,
@@ -98,6 +123,9 @@ class ArticleControllerTest {
                 "$5.00",
                 "CASH",
                 "40%",
+                candidateScore,
+                candidateStrength,
+                "Matched " + candidateStrength + " candidate signal: definitive agreement.",
                 "definitive agreement|per share in cash",
                 "",
                 "",

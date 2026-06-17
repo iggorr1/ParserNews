@@ -29,17 +29,20 @@ public class EventPersistenceService {
     private final NewsArticleRepository articleRepository;
     private final DetectedEventRepository eventRepository;
     private final FalsePositiveFilter falsePositiveFilter;
+    private final CandidateScoringService candidateScoringService;
 
     public EventPersistenceService(
             NewsSourceRepository sourceRepository,
             NewsArticleRepository articleRepository,
             DetectedEventRepository eventRepository,
-            FalsePositiveFilter falsePositiveFilter
+            FalsePositiveFilter falsePositiveFilter,
+            CandidateScoringService candidateScoringService
     ) {
         this.sourceRepository = sourceRepository;
         this.articleRepository = articleRepository;
         this.eventRepository = eventRepository;
         this.falsePositiveFilter = falsePositiveFilter;
+        this.candidateScoringService = candidateScoringService;
     }
 
     @Transactional
@@ -73,6 +76,10 @@ public class EventPersistenceService {
             return;
         }
 
+        CandidateScoringService.CandidateScore candidateScore = candidateScoringService.score(
+                newsEvent.headline(),
+                newsEvent.body()
+        );
         eventRepository.save(new DetectedEventEntity(
                 article,
                 mapEventType(analysisResult.eventType()),
@@ -84,6 +91,9 @@ public class EventPersistenceService {
                 analysisResult.offerPrice(),
                 analysisResult.cashOrStock(),
                 analysisResult.premiumPercent(),
+                candidateScore.score(),
+                candidateScore.strength(),
+                candidateScore.reason(),
                 join(analysisResult.matchedPositiveKeywords()),
                 join(analysisResult.matchedNegativeKeywords()),
                 join(falsePositiveFilter.reasons(newsEvent.fullText())),

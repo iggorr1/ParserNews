@@ -55,6 +55,15 @@ public class DetectedEventEntity {
 
     private String premiumPercent;
 
+    private Integer candidateScore = 0;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32, columnDefinition = "varchar(32)")
+    private CandidateStrength candidateStrength = CandidateStrength.NONE;
+
+    @Column(length = 1024)
+    private String candidateReason;
+
     @Column(length = 2048)
     private String matchedPositiveKeywords;
 
@@ -87,6 +96,9 @@ public class DetectedEventEntity {
             String offerPrice,
             String cashOrStock,
             String premiumPercent,
+            int candidateScore,
+            CandidateStrength candidateStrength,
+            String candidateReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String falsePositiveReasons,
@@ -102,6 +114,9 @@ public class DetectedEventEntity {
         this.offerPrice = offerPrice;
         this.cashOrStock = cashOrStock;
         this.premiumPercent = premiumPercent;
+        this.candidateScore = candidateScore;
+        this.candidateStrength = candidateStrength == null ? CandidateStrength.NONE : candidateStrength;
+        this.candidateReason = candidateReason;
         this.matchedPositiveKeywords = matchedPositiveKeywords;
         this.matchedNegativeKeywords = matchedNegativeKeywords;
         this.falsePositiveReasons = falsePositiveReasons;
@@ -158,6 +173,18 @@ public class DetectedEventEntity {
 
     public String getPremiumPercent() {
         return premiumPercent;
+    }
+
+    public int getCandidateScore() {
+        return candidateScore == null ? 0 : candidateScore;
+    }
+
+    public CandidateStrength getCandidateStrength() {
+        return candidateStrength == null ? CandidateStrength.NONE : candidateStrength;
+    }
+
+    public String getCandidateReason() {
+        return candidateReason;
     }
 
     public String getMatchedPositiveKeywords() {

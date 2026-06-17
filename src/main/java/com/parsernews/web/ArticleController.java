@@ -3,6 +3,7 @@ package com.parsernews.web;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
+import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceType;
@@ -17,6 +18,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 
 @RestController
@@ -65,6 +67,9 @@ public class ArticleController {
 
     private List<ArticleListResponse> candidates(int limit) {
         return eventRepository.findTop200ByOrderByDetectedAtDesc().stream()
+                .filter(event -> event.getCandidateStrength() != CandidateStrength.NONE)
+                .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
+                        .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
                 .limit(normalizedLimit(limit))
                 .map(event -> ArticleListResponse.from(event.getArticle(), event))
                 .toList();
@@ -89,6 +94,9 @@ public class ArticleController {
             boolean candidate,
             DetectedEventType eventType,
             ReviewStatus reviewStatus,
+            int candidateScore,
+            CandidateStrength candidateStrength,
+            String candidateReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String snippet,
@@ -109,6 +117,9 @@ public class ArticleController {
                     event != null,
                     event == null ? null : event.getEventType(),
                     event == null ? null : event.getReviewStatus(),
+                    event == null ? 0 : event.getCandidateScore(),
+                    event == null ? CandidateStrength.NONE : event.getCandidateStrength(),
+                    event == null ? "No detected M&A candidate event." : event.getCandidateReason(),
                     event == null ? null : event.getMatchedPositiveKeywords(),
                     event == null ? null : event.getMatchedNegativeKeywords(),
                     buildSnippet(text),
@@ -130,6 +141,9 @@ public class ArticleController {
             boolean candidate,
             DetectedEventType eventType,
             ReviewStatus reviewStatus,
+            int candidateScore,
+            CandidateStrength candidateStrength,
+            String candidateReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String falsePositiveReasons,
@@ -149,6 +163,9 @@ public class ArticleController {
                     event != null,
                     event == null ? null : event.getEventType(),
                     event == null ? null : event.getReviewStatus(),
+                    event == null ? 0 : event.getCandidateScore(),
+                    event == null ? CandidateStrength.NONE : event.getCandidateStrength(),
+                    event == null ? "No detected M&A candidate event." : event.getCandidateReason(),
                     event == null ? null : event.getMatchedPositiveKeywords(),
                     event == null ? null : event.getMatchedNegativeKeywords(),
                     event == null ? null : event.getFalsePositiveReasons(),
