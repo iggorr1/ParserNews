@@ -1,5 +1,6 @@
 package com.parsernews.service;
 
+import com.parsernews.persistence.ScanRunTriggerType;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -23,7 +24,7 @@ public class NewsMonitoringScheduler {
     )
     public void poll() {
         if (enabled) {
-            newsScannerService.scan();
+            newsScannerService.scan(ScanRunTriggerType.SCHEDULED);
         }
     }
 }

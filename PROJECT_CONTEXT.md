@@ -124,6 +124,7 @@ Stored event API lives in:
 - Public HTTPS RSS scanning.
 - Scheduled RSS polling for live monitoring.
 - Manual scan endpoint at `POST /api/scan`.
+- Persistent scan run history at `GET /api/scan-runs`.
 - Rule-based event classification.
 - False-positive filtering for debt tender offers, senior notes, bonds, offerings, asset acquisitions, reverse mergers, and other non-takeover noise.
 - Event statuses: `IGNORED`, `WATCHLIST`, `MANUAL_REVIEW`, `IMPORTANT`, `HIGH_PRIORITY_SIGNAL`.
@@ -136,6 +137,7 @@ Stored event API lives in:
 - Console alerts with matched keywords and extracted terms.
 - JSON/CSV report export.
 - Saved news sources, raw articles, and detected events.
+- Saved scan run summaries with trigger type, status, counts, and failure message.
 - H2 local database.
 - PostgreSQL profile with Docker Compose.
 - REST API for reports and saved events.

@@ -8,7 +8,12 @@ import com.parsernews.model.NewsEvent;
 import com.parsernews.model.ScanSummary;
 import com.parsernews.parser.NewsSourceParser;
 import com.parsernews.persistence.NewsArticleRepository;
+import com.parsernews.persistence.ScanRunEntity;
+import com.parsernews.persistence.ScanRunRepository;
+import com.parsernews.persistence.ScanRunStatus;
+import com.parsernews.persistence.ScanRunTriggerType;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.util.List;
 
@@ -17,6 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
 
 class NewsScannerServiceTest {
     @Test
@@ -35,6 +41,7 @@ class NewsScannerServiceTest {
         ReportExportService reportExportService = mock(ReportExportService.class);
         EventPersistenceService eventPersistenceService = mock(EventPersistenceService.class);
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        ScanRunRepository scanRunRepository = scanRunRepository();
         when(articleRepository.existsByUrlHash(EventPersistenceService.urlHash(event.sourceUrl()))).thenReturn(true);
 
         NewsScannerService service = new NewsScannerService(
@@ -45,6 +52,7 @@ class NewsScannerServiceTest {
                 reportExportService,
                 eventPersistenceService,
                 articleRepository,
+                scanRunRepository,
                 new ConsoleSettings(EventStatus.IGNORED)
         );
 
@@ -55,10 +63,15 @@ class NewsScannerServiceTest {
         assertThat(summary.duplicatesSkipped()).isEqualTo(1);
         verify(analyzer, never()).analyze(event);
         verify(eventPersistenceService, never()).save(event, null);
+        ScanRunEntity scanRun = savedScanRun(scanRunRepository);
+        assertThat(scanRun.getStatus()).isEqualTo(ScanRunStatus.SUCCESS);
+        assertThat(scanRun.getTotalFetched()).isEqualTo(1);
+        assertThat(scanRun.getSavedArticles()).isZero();
+        assertThat(scanRun.getDuplicatesSkipped()).isEqualTo(1);
     }
 
     @Test
-    void returnsSummaryForManualScanEndpoint() {
+    void successfulManualScanCreatesScanRun() {
         NewsEvent event = new NewsEvent(
                 "TEST",
                 "Test Company",
@@ -82,6 +95,7 @@ class NewsScannerServiceTest {
         ReportExportService reportExportService = mock(ReportExportService.class);
         EventPersistenceService eventPersistenceService = mock(EventPersistenceService.class);
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        ScanRunRepository scanRunRepository = scanRunRepository();
 
         NewsScannerService service = new NewsScannerService(
                 parser,
@@ -91,15 +105,70 @@ class NewsScannerServiceTest {
                 reportExportService,
                 eventPersistenceService,
                 articleRepository,
+                scanRunRepository,
                 new ConsoleSettings(EventStatus.HIGH_PRIORITY_SIGNAL)
         );
 
-        ScanSummary summary = service.scan();
+        ScanSummary summary = service.scan(ScanRunTriggerType.MANUAL);
 
         assertThat(summary.totalRead()).isEqualTo(1);
         assertThat(summary.analyzed()).isEqualTo(1);
         assertThat(summary.duplicatesSkipped()).isZero();
         verify(eventPersistenceService).save(event, result);
         verify(reportExportService).export(org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.eq(summary));
+        ScanRunEntity scanRun = savedScanRun(scanRunRepository);
+        assertThat(scanRun.getTriggerType()).isEqualTo(ScanRunTriggerType.MANUAL);
+        assertThat(scanRun.getStatus()).isEqualTo(ScanRunStatus.SUCCESS);
+        assertThat(scanRun.getTotalFetched()).isEqualTo(1);
+        assertThat(scanRun.getCandidatesFound()).isEqualTo(1);
+        assertThat(scanRun.getSavedArticles()).isEqualTo(1);
+        assertThat(scanRun.getDuplicatesSkipped()).isZero();
+        assertThat(scanRun.getErrorsCount()).isZero();
+    }
+
+    @Test
+    void failedScanRecordsFailedScanRun() {
+        RuntimeException failure = new RuntimeException("Feed failed");
+        NewsSourceParser parser = () -> {
+            throw failure;
+        };
+        RuleBasedNewsAnalyzer analyzer = mock(RuleBasedNewsAnalyzer.class);
+        AlertService alertService = mock(AlertService.class);
+        ReportExportService reportExportService = mock(ReportExportService.class);
+        EventPersistenceService eventPersistenceService = mock(EventPersistenceService.class);
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        ScanRunRepository scanRunRepository = scanRunRepository();
+
+        NewsScannerService service = new NewsScannerService(
+                parser,
+                analyzer,
+                alertService,
+                new DuplicateNewsFilter(),
+                reportExportService,
+                eventPersistenceService,
+                articleRepository,
+                scanRunRepository,
+                new ConsoleSettings(EventStatus.IGNORED)
+        );
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> service.scan(ScanRunTriggerType.SCHEDULED))
+                .isSameAs(failure);
+        ScanRunEntity scanRun = savedScanRun(scanRunRepository);
+        assertThat(scanRun.getTriggerType()).isEqualTo(ScanRunTriggerType.SCHEDULED);
+        assertThat(scanRun.getStatus()).isEqualTo(ScanRunStatus.FAILED);
+        assertThat(scanRun.getErrorsCount()).isEqualTo(1);
+        assertThat(scanRun.getErrorMessage()).isEqualTo("Feed failed");
+    }
+
+    private ScanRunRepository scanRunRepository() {
+        ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
+        when(scanRunRepository.save(any(ScanRunEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        return scanRunRepository;
+    }
+
+    private ScanRunEntity savedScanRun(ScanRunRepository scanRunRepository) {
+        ArgumentCaptor<ScanRunEntity> captor = ArgumentCaptor.forClass(ScanRunEntity.class);
+        verify(scanRunRepository, org.mockito.Mockito.atLeastOnce()).save(captor.capture());
+        return captor.getValue();
     }
 }

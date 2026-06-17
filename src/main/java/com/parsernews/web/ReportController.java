@@ -3,6 +3,7 @@ package com.parsernews.web;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.parsernews.model.ScanSummary;
+import com.parsernews.persistence.ScanRunTriggerType;
 import com.parsernews.service.NewsScannerService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.FileSystemResource;
@@ -44,7 +45,7 @@ public class ReportController {
 
     @org.springframework.web.bind.annotation.PostMapping("/scan")
     public ScanSummary scan() {
-        return newsScannerService.scan();
+        return newsScannerService.scan(ScanRunTriggerType.MANUAL);
     }
 
     @GetMapping("/report")

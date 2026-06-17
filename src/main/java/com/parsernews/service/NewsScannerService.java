@@ -8,6 +8,9 @@ import com.parsernews.model.ScanResult;
 import com.parsernews.model.ScanSummary;
 import com.parsernews.parser.NewsSourceParser;
 import com.parsernews.persistence.NewsArticleRepository;
+import com.parsernews.persistence.ScanRunEntity;
+import com.parsernews.persistence.ScanRunRepository;
+import com.parsernews.persistence.ScanRunTriggerType;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -22,6 +25,7 @@ public class NewsScannerService {
     private final ReportExportService reportExportService;
     private final EventPersistenceService eventPersistenceService;
     private final NewsArticleRepository articleRepository;
+    private final ScanRunRepository scanRunRepository;
     private final ConsoleSettings consoleSettings;
 
     public NewsScannerService(
@@ -32,6 +36,7 @@ public class NewsScannerService {
             ReportExportService reportExportService,
             EventPersistenceService eventPersistenceService,
             NewsArticleRepository articleRepository,
+            ScanRunRepository scanRunRepository,
             ConsoleSettings consoleSettings
     ) {
         this.newsSourceParser = newsSourceParser;
@@ -41,13 +46,32 @@ public class NewsScannerService {
         this.reportExportService = reportExportService;
         this.eventPersistenceService = eventPersistenceService;
         this.articleRepository = articleRepository;
+        this.scanRunRepository = scanRunRepository;
         this.consoleSettings = consoleSettings;
     }
 
     public synchronized ScanSummary scan() {
+        return scan(ScanRunTriggerType.MANUAL);
+    }
+
+    public synchronized ScanSummary scan(ScanRunTriggerType triggerType) {
+        ScanRunEntity scanRun = scanRunRepository.save(new ScanRunEntity(triggerType));
+        try {
+            ScanSummary summary = doScan(scanRun);
+            scanRunRepository.save(scanRun);
+            return summary;
+        } catch (RuntimeException exception) {
+            scanRun.markFailed(exception.getMessage());
+            scanRunRepository.save(scanRun);
+            throw exception;
+        }
+    }
+
+    private ScanSummary doScan(ScanRunEntity scanRun) {
         List<NewsEvent> events = newsSourceParser.readNews();
         List<ScanResult> results = new ArrayList<>();
         int analyzed = 0;
+        int candidatesFound = 0;
         int duplicatesSkipped = 0;
         int labeled = 0;
         int matchedExpected = 0;
@@ -62,6 +86,9 @@ public class NewsScannerService {
             eventPersistenceService.save(event, result);
             Boolean matchesExpected = null;
             analyzed++;
+            if (result.status() != EventStatus.IGNORED) {
+                candidatesFound++;
+            }
             if (event.hasExpectedResult()) {
                 labeled++;
                 if (alertService.matchesExpected(event, result)) {
@@ -89,6 +116,7 @@ public class NewsScannerService {
 
         alertService.printSummary(summary);
         reportExportService.export(results, summary);
+        scanRun.markSuccess(events.size(), candidatesFound, analyzed, duplicatesSkipped);
         return summary;
     }
 
