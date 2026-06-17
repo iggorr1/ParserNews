@@ -4,6 +4,7 @@ import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceEntity;
@@ -40,6 +41,7 @@ class ArticleControllerTest {
         assertThat(response.getFirst().snippet()).contains("Shareholders will receive");
         assertThat(response.getFirst().candidateScore()).isZero();
         assertThat(response.getFirst().candidateStrength()).isEqualTo(CandidateStrength.NONE);
+        assertThat(response.getFirst().manualReviewStatus()).isEqualTo(ManualReviewStatus.PENDING);
     }
 
     @Test
@@ -61,6 +63,7 @@ class ArticleControllerTest {
         assertThat(response.getFirst().candidateScore()).isEqualTo(90);
         assertThat(response.getFirst().candidateStrength()).isEqualTo(CandidateStrength.HIGH);
         assertThat(response.getFirst().candidateReason()).contains("HIGH");
+        assertThat(response.getFirst().manualReviewStatus()).isEqualTo(ManualReviewStatus.PENDING);
     }
 
     @Test
@@ -113,6 +116,65 @@ class ArticleControllerTest {
         assertThat(response.fullText()).doesNotContain("dataLayer");
         assertThat(response.fullText()).doesNotContain("function (w, d, s, l, i)");
         assertThat(response.fullText()).doesNotContain("box-sizing");
+    }
+
+    @Test
+    void manualReviewMarksArticleEventUseful() {
+        NewsArticleEntity article = article(7L, "Target to be acquired", "https://example.com/review");
+        DetectedEventEntity event = event(article, 90, CandidateStrength.HIGH);
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(articleRepository.findById(7L)).thenReturn(Optional.of(article));
+        when(eventRepository.findByArticle(article)).thenReturn(Optional.of(event));
+        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+
+        ArticleController.ArticleDetailResponse response = controller.updateManualReview(
+                7L,
+                new ArticleController.ManualReviewRequest(ManualReviewStatus.USEFUL, "Looks actionable")
+        );
+
+        assertThat(response.manualReviewStatus()).isEqualTo(ManualReviewStatus.USEFUL);
+        assertThat(response.manualReviewNote()).isEqualTo("Looks actionable");
+        assertThat(response.manualReviewedAt()).isNotNull();
+        assertThat(response.reviewStatus()).isEqualTo(ReviewStatus.HIGH_PRIORITY_SIGNAL);
+    }
+
+    @Test
+    void manualReviewCanResetArticleEventToPending() {
+        NewsArticleEntity article = article(8L, "Target to be acquired", "https://example.com/reset");
+        DetectedEventEntity event = event(article, 90, CandidateStrength.HIGH);
+        event.updateManualReview(ManualReviewStatus.IGNORED, "Not useful");
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(articleRepository.findById(8L)).thenReturn(Optional.of(article));
+        when(eventRepository.findByArticle(article)).thenReturn(Optional.of(event));
+        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+
+        ArticleController.ArticleDetailResponse response = controller.updateManualReview(
+                8L,
+                new ArticleController.ManualReviewRequest(ManualReviewStatus.PENDING, "")
+        );
+
+        assertThat(response.manualReviewStatus()).isEqualTo(ManualReviewStatus.PENDING);
+        assertThat(response.manualReviewNote()).isNull();
+        assertThat(response.manualReviewedAt()).isNull();
+    }
+
+    @Test
+    void manualReviewReturnsBadRequestForArticleWithoutDetectedEvent() {
+        NewsArticleEntity article = article(9L, "Regular article", "https://example.com/no-event");
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(articleRepository.findById(9L)).thenReturn(Optional.of(article));
+        when(eventRepository.findByArticle(article)).thenReturn(Optional.empty());
+        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+
+        assertThatThrownBy(() -> controller.updateManualReview(
+                9L,
+                new ArticleController.ManualReviewRequest(ManualReviewStatus.USEFUL, null)
+        ))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400 BAD_REQUEST");
     }
 
     private NewsArticleEntity article(Long id, String headline, String url) {

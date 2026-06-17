@@ -4,6 +4,7 @@ import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceType;
@@ -12,7 +13,9 @@ import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
@@ -66,6 +69,20 @@ public class ArticleController {
         return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null));
     }
 
+    @PatchMapping("/api/articles/{id}/manual-review")
+    @Transactional
+    public ArticleDetailResponse updateManualReview(
+            @PathVariable Long id,
+            @RequestBody ManualReviewRequest request
+    ) {
+        NewsArticleEntity article = articleRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found"));
+        DetectedEventEntity event = eventRepository.findByArticle(article)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Article has no detected event to review"));
+        event.updateManualReview(request.status(), request.note());
+        return ArticleDetailResponse.from(article, event);
+    }
+
     private List<ArticleListResponse> candidates(int limit) {
         return eventRepository.findTop200ByOrderByDetectedAtDesc().stream()
                 .filter(event -> event.getCandidateStrength() != CandidateStrength.NONE)
@@ -98,6 +115,12 @@ public class ArticleController {
             int candidateScore,
             CandidateStrength candidateStrength,
             String candidateReason,
+            ManualReviewStatus manualReviewStatus,
+            String manualReviewNote,
+            Instant manualReviewedAt,
+            boolean alertEligible,
+            Instant alertQueuedAt,
+            String alertReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String snippet,
@@ -121,6 +144,12 @@ public class ArticleController {
                     event == null ? 0 : event.getCandidateScore(),
                     event == null ? CandidateStrength.NONE : event.getCandidateStrength(),
                     event == null ? "No detected M&A candidate event." : event.getCandidateReason(),
+                    event == null ? ManualReviewStatus.PENDING : event.getManualReviewStatus(),
+                    event == null ? null : event.getManualReviewNote(),
+                    event == null ? null : event.getManualReviewedAt(),
+                    event != null && event.isAlertEligible(),
+                    event == null ? null : event.getAlertQueuedAt(),
+                    event == null ? null : event.getAlertReason(),
                     event == null ? null : event.getMatchedPositiveKeywords(),
                     event == null ? null : event.getMatchedNegativeKeywords(),
                     buildSnippet(text, article.getHeadline()),
@@ -145,6 +174,12 @@ public class ArticleController {
             int candidateScore,
             CandidateStrength candidateStrength,
             String candidateReason,
+            ManualReviewStatus manualReviewStatus,
+            String manualReviewNote,
+            Instant manualReviewedAt,
+            boolean alertEligible,
+            Instant alertQueuedAt,
+            String alertReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
             String falsePositiveReasons,
@@ -167,6 +202,12 @@ public class ArticleController {
                     event == null ? 0 : event.getCandidateScore(),
                     event == null ? CandidateStrength.NONE : event.getCandidateStrength(),
                     event == null ? "No detected M&A candidate event." : event.getCandidateReason(),
+                    event == null ? ManualReviewStatus.PENDING : event.getManualReviewStatus(),
+                    event == null ? null : event.getManualReviewNote(),
+                    event == null ? null : event.getManualReviewedAt(),
+                    event != null && event.isAlertEligible(),
+                    event == null ? null : event.getAlertQueuedAt(),
+                    event == null ? null : event.getAlertReason(),
                     event == null ? null : event.getMatchedPositiveKeywords(),
                     event == null ? null : event.getMatchedNegativeKeywords(),
                     event == null ? null : event.getFalsePositiveReasons(),
@@ -190,5 +231,11 @@ public class ArticleController {
         } catch (RuntimeException exception) {
             return null;
         }
+    }
+
+    public record ManualReviewRequest(
+            ManualReviewStatus status,
+            String note
+    ) {
     }
 }

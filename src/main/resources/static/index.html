@@ -82,6 +82,54 @@
             align-items: center;
         }
 
+        .filters {
+            display: grid;
+            grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(150px, 1fr)) minmax(160px, 1fr);
+            gap: 10px;
+            align-items: end;
+            margin-bottom: 16px;
+        }
+
+        .control {
+            display: grid;
+            gap: 5px;
+            min-width: 0;
+        }
+
+        .control label,
+        .toggle {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        input,
+        select {
+            width: 100%;
+            min-height: 34px;
+            border: 1px solid var(--line);
+            border-radius: 6px;
+            background: var(--panel);
+            color: var(--text);
+            padding: 7px 9px;
+            font: inherit;
+        }
+
+        .toggle {
+            min-height: 34px;
+            display: inline-flex;
+            gap: 7px;
+            align-items: center;
+            text-transform: none;
+        }
+
+        .toggle input {
+            width: 16px;
+            min-height: 16px;
+            flex: 0 0 auto;
+        }
+
         button,
         .button {
             min-height: 34px;
@@ -126,6 +174,35 @@
             border-radius: 8px;
             padding: 14px;
             min-width: 0;
+        }
+
+        .action-center {
+            border-color: #b8d8cf;
+            background: linear-gradient(180deg, #ffffff 0%, #f5fbf9 100%);
+            margin-bottom: 16px;
+        }
+
+        .action-layout {
+            display: grid;
+            grid-template-columns: minmax(240px, 1.5fr) repeat(3, minmax(110px, 1fr));
+            gap: 12px;
+            align-items: center;
+        }
+
+        .action-message {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .action-stat {
+            border-left: 1px solid var(--line);
+            padding-left: 12px;
+        }
+
+        .action-stat strong {
+            display: block;
+            font-size: 24px;
         }
 
         .span-3 {
@@ -223,8 +300,14 @@
         .candidate-card {
             border: 1px solid var(--line);
             border-radius: 8px;
-            padding: 12px;
-            background: #fbfcfe;
+            padding: 14px;
+            background: #ffffff;
+            box-shadow: 0 1px 2px rgba(31, 41, 51, 0.05);
+        }
+
+        .candidate-card.HIGH {
+            border-color: #badfce;
+            background: #fbfffd;
         }
 
         .candidate-title {
@@ -235,6 +318,33 @@
         .snippet {
             color: #3f4b5a;
             margin: 8px 0;
+        }
+
+        .warning {
+            border: 1px solid #f1d191;
+            background: var(--soft-warn);
+            color: var(--warn);
+            border-radius: 8px;
+            padding: 8px 10px;
+            margin: 10px 0;
+        }
+
+        .review-row {
+            display: grid;
+            grid-template-columns: minmax(180px, 1fr) auto auto auto;
+            gap: 8px;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        .technical-details {
+            margin-top: 14px;
+        }
+
+        .technical-details summary {
+            cursor: pointer;
+            font-weight: 700;
+            margin-bottom: 12px;
         }
 
         .kv {
@@ -335,6 +445,14 @@
         }
 
         @media (max-width: 1050px) {
+            .filters {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
+            .action-layout {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+
             .span-3,
             .span-4,
             .span-5,
@@ -355,6 +473,15 @@
             .span-5,
             .span-7 {
                 grid-column: span 12;
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .action-layout,
+            .review-row {
+                grid-template-columns: 1fr;
             }
 
             .kv {
@@ -380,41 +507,90 @@
         </div>
     </section>
 
+    <section class="panel filters">
+        <div class="control">
+            <label for="searchInput">Search</label>
+            <input id="searchInput" type="search" placeholder="Title, source, host, reason, snippet">
+        </div>
+        <div class="control">
+            <label for="strengthFilter">Strength</label>
+            <select id="strengthFilter">
+                <option value="">ALL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="LOW">LOW</option>
+                <option value="NONE">NONE</option>
+            </select>
+        </div>
+        <div class="control">
+            <label for="sourceFilter">Source</label>
+            <select id="sourceFilter">
+                <option value="">All sources</option>
+            </select>
+        </div>
+        <div class="control">
+            <label for="sortSelect">Sort</label>
+            <select id="sortSelect">
+                <option value="published">Newest published</option>
+                <option value="discovered">Newest discovered</option>
+                <option value="score">Highest score</option>
+                <option value="source">Source</option>
+            </select>
+        </div>
+        <div class="control">
+            <label for="manualReviewFilter">Manual review</label>
+            <select id="manualReviewFilter">
+                <option value="">ALL</option>
+                <option value="PENDING">PENDING</option>
+                <option value="USEFUL">USEFUL</option>
+                <option value="IGNORED">IGNORED</option>
+            </select>
+        </div>
+        <label class="toggle">
+            <input id="candidateOnlyToggle" type="checkbox">
+            Candidate-only articles
+        </label>
+        <label class="toggle">
+            <input id="eligibleOnlyToggle" type="checkbox">
+            Alert-eligible candidates
+        </label>
+        <label class="toggle">
+            <input id="autoRefreshToggle" type="checkbox">
+            Auto-refresh 30s
+        </label>
+        <div class="muted">Last updated: <span id="lastUpdated">never</span></div>
+    </section>
+
     <div id="errors"></div>
 
+    <section class="panel action-center">
+        <div class="action-layout">
+            <div>
+                <div class="action-message" id="actionMessage">Loading candidates...</div>
+                <div class="muted" id="actionSubtext">Checking live monitoring status.</div>
+            </div>
+            <div class="action-stat">
+                <strong id="actionHighCount">0</strong>
+                <span class="muted">HIGH candidates</span>
+            </div>
+            <div class="action-stat">
+                <strong id="actionEligibleCount">0</strong>
+                <span class="muted">Alert eligible</span>
+            </div>
+            <div class="action-stat">
+                <strong id="actionScanStatus">-</strong>
+                <span class="muted">Latest scan</span>
+            </div>
+        </div>
+        <div class="actions" style="margin-top: 12px;">
+            <button id="reviewHighButton" type="button">Review HIGH candidates</button>
+            <button id="scanButtonTop" class="primary" type="button">Run manual scan</button>
+            <button id="dryRunButtonTop" type="button">Run dry-run</button>
+        </div>
+    </section>
+
     <section class="grid">
-        <section class="panel span-3">
-            <div class="panel-head">
-                <h2>System Status</h2>
-                <span id="healthBadge" class="badge">Loading</span>
-            </div>
-            <div class="metric" id="statusMetric">-</div>
-            <div class="muted" id="statusText">Waiting for backend status.</div>
-        </section>
-
-        <section class="panel span-3">
-            <div class="panel-head">
-                <h2>Latest Scan</h2>
-                <span id="scanStatusBadge" class="badge">No scan</span>
-            </div>
-            <div class="kv" id="latestScan"></div>
-        </section>
-
-        <section class="panel span-3">
-            <div class="panel-head">
-                <h2>Articles Summary</h2>
-            </div>
-            <div class="kv" id="articleStats"></div>
-        </section>
-
-        <section class="panel span-3">
-            <div class="panel-head">
-                <h2>Alerts</h2>
-            </div>
-            <div class="kv" id="alertStats"></div>
-        </section>
-
-        <section class="panel span-7">
+        <section class="panel span-7" id="candidateSection">
             <div class="panel-head">
                 <h2>Candidates</h2>
                 <span class="badge" id="candidateCount">0</span>
@@ -432,7 +608,10 @@
 
         <section class="panel span-12">
             <div class="panel-head">
-                <h2>Latest Articles</h2>
+                <div>
+                    <h2>Latest Articles</h2>
+                    <div class="muted">Secondary feed view. Use candidates above for review first.</div>
+                </div>
                 <span class="badge" id="articleCount">0</span>
             </div>
             <div class="table-wrap">
@@ -453,30 +632,66 @@
             </div>
         </section>
 
-        <section class="panel span-12">
-            <div class="panel-head">
-                <h2>Scan Runs</h2>
-                <span class="badge" id="scanRunCount">0</span>
-            </div>
-            <div class="table-wrap">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Status</th>
-                        <th>Trigger</th>
-                        <th>Started</th>
-                        <th>Fetched</th>
-                        <th>Candidates</th>
-                        <th>Saved</th>
-                        <th>Duplicates</th>
-                        <th>Errors</th>
-                    </tr>
-                    </thead>
-                    <tbody id="scanRuns"></tbody>
-                </table>
-            </div>
-        </section>
+        <details class="panel span-12 technical-details">
+            <summary>Technical details</summary>
+            <section class="grid">
+                <section class="panel span-3">
+                    <div class="panel-head">
+                        <h2>System Status</h2>
+                        <span id="healthBadge" class="badge">Loading</span>
+                    </div>
+                    <div class="metric" id="statusMetric">-</div>
+                    <div class="muted" id="statusText">Waiting for backend status.</div>
+                </section>
+
+                <section class="panel span-3">
+                    <div class="panel-head">
+                        <h2>Latest Scan</h2>
+                        <span id="scanStatusBadge" class="badge">No scan</span>
+                    </div>
+                    <div class="kv" id="latestScan"></div>
+                </section>
+
+                <section class="panel span-3">
+                    <div class="panel-head">
+                        <h2>Articles Summary</h2>
+                    </div>
+                    <div class="kv" id="articleStats"></div>
+                </section>
+
+                <section class="panel span-3">
+                    <div class="panel-head">
+                        <h2>Alerts</h2>
+                    </div>
+                    <div class="kv" id="alertStats"></div>
+                </section>
+
+                <section class="panel span-12">
+                    <div class="panel-head">
+                        <h2>Scan Runs</h2>
+                        <span class="badge" id="scanRunCount">0</span>
+                    </div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Status</th>
+                                <th>Trigger</th>
+                                <th>Started</th>
+                                <th>Fetched</th>
+                                <th>Candidates</th>
+                                <th>Saved</th>
+                                <th>Duplicates</th>
+                                <th>Errors</th>
+                            </tr>
+                            </thead>
+                            <tbody id="scanRuns"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </section>
+        </details>
     </section>
 </main>
 
@@ -487,25 +702,49 @@
         candidates: [],
         alerts: [],
         previews: [],
-        scanRuns: []
+        scanRuns: [],
+        autoRefreshTimer: null
     };
 
     const refreshButton = document.querySelector("#refreshButton");
     const scanButton = document.querySelector("#scanButton");
+    const scanButtonTop = document.querySelector("#scanButtonTop");
     const dryRunButton = document.querySelector("#dryRunButton");
+    const dryRunButtonTop = document.querySelector("#dryRunButtonTop");
+    const reviewHighButton = document.querySelector("#reviewHighButton");
     const errors = document.querySelector("#errors");
+    const searchInput = document.querySelector("#searchInput");
+    const strengthFilter = document.querySelector("#strengthFilter");
+    const sourceFilter = document.querySelector("#sourceFilter");
+    const sortSelect = document.querySelector("#sortSelect");
+    const manualReviewFilter = document.querySelector("#manualReviewFilter");
+    const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
+    const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
+    const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
+    const lastUpdated = document.querySelector("#lastUpdated");
 
     refreshButton.addEventListener("click", loadDashboard);
     scanButton.addEventListener("click", runManualScan);
+    scanButtonTop.addEventListener("click", runManualScan);
     dryRunButton.addEventListener("click", runDryRun);
+    dryRunButtonTop.addEventListener("click", runDryRun);
+    reviewHighButton.addEventListener("click", reviewHighCandidates);
+    searchInput.addEventListener("input", render);
+    strengthFilter.addEventListener("change", render);
+    sourceFilter.addEventListener("change", render);
+    sortSelect.addEventListener("change", render);
+    manualReviewFilter.addEventListener("change", render);
+    candidateOnlyToggle.addEventListener("change", render);
+    eligibleOnlyToggle.addEventListener("change", render);
+    autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
 
     async function loadDashboard() {
         setBusy(refreshButton, true, "Refreshing");
         clearErrors();
         const results = await Promise.allSettled([
             fetchJson("/api/status"),
-            fetchJson("/api/articles?limit=10"),
-            fetchJson("/api/articles/candidates?limit=10"),
+            fetchJson("/api/articles?limit=100"),
+            fetchJson("/api/articles/candidates?limit=100"),
             fetchJson("/api/alerts/candidates"),
             fetchJson("/api/scan-runs"),
             postJson("/api/alerts/dry-run")
@@ -516,12 +755,15 @@
         assignResult(results[3], "alerts", [], "Alert candidates");
         assignResult(results[4], "scanRuns", [], "Scan runs");
         assignResult(results[5], "previews", [], "Alert dry-run");
+        updateSourceFilter();
+        lastUpdated.textContent = new Date().toLocaleString();
         render();
         setBusy(refreshButton, false, "Refresh dashboard");
     }
 
     async function runManualScan() {
         setBusy(scanButton, true, "Scanning");
+        setBusy(scanButtonTop, true, "Scanning");
         clearErrors();
         try {
             await postJson("/api/scan");
@@ -530,18 +772,52 @@
             showError("Manual scan", error.message);
         } finally {
             setBusy(scanButton, false, "Run manual scan");
+            setBusy(scanButtonTop, false, "Run manual scan");
         }
     }
 
     async function runDryRun() {
         setBusy(dryRunButton, true, "Previewing");
+        setBusy(dryRunButtonTop, true, "Previewing");
         try {
             state.previews = await postJson("/api/alerts/dry-run");
+            lastUpdated.textContent = new Date().toLocaleString();
             renderAlertPreview();
         } catch (error) {
             showError("Alert dry-run", error.message);
         } finally {
             setBusy(dryRunButton, false, "Run alert dry-run");
+            setBusy(dryRunButtonTop, false, "Run dry-run");
+        }
+    }
+
+    async function previewCandidate(articleId) {
+        const alert = state.alerts.find(candidate => candidate.articleId === articleId);
+        if (!alert) {
+            showError("Preview alert", "Candidate is not currently alert eligible.");
+            return;
+        }
+        try {
+            const preview = await fetchJson(`/api/alerts/candidates/${encodeURIComponent(alert.detectedEventId)}/preview`);
+            state.previews = [preview, ...state.previews.filter(item => item.detectedEventId !== preview.detectedEventId)];
+            renderAlertPreview();
+            document.querySelector("#alertPreview").scrollIntoView({behavior: "smooth", block: "start"});
+        } catch (error) {
+            showError("Preview alert", error.message);
+        }
+    }
+
+    async function updateManualReview(articleId, status) {
+        const note = document.querySelector(`[data-review-note="${CSS.escape(String(articleId))}"]`)?.value || "";
+        try {
+            const updated = await patchJson(`/api/articles/${encodeURIComponent(articleId)}/manual-review`, {
+                status,
+                note
+            });
+            updateArticleInState(updated);
+            render();
+        } catch (error) {
+            showError("Manual review", error.message);
         }
     }
 
@@ -552,6 +828,16 @@
 
     async function postJson(url) {
         const response = await fetch(url, {method: "POST", cache: "no-store"});
+        return readJsonResponse(response, url);
+    }
+
+    async function patchJson(url, body) {
+        const response = await fetch(url, {
+            method: "PATCH",
+            cache: "no-store",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+        });
         return readJsonResponse(response, url);
     }
 
@@ -573,11 +859,36 @@
     }
 
     function render() {
+        renderActionCenter();
         renderStatus();
         renderCandidates();
         renderAlertPreview();
         renderArticles();
         renderScanRuns();
+    }
+
+    function renderActionCenter() {
+        const health = state.status?.status || "WARN";
+        const highPending = state.candidates.filter(candidate =>
+            candidate.candidateStrength === "HIGH" && candidate.manualReviewStatus !== "IGNORED"
+        ).length;
+        const eligible = state.alerts.length;
+        const latestScanStatus = state.status?.latestScan?.status || "-";
+        const message = health === "WARN"
+            ? "System warning: latest scan failed"
+            : highPending > 0
+                ? `${highPending} HIGH candidate${highPending === 1 ? "" : "s"} needs review`
+                : "No urgent candidates";
+
+        document.querySelector("#actionMessage").textContent = message;
+        document.querySelector("#actionSubtext").textContent = health === "WARN"
+            ? "Open technical details and check the latest scan run."
+            : highPending > 0
+                ? "Start with the candidate cards below. Preview alerts before queueing or sending later."
+                : "The monitor is running. Review latest articles if you want to tune rules.";
+        document.querySelector("#actionHighCount").textContent = String(highPending);
+        document.querySelector("#actionEligibleCount").textContent = String(eligible);
+        document.querySelector("#actionScanStatus").textContent = latestScanStatus;
     }
 
     function renderStatus() {
@@ -630,29 +941,43 @@
     }
 
     function renderCandidates() {
-        document.querySelector("#candidateCount").textContent = String(state.candidates.length);
+        const candidates = filteredItems(state.candidates, {candidateList: true});
+        document.querySelector("#candidateCount").textContent = `${candidates.length} / ${state.candidates.length}`;
         const target = document.querySelector("#candidates");
-        if (state.candidates.length === 0) {
-            target.innerHTML = `<div class="notice">No M&A candidates found yet. Run a scan or recompute old candidate metadata if needed.</div>`;
+        if (candidates.length === 0) {
+            target.innerHTML = `<div class="notice">No candidates match current filters.</div>`;
             return;
         }
-        target.innerHTML = state.candidates.map(candidate => `
-            <article class="candidate-card">
+        target.innerHTML = candidates.map(candidate => `
+            <article class="candidate-card ${escapeAttr(candidate.candidateStrength)}">
                 <div class="candidate-title">${escapeText(candidate.title)}</div>
                 <div class="badge-row">
                     ${badge(candidate.candidateStrength, candidate.candidateStrength)}
                     ${badge(`score ${candidate.candidateScore}`, candidate.candidateStrength)}
-                    ${badge(candidate.candidate ? "candidate" : "article", candidate.candidate ? "ok" : "disabled")}
                     ${badge(isAlertVisible(candidate) ? "eligible" : "review", isAlertVisible(candidate) ? "eligible" : "disabled")}
+                    ${candidate.alertQueuedAt ? badge("queued", "queued") : ""}
+                    ${badge(`manual ${candidate.manualReviewStatus || "PENDING"}`, candidate.manualReviewStatus === "USEFUL" ? "ok" : candidate.manualReviewStatus === "IGNORED" ? "disabled" : "warn")}
                     ${candidate.reviewStatus ? badge(candidate.reviewStatus, candidate.reviewStatus === "IGNORED" ? "disabled" : "ok") : ""}
                 </div>
+                ${candidate.candidateStrength === "HIGH" && candidate.reviewStatus === "IGNORED"
+                    ? `<div class="warning">Automatic reviewStatus is IGNORED, but candidate strength is HIGH. Treat this as a candidate scoring signal and review manually.</div>`
+                    : ""}
                 <p class="snippet">${escapeText(candidate.snippet || "No snippet available.")}</p>
                 <div class="kv">
                     <div><span>Source</span><strong title="${escapeAttr(candidate.source || candidate.host)}">${escapeText(candidate.source || candidate.host)}</strong></div>
                     <div><span>Reason</span><strong title="${escapeAttr(candidate.candidateReason)}">${escapeText(candidate.candidateReason)}</strong></div>
+                    <div><span>Positive keywords</span><strong title="${escapeAttr(splitKeywords(candidate.matchedPositiveKeywords).join(", "))}">${escapeText(splitKeywords(candidate.matchedPositiveKeywords).join(", ") || "-")}</strong></div>
+                    <div><span>Manual note</span><strong title="${escapeAttr(candidate.manualReviewNote)}">${escapeText(candidate.manualReviewNote || "-")}</strong></div>
                 </div>
-                <div style="margin-top: 9px;">
+                <div class="review-row">
+                    <input data-review-note="${escapeAttr(candidate.id)}" value="${escapeAttr(candidate.manualReviewNote)}" placeholder="Optional review note">
+                    <button type="button" data-review-action="USEFUL" data-article-id="${escapeAttr(candidate.id)}">Mark useful</button>
+                    <button type="button" data-review-action="IGNORED" data-article-id="${escapeAttr(candidate.id)}">Ignore</button>
+                    <button type="button" data-review-action="PENDING" data-article-id="${escapeAttr(candidate.id)}">Reset review</button>
+                </div>
+                <div class="actions" style="margin-top: 9px;">
                     <a href="${escapeAttr(candidate.url)}" target="_blank" rel="noreferrer">Open source</a>
+                    <button type="button" data-preview-article-id="${escapeAttr(candidate.id)}">Preview alert</button>
                 </div>
             </article>
         `).join("");
@@ -678,13 +1003,14 @@
     }
 
     function renderArticles() {
-        document.querySelector("#articleCount").textContent = String(state.articles.length);
+        const articles = filteredItems(state.articles, {articleList: true});
+        document.querySelector("#articleCount").textContent = `${articles.length} / ${state.articles.length}`;
         const target = document.querySelector("#articles");
-        if (state.articles.length === 0) {
-            target.innerHTML = `<tr><td colspan="7" class="muted">No saved articles yet.</td></tr>`;
+        if (articles.length === 0) {
+            target.innerHTML = `<tr><td colspan="7" class="muted">No articles match current filters.</td></tr>`;
             return;
         }
-        target.innerHTML = state.articles.map(article => `
+        target.innerHTML = articles.map(article => `
             <tr>
                 <td class="title-cell">${escapeText(article.title)}</td>
                 <td>${escapeText(article.source || article.host)}<div class="small-cell">${escapeText(article.host)}</div></td>
@@ -692,7 +1018,10 @@
                 <td>${badge(article.candidateStrength || "NONE", article.candidateStrength || "NONE")}</td>
                 <td>${escapeText(article.candidateScore ?? 0)}</td>
                 <td class="small-cell">${escapeText(article.snippet)}</td>
-                <td><a href="${escapeAttr(article.url)}" target="_blank" rel="noreferrer">Open</a></td>
+                <td>
+                    <div>${badge(article.manualReviewStatus || "PENDING", article.manualReviewStatus === "USEFUL" ? "ok" : article.manualReviewStatus === "IGNORED" ? "disabled" : "warn")}</div>
+                    <a href="${escapeAttr(article.url)}" target="_blank" rel="noreferrer">Open</a>
+                </td>
             </tr>
         `).join("");
     }
@@ -722,6 +1051,116 @@
 
     function isAlertVisible(candidate) {
         return state.alerts.some(alert => alert.articleId === candidate.id);
+    }
+
+    function filteredItems(items, options) {
+        const query = searchInput.value.trim().toLowerCase();
+        const strength = strengthFilter.value;
+        const source = sourceFilter.value;
+        const manualStatus = manualReviewFilter.value;
+        const candidateOnly = options.articleList && candidateOnlyToggle.checked;
+        const eligibleOnly = options.candidateList && eligibleOnlyToggle.checked;
+        return [...items]
+            .filter(item => {
+                const itemSource = sourceKey(item);
+                const haystack = [
+                    item.title,
+                    item.source,
+                    item.host,
+                    item.candidateStrength,
+                    item.candidateReason,
+                    item.manualReviewStatus,
+                    item.manualReviewNote,
+                    item.snippet
+                ].join(" ").toLowerCase();
+                return (!query || haystack.includes(query))
+                    && (!strength || (item.candidateStrength || "NONE") === strength)
+                    && (!source || itemSource === source)
+                    && (!manualStatus || (item.manualReviewStatus || "PENDING") === manualStatus)
+                    && (!candidateOnly || item.candidate)
+                    && (!eligibleOnly || isAlertVisible(item));
+            })
+            .sort(compareItems);
+    }
+
+    function compareItems(left, right) {
+        const sort = sortSelect.value;
+        if (sort === "score") {
+            return (right.candidateScore || 0) - (left.candidateScore || 0)
+                || newestDate(right) - newestDate(left);
+        }
+        if (sort === "source") {
+            return sourceKey(left).localeCompare(sourceKey(right))
+                || newestDate(right) - newestDate(left);
+        }
+        if (sort === "discovered") {
+            return dateValue(right.discoveredAt) - dateValue(left.discoveredAt);
+        }
+        return dateValue(right.publishedAt || right.discoveredAt) - dateValue(left.publishedAt || left.discoveredAt);
+    }
+
+    function newestDate(item) {
+        return Math.max(dateValue(item.publishedAt), dateValue(item.discoveredAt));
+    }
+
+    function dateValue(value) {
+        if (!value) {
+            return 0;
+        }
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? 0 : date.getTime();
+    }
+
+    function updateSourceFilter() {
+        const selected = sourceFilter.value;
+        const sources = [...state.articles, ...state.candidates]
+            .map(sourceKey)
+            .filter(Boolean)
+            .filter((value, index, values) => values.indexOf(value) === index)
+            .sort((left, right) => left.localeCompare(right));
+        sourceFilter.innerHTML = `<option value="">All sources</option>` + sources.map(source =>
+            `<option value="${escapeAttr(source)}">${escapeText(source)}</option>`
+        ).join("");
+        if (sources.includes(selected)) {
+            sourceFilter.value = selected;
+        }
+    }
+
+    function sourceKey(item) {
+        return item.source || item.host || "Unknown";
+    }
+
+    function toggleAutoRefresh() {
+        if (state.autoRefreshTimer) {
+            clearInterval(state.autoRefreshTimer);
+            state.autoRefreshTimer = null;
+        }
+        if (autoRefreshToggle.checked) {
+            state.autoRefreshTimer = setInterval(loadDashboard, 30000);
+        }
+    }
+
+    function reviewHighCandidates() {
+        strengthFilter.value = "HIGH";
+        manualReviewFilter.value = "";
+        eligibleOnlyToggle.checked = false;
+        document.querySelector("#candidateSection").scrollIntoView({behavior: "smooth", block: "start"});
+        render();
+    }
+
+    function updateArticleInState(updated) {
+        const apply = item => item.id === updated.id ? {
+            ...item,
+            manualReviewStatus: updated.manualReviewStatus,
+            manualReviewNote: updated.manualReviewNote,
+            manualReviewedAt: updated.manualReviewedAt
+        } : item;
+        state.articles = state.articles.map(apply);
+        state.candidates = state.candidates.map(apply);
+    }
+
+    function splitKeywords(value) {
+        return value ? String(value).split("|").filter(Boolean) : [];
     }
 
     function kvRows(items) {
@@ -776,6 +1215,18 @@
     function escapeAttr(value) {
         return escapeText(value).replaceAll("`", "&#096;");
     }
+
+    document.querySelector("#candidates").addEventListener("click", event => {
+        const reviewButton = event.target.closest("[data-review-action]");
+        if (reviewButton) {
+            updateManualReview(Number(reviewButton.dataset.articleId), reviewButton.dataset.reviewAction);
+            return;
+        }
+        const previewButton = event.target.closest("[data-preview-article-id]");
+        if (previewButton) {
+            previewCandidate(Number(previewButton.dataset.previewArticleId));
+        }
+    });
 
     loadDashboard();
 </script>

@@ -71,6 +71,15 @@ public class DetectedEventEntity {
     @Column(length = 1024)
     private String alertReason;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32, columnDefinition = "varchar(32)")
+    private ManualReviewStatus manualReviewStatus = ManualReviewStatus.PENDING;
+
+    @Column(length = 2048)
+    private String manualReviewNote;
+
+    private Instant manualReviewedAt;
+
     @Column(length = 2048)
     private String matchedPositiveKeywords;
 
@@ -210,6 +219,18 @@ public class DetectedEventEntity {
         return alertReason;
     }
 
+    public ManualReviewStatus getManualReviewStatus() {
+        return manualReviewStatus == null ? ManualReviewStatus.PENDING : manualReviewStatus;
+    }
+
+    public String getManualReviewNote() {
+        return manualReviewNote;
+    }
+
+    public Instant getManualReviewedAt() {
+        return manualReviewedAt;
+    }
+
     public String getMatchedPositiveKeywords() {
         return matchedPositiveKeywords;
     }
@@ -254,6 +275,12 @@ public class DetectedEventEntity {
     public void updateAlertEligibility(boolean alertEligible, String alertReason) {
         this.alertEligible = alertEligible;
         this.alertReason = alertReason;
+    }
+
+    public void updateManualReview(ManualReviewStatus manualReviewStatus, String manualReviewNote) {
+        this.manualReviewStatus = manualReviewStatus == null ? ManualReviewStatus.PENDING : manualReviewStatus;
+        this.manualReviewNote = normalizeBlank(manualReviewNote);
+        this.manualReviewedAt = this.manualReviewStatus == ManualReviewStatus.PENDING ? null : Instant.now();
     }
 
     private String normalizeBlank(String value) {
