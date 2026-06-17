@@ -8,6 +8,7 @@ import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsSourceEntity;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
+import com.parsernews.service.AlertDispatchService;
 import com.parsernews.service.AlertEligibilityService;
 import com.parsernews.service.AlertMessageFormatter;
 import com.parsernews.service.AlertNotifier;
@@ -223,13 +224,45 @@ class AlertCandidateControllerTest {
         assertThat(eligible.isAlertEligible()).isFalse();
     }
 
+    @Test
+    void manualDispatchEndpointRunsOneDispatchCycle() {
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        AlertDispatchService dispatchService = mock(AlertDispatchService.class);
+        AlertDispatchService.AlertDispatchSummary summary = new AlertDispatchService.AlertDispatchSummary(
+                true,
+                1,
+                1,
+                0,
+                0,
+                null,
+                List.of()
+        );
+        when(dispatchService.dispatch()).thenReturn(summary);
+        AlertCandidateController controller = controller(repository, dispatchService, new NoOpAlertNotifier());
+
+        AlertDispatchService.AlertDispatchSummary response = controller.dispatch();
+
+        assertThat(response.enabled()).isTrue();
+        assertThat(response.attemptedCount()).isEqualTo(1);
+        assertThat(response.sentCount()).isEqualTo(1);
+    }
+
     private AlertCandidateController controller(DetectedEventRepository repository) {
         return controller(repository, new NoOpAlertNotifier());
     }
 
     private AlertCandidateController controller(DetectedEventRepository repository, AlertNotifier alertNotifier) {
+        return controller(repository, mock(AlertDispatchService.class), alertNotifier);
+    }
+
+    private AlertCandidateController controller(
+            DetectedEventRepository repository,
+            AlertDispatchService alertDispatchService,
+            AlertNotifier alertNotifier
+    ) {
         return new AlertCandidateController(
                 repository,
+                alertDispatchService,
                 new AlertEligibilityService(),
                 new AlertMessageFormatter(),
                 alertNotifier

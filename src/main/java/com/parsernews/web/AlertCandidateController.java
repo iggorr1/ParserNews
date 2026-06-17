@@ -3,6 +3,7 @@ package com.parsernews.web;
 import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
+import com.parsernews.service.AlertDispatchService;
 import com.parsernews.service.AlertEligibilityService;
 import com.parsernews.service.AlertMessageFormatter;
 import com.parsernews.service.AlertNotifier;
@@ -22,17 +23,20 @@ import java.util.List;
 @RestController
 public class AlertCandidateController {
     private final DetectedEventRepository eventRepository;
+    private final AlertDispatchService alertDispatchService;
     private final AlertEligibilityService alertEligibilityService;
     private final AlertMessageFormatter alertMessageFormatter;
     private final AlertNotifier alertNotifier;
 
     public AlertCandidateController(
             DetectedEventRepository eventRepository,
+            AlertDispatchService alertDispatchService,
             AlertEligibilityService alertEligibilityService,
             AlertMessageFormatter alertMessageFormatter,
             AlertNotifier alertNotifier
     ) {
         this.eventRepository = eventRepository;
+        this.alertDispatchService = alertDispatchService;
         this.alertEligibilityService = alertEligibilityService;
         this.alertMessageFormatter = alertMessageFormatter;
         this.alertNotifier = alertNotifier;
@@ -89,6 +93,11 @@ public class AlertCandidateController {
             event.markAlertQueued();
         }
         return AlertSendResponse.from(event, eligibility, notification, message);
+    }
+
+    @PostMapping("/api/alerts/dispatch")
+    public AlertDispatchService.AlertDispatchSummary dispatch() {
+        return alertDispatchService.dispatch();
     }
 
     @PostMapping("/api/alerts/dry-run")

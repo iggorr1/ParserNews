@@ -5,6 +5,7 @@ import org.springframework.context.annotation.Configuration;
 
 @Configuration
 @EnableConfigurationProperties({
+        AlertDispatchSettings.class,
         AnalyzerSettings.class,
         ConsoleSettings.class,
         RssSettings.class,
