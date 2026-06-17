@@ -9,6 +9,7 @@ import com.parsernews.persistence.NewsSourceEntity;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
 import com.parsernews.service.AlertEligibilityService;
+import com.parsernews.service.AlertMessageFormatter;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -31,7 +32,7 @@ class AlertCandidateControllerTest {
         queued.markAlertQueued();
         DetectedEventRepository repository = mock(DetectedEventRepository.class);
         when(repository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(low, queued, eligible));
-        AlertCandidateController controller = new AlertCandidateController(repository, new AlertEligibilityService());
+        AlertCandidateController controller = controller(repository);
 
         List<AlertCandidateController.AlertCandidateResponse> response = controller.candidates();
 
@@ -46,7 +47,7 @@ class AlertCandidateControllerTest {
         DetectedEventEntity eligible = event(10L, CandidateStrength.HIGH, 90, true);
         DetectedEventRepository repository = mock(DetectedEventRepository.class);
         when(repository.findById(10L)).thenReturn(Optional.of(eligible));
-        AlertCandidateController controller = new AlertCandidateController(repository, new AlertEligibilityService());
+        AlertCandidateController controller = controller(repository);
 
         AlertCandidateController.AlertCandidateResponse response = controller.queue(10L);
 
@@ -59,7 +60,7 @@ class AlertCandidateControllerTest {
     void queueReturnsNotFoundForMissingCandidate() {
         DetectedEventRepository repository = mock(DetectedEventRepository.class);
         when(repository.findById(404L)).thenReturn(Optional.empty());
-        AlertCandidateController controller = new AlertCandidateController(repository, new AlertEligibilityService());
+        AlertCandidateController controller = controller(repository);
 
         assertThatThrownBy(() -> controller.queue(404L))
                 .isInstanceOf(ResponseStatusException.class)
@@ -71,11 +72,80 @@ class AlertCandidateControllerTest {
         DetectedEventEntity medium = event(20L, CandidateStrength.MEDIUM, 60, false);
         DetectedEventRepository repository = mock(DetectedEventRepository.class);
         when(repository.findById(20L)).thenReturn(Optional.of(medium));
-        AlertCandidateController controller = new AlertCandidateController(repository, new AlertEligibilityService());
+        AlertCandidateController controller = controller(repository);
 
         assertThatThrownBy(() -> controller.queue(20L))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("400 BAD_REQUEST");
+    }
+
+    @Test
+    void previewReturnsFormattedMessageForEligibleCandidate() {
+        DetectedEventEntity eligible = event(30L, CandidateStrength.HIGH, 90, true);
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findById(30L)).thenReturn(Optional.of(eligible));
+        AlertCandidateController controller = controller(repository);
+
+        AlertCandidateController.AlertPreviewResponse response = controller.preview(30L);
+
+        assertThat(response.detectedEventId()).isEqualTo(30L);
+        assertThat(response.articleId()).isEqualTo(230L);
+        assertThat(response.eligible()).isTrue();
+        assertThat(response.queued()).isFalse();
+        assertThat(response.message()).contains("Test Company enters merger agreement");
+        assertThat(response.message()).contains("Test Source");
+        assertThat(response.message()).contains("example.com");
+        assertThat(response.message()).contains("Strength: HIGH");
+        assertThat(response.message()).contains("Score: 90");
+        assertThat(response.message()).contains("Matched HIGH candidate signal.");
+        assertThat(response.message()).contains("https://example.com/news/30");
+    }
+
+    @Test
+    void previewReturnsNotFoundForMissingCandidate() {
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findById(405L)).thenReturn(Optional.empty());
+        AlertCandidateController controller = controller(repository);
+
+        assertThatThrownBy(() -> controller.preview(405L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404 NOT_FOUND");
+    }
+
+    @Test
+    void dryRunReturnsEligibleNonQueuedPreviews() {
+        DetectedEventEntity eligible = event(40L, CandidateStrength.HIGH, 90, true);
+        DetectedEventEntity low = event(41L, CandidateStrength.LOW, 30, false);
+        DetectedEventEntity queued = event(42L, CandidateStrength.HIGH, 90, true);
+        queued.markAlertQueued();
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(low, queued, eligible));
+        AlertCandidateController controller = controller(repository);
+
+        List<AlertCandidateController.AlertPreviewResponse> response = controller.dryRun();
+
+        assertThat(response).hasSize(1);
+        assertThat(response.getFirst().detectedEventId()).isEqualTo(40L);
+        assertThat(response.getFirst().eligible()).isTrue();
+        assertThat(response.getFirst().queued()).isFalse();
+        assertThat(response.getFirst().message()).contains("Score: 90");
+    }
+
+    @Test
+    void dryRunDoesNotMarkCandidateAsQueued() {
+        DetectedEventEntity eligible = event(50L, CandidateStrength.HIGH, 90, true);
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(eligible));
+        AlertCandidateController controller = controller(repository);
+
+        controller.dryRun();
+
+        assertThat(eligible.getAlertQueuedAt()).isNull();
+        assertThat(eligible.isAlertEligible()).isTrue();
+    }
+
+    private AlertCandidateController controller(DetectedEventRepository repository) {
+        return new AlertCandidateController(repository, new AlertEligibilityService(), new AlertMessageFormatter());
     }
 
     private DetectedEventEntity event(Long id, CandidateStrength strength, int score, boolean alertEligible) {

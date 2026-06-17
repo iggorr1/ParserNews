@@ -4,6 +4,7 @@ import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.service.AlertEligibilityService;
+import com.parsernews.service.AlertMessageFormatter;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,13 +22,16 @@ import java.util.List;
 public class AlertCandidateController {
     private final DetectedEventRepository eventRepository;
     private final AlertEligibilityService alertEligibilityService;
+    private final AlertMessageFormatter alertMessageFormatter;
 
     public AlertCandidateController(
             DetectedEventRepository eventRepository,
-            AlertEligibilityService alertEligibilityService
+            AlertEligibilityService alertEligibilityService,
+            AlertMessageFormatter alertMessageFormatter
     ) {
         this.eventRepository = eventRepository;
         this.alertEligibilityService = alertEligibilityService;
+        this.alertMessageFormatter = alertMessageFormatter;
     }
 
     @GetMapping("/api/alerts/candidates")
@@ -52,6 +56,33 @@ public class AlertCandidateController {
         }
         event.markAlertQueued();
         return AlertCandidateResponse.from(event);
+    }
+
+    @GetMapping("/api/alerts/candidates/{id}/preview")
+    @Transactional(readOnly = true)
+    public AlertPreviewResponse preview(@PathVariable Long id) {
+        DetectedEventEntity event = eventRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Alert candidate not found"));
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+        if (!event.isAlertEligible() || !eligibility.eligible()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, eligibility.reason());
+        }
+        return AlertPreviewResponse.from(event, eligibility, alertMessageFormatter.format(event));
+    }
+
+    @PostMapping("/api/alerts/dry-run")
+    @Transactional(readOnly = true)
+    public List<AlertPreviewResponse> dryRun() {
+        return eventRepository.findTop200ByOrderByDetectedAtDesc().stream()
+                .filter(event -> event.isAlertEligible() && event.getAlertQueuedAt() == null)
+                .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
+                        .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
+                .map(event -> AlertPreviewResponse.from(
+                        event,
+                        alertEligibilityService.evaluate(event),
+                        alertMessageFormatter.format(event)
+                ))
+                .toList();
     }
 
     public record AlertCandidateResponse(
@@ -82,6 +113,30 @@ public class AlertCandidateController {
                     event.isAlertEligible(),
                     event.getAlertQueuedAt(),
                     event.getAlertReason()
+            );
+        }
+    }
+
+    public record AlertPreviewResponse(
+            Long detectedEventId,
+            Long articleId,
+            boolean eligible,
+            boolean queued,
+            String reason,
+            String message
+    ) {
+        static AlertPreviewResponse from(
+                DetectedEventEntity event,
+                AlertEligibilityService.AlertEligibility eligibility,
+                String message
+        ) {
+            return new AlertPreviewResponse(
+                    event.getId(),
+                    event.getArticle().getId(),
+                    eligibility.eligible(),
+                    event.getAlertQueuedAt() != null,
+                    eligibility.reason(),
+                    message
             );
         }
     }
