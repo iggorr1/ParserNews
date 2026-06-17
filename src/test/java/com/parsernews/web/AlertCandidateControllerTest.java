@@ -10,6 +10,8 @@ import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
 import com.parsernews.service.AlertEligibilityService;
 import com.parsernews.service.AlertMessageFormatter;
+import com.parsernews.service.AlertNotifier;
+import com.parsernews.service.NoOpAlertNotifier;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -21,6 +23,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class AlertCandidateControllerTest {
@@ -144,8 +148,92 @@ class AlertCandidateControllerTest {
         assertThat(eligible.isAlertEligible()).isTrue();
     }
 
+    @Test
+    void sendWithTelegramDisabledDoesNotMarkCandidateQueued() {
+        DetectedEventEntity eligible = event(60L, CandidateStrength.HIGH, 90, true);
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findById(60L)).thenReturn(Optional.of(eligible));
+        AlertCandidateController controller = controller(repository);
+
+        AlertCandidateController.AlertSendResponse response = controller.send(60L);
+
+        assertThat(response.detectedEventId()).isEqualTo(60L);
+        assertThat(response.sent()).isFalse();
+        assertThat(response.queued()).isFalse();
+        assertThat(response.notifierStatus()).isEqualTo("DISABLED");
+        assertThat(response.reason()).contains("disabled");
+        assertThat(response.message()).contains("Test Company enters merger agreement");
+        assertThat(eligible.getAlertQueuedAt()).isNull();
+        assertThat(eligible.isAlertEligible()).isTrue();
+    }
+
+    @Test
+    void sendReturnsNotFoundForMissingCandidate() {
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findById(406L)).thenReturn(Optional.empty());
+        AlertCandidateController controller = controller(repository);
+
+        assertThatThrownBy(() -> controller.send(406L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("404 NOT_FOUND");
+    }
+
+    @Test
+    void sendReturnsBadRequestForNonEligibleCandidate() {
+        DetectedEventEntity medium = event(70L, CandidateStrength.MEDIUM, 60, false);
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findById(70L)).thenReturn(Optional.of(medium));
+        AlertCandidateController controller = controller(repository);
+
+        assertThatThrownBy(() -> controller.send(70L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400 BAD_REQUEST");
+    }
+
+    @Test
+    void sendReturnsBadRequestForAlreadyQueuedCandidate() {
+        DetectedEventEntity queued = event(80L, CandidateStrength.HIGH, 90, true);
+        queued.markAlertQueued();
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findById(80L)).thenReturn(Optional.of(queued));
+        AlertNotifier notifier = mock(AlertNotifier.class);
+        AlertCandidateController controller = controller(repository, notifier);
+
+        assertThatThrownBy(() -> controller.send(80L))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("400 BAD_REQUEST");
+        verify(notifier, never()).send(org.mockito.ArgumentMatchers.anyString());
+    }
+
+    @Test
+    void sendMarksCandidateQueuedOnlyWhenNotifierSends() {
+        DetectedEventEntity eligible = event(90L, CandidateStrength.HIGH, 90, true);
+        DetectedEventRepository repository = mock(DetectedEventRepository.class);
+        when(repository.findById(90L)).thenReturn(Optional.of(eligible));
+        AlertNotifier notifier = mock(AlertNotifier.class);
+        when(notifier.send(org.mockito.ArgumentMatchers.anyString()))
+                .thenReturn(AlertNotifier.AlertNotificationResult.sent("SENT", "Telegram alert message was sent."));
+        AlertCandidateController controller = controller(repository, notifier);
+
+        AlertCandidateController.AlertSendResponse response = controller.send(90L);
+
+        assertThat(response.sent()).isTrue();
+        assertThat(response.queued()).isTrue();
+        assertThat(eligible.getAlertQueuedAt()).isNotNull();
+        assertThat(eligible.isAlertEligible()).isFalse();
+    }
+
     private AlertCandidateController controller(DetectedEventRepository repository) {
-        return new AlertCandidateController(repository, new AlertEligibilityService(), new AlertMessageFormatter());
+        return controller(repository, new NoOpAlertNotifier());
+    }
+
+    private AlertCandidateController controller(DetectedEventRepository repository, AlertNotifier alertNotifier) {
+        return new AlertCandidateController(
+                repository,
+                new AlertEligibilityService(),
+                new AlertMessageFormatter(),
+                alertNotifier
+        );
     }
 
     private DetectedEventEntity event(Long id, CandidateStrength strength, int score, boolean alertEligible) {

@@ -129,6 +129,7 @@ Stored event API lives in:
 - Deterministic candidate scoring with score, strength, and reason.
 - Alert eligibility and queue foundation at `GET /api/alerts/candidates`.
 - Alert message preview and dry-run at `GET /api/alerts/candidates/{id}/preview` and `POST /api/alerts/dry-run`.
+- Telegram notifier foundation is disabled by default and guarded by `alerts.telegram.enabled`.
 - Local/admin candidate backfill at `POST /api/admin/recompute-candidates`.
 - Rule-based event classification.
 - False-positive filtering for debt tender offers, senior notes, bonds, offerings, asset acquisitions, reverse mergers, and other non-takeover noise.

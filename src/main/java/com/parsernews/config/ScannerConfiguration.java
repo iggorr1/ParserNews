@@ -8,7 +8,8 @@ import org.springframework.context.annotation.Configuration;
         AnalyzerSettings.class,
         ConsoleSettings.class,
         RssSettings.class,
-        SafetySettings.class
+        SafetySettings.class,
+        TelegramAlertSettings.class
 })
 public class ScannerConfiguration {
 }
