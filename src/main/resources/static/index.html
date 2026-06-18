@@ -261,6 +261,10 @@
 
         .badge.ok,
         .badge.HIGH,
+        .badge.CASH,
+        .badge.HIGH_CONFIDENCE,
+        .badge.DEFINITIVE_AGREEMENT,
+        .badge.MERGER_AGREEMENT,
         .badge.LIKELY_DEAL,
         .badge.SUCCESS,
         .badge.eligible {
@@ -271,6 +275,10 @@
 
         .badge.warn,
         .badge.MEDIUM,
+        .badge.CASH_AND_STOCK,
+        .badge.MEDIUM_CONFIDENCE,
+        .badge.PROPOSAL,
+        .badge.TENDER_OFFER,
         .badge.NEEDS_REVIEW,
         .badge.MANUAL {
             color: var(--warn);
@@ -281,6 +289,9 @@
         .badge.LOW,
         .badge.NONE,
         .badge.UNKNOWN,
+        .badge.STOCK,
+        .badge.LOW_CONFIDENCE,
+        .badge.RUMOR_OR_EXPLORATION,
         .badge.LIKELY_NOISE,
         .badge.disabled,
         .badge.queued {
@@ -409,6 +420,34 @@
             display: grid;
             gap: 4px;
             margin: 10px 0;
+        }
+
+        .deal-terms {
+            display: grid;
+            grid-template-columns: repeat(6, minmax(0, 1fr));
+            gap: 8px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .deal-term {
+            min-width: 0;
+        }
+
+        .deal-term span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .deal-term strong {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
         }
 
         .candidate-details {
@@ -596,6 +635,10 @@
                 justify-content: flex-start;
             }
 
+            .deal-terms {
+                grid-template-columns: 1fr;
+            }
+
             .kv {
                 grid-template-columns: 1fr;
             }
@@ -667,6 +710,18 @@
                 <option value="LIKELY_NOISE">LIKELY_NOISE</option>
                 <option value="LAW_FIRM_ALERT">LAW_FIRM_ALERT</option>
                 <option value="FINANCING_OR_OFFERING">FINANCING_OR_OFFERING</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+        </div>
+        <div class="control">
+            <label for="dealStatusFilter">Deal status</label>
+            <select id="dealStatusFilter">
+                <option value="">ALL</option>
+                <option value="PROPOSAL">PROPOSAL</option>
+                <option value="DEFINITIVE_AGREEMENT">DEFINITIVE_AGREEMENT</option>
+                <option value="MERGER_AGREEMENT">MERGER_AGREEMENT</option>
+                <option value="TENDER_OFFER">TENDER_OFFER</option>
+                <option value="RUMOR_OR_EXPLORATION">RUMOR_OR_EXPLORATION</option>
                 <option value="UNKNOWN">UNKNOWN</option>
             </select>
         </div>
@@ -875,6 +930,7 @@
     const sortSelect = document.querySelector("#sortSelect");
     const manualReviewFilter = document.querySelector("#manualReviewFilter");
     const verdictFilter = document.querySelector("#verdictFilter");
+    const dealStatusFilter = document.querySelector("#dealStatusFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -892,6 +948,7 @@
     sortSelect.addEventListener("change", render);
     manualReviewFilter.addEventListener("change", render);
     verdictFilter.addEventListener("change", render);
+    dealStatusFilter.addEventListener("change", render);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -1064,8 +1121,15 @@
         const likelyDeals = state.candidates.filter(candidate =>
             candidate.reviewVerdict === "LIKELY_DEAL" && candidate.manualReviewStatus !== "IGNORED"
         ).length;
+        const highConfidenceDeals = state.candidates.filter(candidate =>
+            candidate.reviewVerdict === "LIKELY_DEAL"
+                && candidate.dealConfidence === "HIGH"
+                && candidate.manualReviewStatus !== "IGNORED"
+        ).length;
         const needsReview = state.candidates.filter(candidate =>
-            candidate.reviewVerdict === "NEEDS_REVIEW" && candidate.manualReviewStatus !== "IGNORED"
+            candidate.manualReviewStatus !== "IGNORED"
+                && (candidate.reviewVerdict === "NEEDS_REVIEW"
+                    || (candidate.reviewVerdict === "LIKELY_DEAL" && hasMissingDealTerms(candidate)))
         ).length;
         const actionable = likelyDeals + needsReview;
         const hasOnlyNoise = state.candidates.length > 0
@@ -1077,7 +1141,9 @@
         const latestScanStatus = state.status?.latestScan?.status || "-";
         const message = health === "WARN"
             ? "System warning: latest scan failed"
-            : likelyDeals > 0
+            : highConfidenceDeals > 0
+                ? `${highConfidenceDeals} high-confidence likely deal${highConfidenceDeals === 1 ? "" : "s"}`
+                : likelyDeals > 0
                 ? `${likelyDeals} likely deal${likelyDeals === 1 ? "" : "s"} needs review`
                 : needsReview > 0
                     ? `${needsReview} candidate${needsReview === 1 ? "" : "s"} need review`
@@ -1088,7 +1154,9 @@
         document.querySelector("#actionMessage").textContent = message;
         document.querySelector("#actionSubtext").textContent = health === "WARN"
             ? "Open technical details and check the latest scan run."
-            : actionable > 0
+            : highConfidenceDeals > 0
+                ? "Start with high-confidence deal terms, then verify source article manually."
+                : actionable > 0
                 ? "Start with the candidate cards below. Check verdict, risk flags, and suggested action."
                 : "The monitor is running. Review latest articles if you want to tune rules.";
         document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
@@ -1173,6 +1241,15 @@
                     ${chipList("Positive signals", candidate.reviewPositiveSignals, "")}
                     ${chipList("Risk flags", candidate.reviewRiskFlags, "risk")}
                 </div>
+                <div class="deal-terms">
+                    ${dealTerm("Target", candidate.targetCompany)}
+                    ${dealTerm("Buyer", candidate.buyerCompany)}
+                    ${dealTerm("Offer", formatOffer(candidate))}
+                    ${dealTerm("Payment", candidate.paymentType)}
+                    <div class="deal-term"><span>Status</span>${badge(candidate.dealStatus || "UNKNOWN", candidate.dealStatus || "UNKNOWN")}</div>
+                    <div class="deal-term"><span>Confidence</span>${badge(candidate.dealConfidence || "UNKNOWN", `${candidate.dealConfidence || "UNKNOWN"}_CONFIDENCE`)}</div>
+                </div>
+                ${chipList("Deal warnings", candidate.dealWarnings, "risk")}
                 <details class="candidate-details">
                     <summary>Details</summary>
                     <p class="snippet">${escapeText(candidate.snippet || "No snippet available.")}</p>
@@ -1183,6 +1260,7 @@
                         <div><span>Alert state</span><strong>${escapeText(isAlertVisible(candidate) ? "eligible" : "not eligible")}${candidate.alertQueuedAt ? ", queued" : ""}</strong></div>
                         <div><span>Automatic reviewStatus</span><strong>${escapeText(candidate.reviewStatus || "-")}</strong></div>
                         <div><span>Manual note</span><strong title="${escapeAttr(candidate.manualReviewNote)}">${escapeText(candidate.manualReviewNote || "-")}</strong></div>
+                        <div><span>Deal summary</span><strong title="${escapeAttr(candidate.dealSummary)}">${escapeText(candidate.dealSummary || "-")}</strong></div>
                     </div>
                 </details>
                 <div class="review-row">
@@ -1288,6 +1366,7 @@
         const source = sourceFilter.value;
         const manualStatus = manualReviewFilter.value;
         const verdict = verdictFilter.value;
+        const dealStatus = dealStatusFilter.value;
         const candidateOnly = options.articleList && candidateOnlyToggle.checked;
         const eligibleOnly = options.candidateList && eligibleOnlyToggle.checked;
         return [...items]
@@ -1299,6 +1378,13 @@
                     item.host,
                     item.candidateStrength,
                     item.reviewVerdict,
+                    item.dealStatus,
+                    item.dealConfidence,
+                    item.targetCompany,
+                    item.buyerCompany,
+                    item.paymentType,
+                    item.dealSummary,
+                    (item.dealWarnings || []).join(" "),
                     item.reviewSummary,
                     item.suggestedAction,
                     (item.reviewRiskFlags || []).join(" "),
@@ -1313,6 +1399,7 @@
                     && (!source || itemSource === source)
                     && (!manualStatus || (item.manualReviewStatus || "PENDING") === manualStatus)
                     && (!verdict || (item.reviewVerdict || "UNKNOWN") === verdict)
+                    && (!dealStatus || (item.dealStatus || "UNKNOWN") === dealStatus)
                     && (!candidateOnly || item.candidate)
                     && (!eligibleOnly || isAlertVisible(item));
             })
@@ -1411,6 +1498,29 @@
                 <strong class="${escapeAttr(kind)}">${escapeText(value ?? 0)}</strong>
             </div>
         `;
+    }
+
+    function dealTerm(label, value) {
+        return `
+            <div class="deal-term">
+                <span>${escapeText(label)}</span>
+                <strong title="${escapeAttr(value || "Unknown")}">${escapeText(value || "Unknown")}</strong>
+            </div>
+        `;
+    }
+
+    function formatOffer(item) {
+        if (item.offerPrice === null || item.offerPrice === undefined || item.offerPrice === "") {
+            return "Unknown";
+        }
+        return `${item.offerCurrency || ""} ${item.offerPrice}`.trim();
+    }
+
+    function hasMissingDealTerms(item) {
+        const warnings = Array.isArray(item.dealWarnings) ? item.dealWarnings : [];
+        return warnings.some(warning =>
+            ["target unknown", "buyer unknown", "offer price missing", "payment type unknown"].includes(warning)
+        );
     }
 
     function chipList(label, values, kind) {

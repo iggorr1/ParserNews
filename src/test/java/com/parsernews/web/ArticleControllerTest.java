@@ -11,6 +11,7 @@ import com.parsernews.persistence.NewsSourceEntity;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
 import com.parsernews.service.CandidateReviewInsightService;
+import com.parsernews.service.DealTermsExtractionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -65,6 +66,8 @@ class ArticleControllerTest {
         assertThat(response.getFirst().candidateStrength()).isEqualTo(CandidateStrength.HIGH);
         assertThat(response.getFirst().candidateReason()).contains("HIGH");
         assertThat(response.getFirst().manualReviewStatus()).isEqualTo(ManualReviewStatus.PENDING);
+        assertThat(response.getFirst().offerPrice()).isEqualByComparingTo("5.00");
+        assertThat(response.getFirst().paymentType()).isEqualTo(com.parsernews.model.PaymentType.CASH);
     }
 
     @Test
@@ -186,7 +189,7 @@ class ArticleControllerTest {
             NewsArticleRepository articleRepository,
             DetectedEventRepository eventRepository
     ) {
-        return new ArticleController(articleRepository, eventRepository, new CandidateReviewInsightService());
+        return new ArticleController(articleRepository, eventRepository, new CandidateReviewInsightService(), new DealTermsExtractionService());
     }
 
     private NewsArticleEntity articleWithText(Long id, String headline, String articleText) {

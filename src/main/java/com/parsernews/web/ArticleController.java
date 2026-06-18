@@ -10,6 +10,7 @@ import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
 import com.parsernews.service.CandidateReviewInsightService;
+import com.parsernews.service.DealTermsExtractionService;
 import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
@@ -31,15 +33,18 @@ public class ArticleController {
     private final NewsArticleRepository articleRepository;
     private final DetectedEventRepository eventRepository;
     private final CandidateReviewInsightService reviewInsightService;
+    private final DealTermsExtractionService dealTermsExtractionService;
 
     public ArticleController(
             NewsArticleRepository articleRepository,
             DetectedEventRepository eventRepository,
-            CandidateReviewInsightService reviewInsightService
+            CandidateReviewInsightService reviewInsightService,
+            DealTermsExtractionService dealTermsExtractionService
     ) {
         this.articleRepository = articleRepository;
         this.eventRepository = eventRepository;
         this.reviewInsightService = reviewInsightService;
+        this.dealTermsExtractionService = dealTermsExtractionService;
     }
 
     @GetMapping("/api/articles")
@@ -58,7 +63,8 @@ public class ArticleController {
                 .map(article -> ArticleListResponse.from(
                         article,
                         eventRepository.findByArticle(article).orElse(null),
-                        reviewInsightService
+                        reviewInsightService,
+                        dealTermsExtractionService
                 ))
                 .toList();
     }
@@ -74,7 +80,7 @@ public class ArticleController {
     public ArticleDetailResponse article(@PathVariable Long id) {
         NewsArticleEntity article = articleRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found"));
-        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null), reviewInsightService);
+        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null), reviewInsightService, dealTermsExtractionService);
     }
 
     @PatchMapping("/api/articles/{id}/manual-review")
@@ -88,7 +94,7 @@ public class ArticleController {
         DetectedEventEntity event = eventRepository.findByArticle(article)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Article has no detected event to review"));
         event.updateManualReview(request.status(), request.note());
-        return ArticleDetailResponse.from(article, event, reviewInsightService);
+        return ArticleDetailResponse.from(article, event, reviewInsightService, dealTermsExtractionService);
     }
 
     private List<ArticleListResponse> candidates(int limit) {
@@ -97,7 +103,7 @@ public class ArticleController {
                 .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
                         .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
                 .limit(normalizedLimit(limit))
-                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService))
+                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService))
                 .toList();
     }
 
@@ -136,6 +142,15 @@ public class ArticleController {
             List<String> reviewRiskFlags,
             List<String> reviewPositiveSignals,
             String suggestedAction,
+            String targetCompany,
+            String buyerCompany,
+            BigDecimal offerPrice,
+            String offerCurrency,
+            com.parsernews.model.PaymentType paymentType,
+            com.parsernews.model.DealStatus dealStatus,
+            com.parsernews.model.DealConfidence dealConfidence,
+            List<String> dealWarnings,
+            String dealSummary,
             String snippet,
             boolean hasFullText,
             int fullTextLength
@@ -143,10 +158,12 @@ public class ArticleController {
         static ArticleListResponse from(
                 NewsArticleEntity article,
                 DetectedEventEntity event,
-                CandidateReviewInsightService reviewInsightService
+                CandidateReviewInsightService reviewInsightService,
+                DealTermsExtractionService dealTermsExtractionService
         ) {
             String text = article.getArticleText();
             CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
+            DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(article, event, insight);
             return new ArticleListResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -175,6 +192,15 @@ public class ArticleController {
                     insight.reviewRiskFlags(),
                     insight.reviewPositiveSignals(),
                     insight.suggestedAction(),
+                    dealTerms.targetCompany(),
+                    dealTerms.buyerCompany(),
+                    dealTerms.offerPrice(),
+                    dealTerms.offerCurrency(),
+                    dealTerms.paymentType(),
+                    dealTerms.dealStatus(),
+                    dealTerms.dealConfidence(),
+                    dealTerms.dealWarnings(),
+                    dealTerms.dealSummary(),
                     buildSnippet(text, article.getHeadline()),
                     text != null && !text.isBlank(),
                     text == null ? 0 : text.length()
@@ -210,6 +236,15 @@ public class ArticleController {
             List<String> reviewRiskFlags,
             List<String> reviewPositiveSignals,
             String suggestedAction,
+            String targetCompany,
+            String buyerCompany,
+            BigDecimal offerPrice,
+            String offerCurrency,
+            com.parsernews.model.PaymentType paymentType,
+            com.parsernews.model.DealStatus dealStatus,
+            com.parsernews.model.DealConfidence dealConfidence,
+            List<String> dealWarnings,
+            String dealSummary,
             String falsePositiveReasons,
             String explanation,
             String fullText
@@ -217,9 +252,11 @@ public class ArticleController {
         static ArticleDetailResponse from(
                 NewsArticleEntity article,
                 DetectedEventEntity event,
-                CandidateReviewInsightService reviewInsightService
+                CandidateReviewInsightService reviewInsightService,
+                DealTermsExtractionService dealTermsExtractionService
         ) {
             CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
+            DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(article, event, insight);
             return new ArticleDetailResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -248,6 +285,15 @@ public class ArticleController {
                     insight.reviewRiskFlags(),
                     insight.reviewPositiveSignals(),
                     insight.suggestedAction(),
+                    dealTerms.targetCompany(),
+                    dealTerms.buyerCompany(),
+                    dealTerms.offerPrice(),
+                    dealTerms.offerCurrency(),
+                    dealTerms.paymentType(),
+                    dealTerms.dealStatus(),
+                    dealTerms.dealConfidence(),
+                    dealTerms.dealWarnings(),
+                    dealTerms.dealSummary(),
                     event == null ? null : event.getFalsePositiveReasons(),
                     event == null ? null : event.getExplanation(),
                     ArticleTextCleaner.cleanTextForSnippet(article.getArticleText(), article.getHeadline())
