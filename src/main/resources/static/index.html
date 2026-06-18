@@ -356,6 +356,52 @@
             color: var(--danger);
         }
 
+        .source-quality {
+            margin-bottom: 16px;
+        }
+
+        .source-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 10px;
+        }
+
+        .source-card {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 12px;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .source-card:hover {
+            border-color: #9bcbbd;
+        }
+
+        .source-name {
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+
+        .source-metrics {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 7px;
+            margin-top: 10px;
+        }
+
+        .source-metric span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .source-metric strong {
+            display: block;
+            font-size: 18px;
+        }
+
         .warning {
             border: 1px solid #f1d191;
             background: var(--soft-warn);
@@ -637,6 +683,17 @@
         </div>
     </section>
 
+    <section class="panel source-quality">
+        <div class="panel-head">
+            <div>
+                <h2>Source Quality</h2>
+                <div class="muted">Click a source to filter articles and candidates.</div>
+            </div>
+            <span class="badge" id="sourceStatsCount">0</span>
+        </div>
+        <div class="source-grid" id="sourceQuality"></div>
+    </section>
+
     <section class="grid">
         <section class="panel span-7" id="candidateSection">
             <div class="panel-head">
@@ -751,6 +808,7 @@
         alerts: [],
         previews: [],
         scanRuns: [],
+        sourceStats: [],
         autoRefreshTimer: null
     };
 
@@ -797,7 +855,8 @@
             fetchJson("/api/articles/candidates?limit=100"),
             fetchJson("/api/alerts/candidates"),
             fetchJson("/api/scan-runs"),
-            postJson("/api/alerts/dry-run")
+            postJson("/api/alerts/dry-run"),
+            fetchJson("/api/stats/sources")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -805,6 +864,7 @@
         assignResult(results[3], "alerts", [], "Alert candidates");
         assignResult(results[4], "scanRuns", [], "Scan runs");
         assignResult(results[5], "previews", [], "Alert dry-run");
+        assignResult(results[6], "sourceStats", [], "Source stats");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -910,11 +970,44 @@
 
     function render() {
         renderActionCenter();
+        renderSourceQuality();
         renderStatus();
         renderCandidates();
         renderAlertPreview();
         renderArticles();
         renderScanRuns();
+    }
+
+    function renderSourceQuality() {
+        const target = document.querySelector("#sourceQuality");
+        const visibleStats = state.sourceStats.slice(0, 8);
+        document.querySelector("#sourceStatsCount").textContent = `${visibleStats.length} / ${state.sourceStats.length}`;
+        if (visibleStats.length === 0) {
+            target.innerHTML = `<div class="notice">No source stats yet.</div>`;
+            return;
+        }
+        target.innerHTML = visibleStats.map(item => {
+            const noiseCount = item.lawFirmAlerts + item.financingOrOffering + item.likelyNoise;
+            return `
+                <button class="source-card" type="button" data-source-filter="${escapeAttr(item.source)}">
+                    <div class="source-name">${escapeText(item.source)}</div>
+                    <div class="muted">${escapeText(item.host || "-")}</div>
+                    <div class="badge-row" style="margin-top: 8px;">
+                        ${badge(`${item.likelyDeals} likely deals`, item.likelyDeals > 0 ? "LIKELY_DEAL" : "disabled")}
+                        ${badge(`${item.needsReview} review`, item.needsReview > 0 ? "NEEDS_REVIEW" : "disabled")}
+                        ${badge(`${noiseCount} noise`, noiseCount > 0 ? "error" : "disabled")}
+                    </div>
+                    <div class="source-metrics">
+                        ${sourceMetric("Articles", item.totalArticles, "")}
+                        ${sourceMetric("Candidates", item.totalCandidates, "")}
+                        ${sourceMetric("HIGH", item.highCandidates, "ok")}
+                        ${sourceMetric("Useful", item.manualUseful, "ok")}
+                        ${sourceMetric("Ignored", item.manualIgnored, "error")}
+                        ${sourceMetric("Pending", item.manualPending, "warn")}
+                    </div>
+                </button>
+            `;
+        }).join("");
     }
 
     function renderActionCenter() {
@@ -1193,7 +1286,7 @@
 
     function updateSourceFilter() {
         const selected = sourceFilter.value;
-        const sources = [...state.articles, ...state.candidates]
+        const sources = [...state.articles, ...state.candidates, ...state.sourceStats]
             .map(sourceKey)
             .filter(Boolean)
             .filter((value, index, values) => values.indexOf(value) === index)
@@ -1246,6 +1339,15 @@
 
     function splitKeywords(value) {
         return value ? String(value).split("|").filter(Boolean) : [];
+    }
+
+    function sourceMetric(label, value, kind) {
+        return `
+            <div class="source-metric">
+                <span>${escapeText(label)}</span>
+                <strong class="${escapeAttr(kind)}">${escapeText(value ?? 0)}</strong>
+            </div>
+        `;
     }
 
     function chipList(label, values, kind) {
@@ -1324,6 +1426,16 @@
         if (previewButton) {
             previewCandidate(Number(previewButton.dataset.previewArticleId));
         }
+    });
+
+    document.querySelector("#sourceQuality").addEventListener("click", event => {
+        const sourceButton = event.target.closest("[data-source-filter]");
+        if (!sourceButton) {
+            return;
+        }
+        sourceFilter.value = sourceButton.dataset.sourceFilter;
+        render();
+        document.querySelector("#candidateSection").scrollIntoView({behavior: "smooth", block: "start"});
     });
 
     loadDashboard();
