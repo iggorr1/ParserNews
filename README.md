@@ -93,6 +93,54 @@ because the public M&A page does not expose a simple RSS URL in the current
 scanner format; adding it should wait for either a stable RSS endpoint or a
 small source-specific parser.
 
+## Source Evaluation Notes
+
+New sources should be added only when they are stable RSS feeds, compatible with
+the current `RssNewsParser`, and likely to contain public-company M&A,
+takeover, take-private, or activist proposal signals. Broad market news, market
+data APIs, API-key products, and HTML-only pages should stay out of the RSS
+parser until there is a focused module for them.
+
+| Source | Classification | Current fit | M&A usefulness | Noise | Decision |
+| --- | --- | --- | --- | --- | --- |
+| Thomson Reuters IR RSS | Direct RSS source | Technically compatible RSS, but only Thomson Reuters investor-relations content | Low for broad scanner; useful only for Thomson Reuters itself | Low, but too narrow | Skip |
+| yfinance | Market data library/API | Not RSS and Python-focused | Useful later for price snapshots, not news collection | N/A | Skip for RSS; possible future market-data module |
+| Alpha Vantage | Market data API requiring key | Not RSS; requires API-key configuration | Useful later for prices, quotes, fundamentals | N/A | Skip for RSS; possible future market-data module |
+| Trustnet RSS | Direct RSS source / RSS page | Some feeds are XML, but content is fund/research-oriented | Low for public-company takeover announcements | Medium/high | Skip |
+| Investegate | HTML page requiring parser | Not a simple RSS feed for current parser | Potentially high for UK RNS/takeover notices | High without filtering | Future source-specific parser candidate |
+| Marketaux | API requiring key | Not RSS; requires API integration | Potentially useful news API later | Depends on query | Skip for RSS; possible future API module |
+| Business Journals syndication | Direct RSS page, but feed access returned 403 in local probe | Not safe for current unattended RSS polling | Medium; regional business deal coverage, but not focused on public-company takeovers | Medium/high | Skip |
+| MarketScreener hot news | HTML page requiring parser | Not safe as RSS; local RSS-style probe returned 403 | Medium for market news, but not focused enough | High | Skip |
+| PR Newswire RSS | Direct RSS source / RSS directory | Already configured for relevant categories, including Acquisitions/Mergers and Shareholder Activism | High | Medium | Keep existing; no broad expansion now |
+| Feedspot M&A RSS list | RSS directory/catalog | Do not ingest Feedspot itself | Useful only for discovering primary sources | N/A | Document only |
+| Feedspot Private Equity RSS list | RSS directory/catalog | Do not ingest Feedspot itself | Useful only for discovering primary sources | N/A | Document only |
+| Feedspot Financial News RSS list | RSS directory/catalog | Do not ingest Feedspot itself | Broad financial-news discovery list | High if added blindly | Document only |
+| SEC EDGAR APIs | SEC filing API / separate future module | Do not mix into `RssNewsParser` | High for official filings and tender/proxy events | Medium without form filtering | Future SEC module |
+
+No new RSS feeds were added in this evaluation pass. The safe choice is to keep
+the current focused RSS set and avoid adding broad/noisy feeds that would make
+the dashboard harder to review.
+
+### SEC Future Module
+
+SEC monitoring should be implemented separately from RSS parsing. Two reasonable
+future approaches:
+
+1. CIK watchlist using the SEC submissions API.
+2. EDGAR daily index scanner for recent filing discovery.
+
+Interesting filing types for future M&A monitoring:
+
+- `8-K`
+- `SC 13D`
+- `SC 13G`
+- `SC TO-T`
+- `SC TO-I`
+- `DEFM14A`
+- `PREM14A`
+- `425`
+- `S-4`
+
 ## Easy Local Launch
 
 For the simplest Windows launch, double-click:
