@@ -10,6 +10,7 @@ import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceEntity;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
+import com.parsernews.service.CandidateReviewInsightService;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -31,7 +32,7 @@ class ArticleControllerTest {
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(articleRepository.findTop200ByOrderByCollectedAtDesc()).thenReturn(List.of(latest, older));
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         List<ArticleController.ArticleListResponse> response = controller.articles(null, false, 200);
 
@@ -51,7 +52,7 @@ class ArticleControllerTest {
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(event));
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         List<ArticleController.ArticleListResponse> response = controller.candidateArticles(200);
 
@@ -77,7 +78,7 @@ class ArticleControllerTest {
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(low, none, high));
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         List<ArticleController.ArticleListResponse> response = controller.candidateArticles(200);
 
@@ -90,7 +91,7 @@ class ArticleControllerTest {
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(articleRepository.findById(404L)).thenReturn(Optional.empty());
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         assertThatThrownBy(() -> controller.article(404L))
                 .isInstanceOf(ResponseStatusException.class)
@@ -108,7 +109,7 @@ class ArticleControllerTest {
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(articleRepository.findById(6L)).thenReturn(Optional.of(article));
         when(eventRepository.findByArticle(article)).thenReturn(Optional.empty());
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         ArticleController.ArticleDetailResponse response = controller.article(6L);
 
@@ -126,7 +127,7 @@ class ArticleControllerTest {
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(articleRepository.findById(7L)).thenReturn(Optional.of(article));
         when(eventRepository.findByArticle(article)).thenReturn(Optional.of(event));
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         ArticleController.ArticleDetailResponse response = controller.updateManualReview(
                 7L,
@@ -148,7 +149,7 @@ class ArticleControllerTest {
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(articleRepository.findById(8L)).thenReturn(Optional.of(article));
         when(eventRepository.findByArticle(article)).thenReturn(Optional.of(event));
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         ArticleController.ArticleDetailResponse response = controller.updateManualReview(
                 8L,
@@ -167,7 +168,7 @@ class ArticleControllerTest {
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(articleRepository.findById(9L)).thenReturn(Optional.of(article));
         when(eventRepository.findByArticle(article)).thenReturn(Optional.empty());
-        ArticleController controller = new ArticleController(articleRepository, eventRepository);
+        ArticleController controller = controller(articleRepository, eventRepository);
 
         assertThatThrownBy(() -> controller.updateManualReview(
                 9L,
@@ -179,6 +180,13 @@ class ArticleControllerTest {
 
     private NewsArticleEntity article(Long id, String headline, String url) {
         return article(id, headline, "Shareholders will receive $5.00 per share in cash.", url);
+    }
+
+    private ArticleController controller(
+            NewsArticleRepository articleRepository,
+            DetectedEventRepository eventRepository
+    ) {
+        return new ArticleController(articleRepository, eventRepository, new CandidateReviewInsightService());
     }
 
     private NewsArticleEntity articleWithText(Long id, String headline, String articleText) {

@@ -261,6 +261,7 @@
 
         .badge.ok,
         .badge.HIGH,
+        .badge.LIKELY_DEAL,
         .badge.SUCCESS,
         .badge.eligible {
             color: var(--ok);
@@ -270,6 +271,7 @@
 
         .badge.warn,
         .badge.MEDIUM,
+        .badge.NEEDS_REVIEW,
         .badge.MANUAL {
             color: var(--warn);
             background: var(--soft-warn);
@@ -278,6 +280,8 @@
 
         .badge.LOW,
         .badge.NONE,
+        .badge.UNKNOWN,
+        .badge.LIKELY_NOISE,
         .badge.disabled,
         .badge.queued {
             color: var(--muted);
@@ -286,7 +290,9 @@
         }
 
         .badge.FAILED,
-        .badge.error {
+        .badge.error,
+        .badge.LAW_FIRM_ALERT,
+        .badge.FINANCING_OR_OFFERING {
             color: var(--danger);
             background: var(--soft-danger);
             border-color: #efb8b8;
@@ -318,6 +324,36 @@
         .snippet {
             color: #3f4b5a;
             margin: 8px 0;
+        }
+
+        .insight {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .chip-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 7px;
+        }
+
+        .chip {
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            padding: 2px 7px;
+            background: #ffffff;
+            color: #3f4b5a;
+            font-size: 12px;
+        }
+
+        .chip.risk {
+            border-color: #efb8b8;
+            background: var(--soft-danger);
+            color: var(--danger);
         }
 
         .warning {
@@ -546,6 +582,18 @@
                 <option value="IGNORED">IGNORED</option>
             </select>
         </div>
+        <div class="control">
+            <label for="verdictFilter">Verdict</label>
+            <select id="verdictFilter">
+                <option value="">ALL</option>
+                <option value="LIKELY_DEAL">LIKELY_DEAL</option>
+                <option value="NEEDS_REVIEW">NEEDS_REVIEW</option>
+                <option value="LIKELY_NOISE">LIKELY_NOISE</option>
+                <option value="LAW_FIRM_ALERT">LAW_FIRM_ALERT</option>
+                <option value="FINANCING_OR_OFFERING">FINANCING_OR_OFFERING</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+        </div>
         <label class="toggle">
             <input id="candidateOnlyToggle" type="checkbox">
             Candidate-only articles
@@ -570,12 +618,12 @@
                 <div class="muted" id="actionSubtext">Checking live monitoring status.</div>
             </div>
             <div class="action-stat">
-                <strong id="actionHighCount">0</strong>
-                <span class="muted">HIGH candidates</span>
+                <strong id="actionLikelyDealCount">0</strong>
+                <span class="muted">Likely deals</span>
             </div>
             <div class="action-stat">
-                <strong id="actionEligibleCount">0</strong>
-                <span class="muted">Alert eligible</span>
+                <strong id="actionNeedsReviewCount">0</strong>
+                <span class="muted">Needs review</span>
             </div>
             <div class="action-stat">
                 <strong id="actionScanStatus">-</strong>
@@ -718,6 +766,7 @@
     const sourceFilter = document.querySelector("#sourceFilter");
     const sortSelect = document.querySelector("#sortSelect");
     const manualReviewFilter = document.querySelector("#manualReviewFilter");
+    const verdictFilter = document.querySelector("#verdictFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -734,6 +783,7 @@
     sourceFilter.addEventListener("change", render);
     sortSelect.addEventListener("change", render);
     manualReviewFilter.addEventListener("change", render);
+    verdictFilter.addEventListener("change", render);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -869,25 +919,38 @@
 
     function renderActionCenter() {
         const health = state.status?.status || "WARN";
-        const highPending = state.candidates.filter(candidate =>
-            candidate.candidateStrength === "HIGH" && candidate.manualReviewStatus !== "IGNORED"
+        const likelyDeals = state.candidates.filter(candidate =>
+            candidate.reviewVerdict === "LIKELY_DEAL" && candidate.manualReviewStatus !== "IGNORED"
         ).length;
-        const eligible = state.alerts.length;
+        const needsReview = state.candidates.filter(candidate =>
+            candidate.reviewVerdict === "NEEDS_REVIEW" && candidate.manualReviewStatus !== "IGNORED"
+        ).length;
+        const actionable = likelyDeals + needsReview;
+        const hasOnlyNoise = state.candidates.length > 0
+            && actionable === 0
+            && state.candidates.every(candidate =>
+                ["LIKELY_NOISE", "LAW_FIRM_ALERT", "FINANCING_OR_OFFERING"].includes(candidate.reviewVerdict)
+                    || candidate.manualReviewStatus === "IGNORED"
+            );
         const latestScanStatus = state.status?.latestScan?.status || "-";
         const message = health === "WARN"
             ? "System warning: latest scan failed"
-            : highPending > 0
-                ? `${highPending} HIGH candidate${highPending === 1 ? "" : "s"} needs review`
-                : "No urgent candidates";
+            : likelyDeals > 0
+                ? `${likelyDeals} likely deal${likelyDeals === 1 ? "" : "s"} needs review`
+                : needsReview > 0
+                    ? `${needsReview} candidate${needsReview === 1 ? "" : "s"} need review`
+                    : hasOnlyNoise
+                        ? "Only likely noise found"
+                        : "No likely deals right now";
 
         document.querySelector("#actionMessage").textContent = message;
         document.querySelector("#actionSubtext").textContent = health === "WARN"
             ? "Open technical details and check the latest scan run."
-            : highPending > 0
-                ? "Start with the candidate cards below. Preview alerts before queueing or sending later."
+            : actionable > 0
+                ? "Start with the candidate cards below. Check verdict, risk flags, and suggested action."
                 : "The monitor is running. Review latest articles if you want to tune rules.";
-        document.querySelector("#actionHighCount").textContent = String(highPending);
-        document.querySelector("#actionEligibleCount").textContent = String(eligible);
+        document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
+        document.querySelector("#actionNeedsReviewCount").textContent = String(needsReview);
         document.querySelector("#actionScanStatus").textContent = latestScanStatus;
     }
 
@@ -953,6 +1016,7 @@
                 <div class="candidate-title">${escapeText(candidate.title)}</div>
                 <div class="badge-row">
                     ${badge(candidate.candidateStrength, candidate.candidateStrength)}
+                    ${badge(candidate.reviewVerdict || "UNKNOWN", candidate.reviewVerdict || "UNKNOWN")}
                     ${badge(`score ${candidate.candidateScore}`, candidate.candidateStrength)}
                     ${badge(isAlertVisible(candidate) ? "eligible" : "review", isAlertVisible(candidate) ? "eligible" : "disabled")}
                     ${candidate.alertQueuedAt ? badge("queued", "queued") : ""}
@@ -962,6 +1026,12 @@
                 ${candidate.candidateStrength === "HIGH" && candidate.reviewStatus === "IGNORED"
                     ? `<div class="warning">Automatic reviewStatus is IGNORED, but candidate strength is HIGH. Treat this as a candidate scoring signal and review manually.</div>`
                     : ""}
+                <div class="insight">
+                    <strong>${escapeText(candidate.reviewSummary || "No review insight available.")}</strong>
+                    <div class="muted" style="margin-top: 4px;">Suggested action: ${escapeText(candidate.suggestedAction || "-")}</div>
+                    ${chipList("Positive signals", candidate.reviewPositiveSignals, "")}
+                    ${chipList("Risk flags", candidate.reviewRiskFlags, "risk")}
+                </div>
                 <p class="snippet">${escapeText(candidate.snippet || "No snippet available.")}</p>
                 <div class="kv">
                     <div><span>Source</span><strong title="${escapeAttr(candidate.source || candidate.host)}">${escapeText(candidate.source || candidate.host)}</strong></div>
@@ -1017,7 +1087,10 @@
                 <td>${escapeText(formatDate(article.publishedAt || article.discoveredAt))}</td>
                 <td>${badge(article.candidateStrength || "NONE", article.candidateStrength || "NONE")}</td>
                 <td>${escapeText(article.candidateScore ?? 0)}</td>
-                <td class="small-cell">${escapeText(article.snippet)}</td>
+                <td class="small-cell">
+                    <div>${badge(article.reviewVerdict || "UNKNOWN", article.reviewVerdict || "UNKNOWN")}</div>
+                    ${escapeText(article.snippet)}
+                </td>
                 <td>
                     <div>${badge(article.manualReviewStatus || "PENDING", article.manualReviewStatus === "USEFUL" ? "ok" : article.manualReviewStatus === "IGNORED" ? "disabled" : "warn")}</div>
                     <a href="${escapeAttr(article.url)}" target="_blank" rel="noreferrer">Open</a>
@@ -1058,6 +1131,7 @@
         const strength = strengthFilter.value;
         const source = sourceFilter.value;
         const manualStatus = manualReviewFilter.value;
+        const verdict = verdictFilter.value;
         const candidateOnly = options.articleList && candidateOnlyToggle.checked;
         const eligibleOnly = options.candidateList && eligibleOnlyToggle.checked;
         return [...items]
@@ -1068,6 +1142,11 @@
                     item.source,
                     item.host,
                     item.candidateStrength,
+                    item.reviewVerdict,
+                    item.reviewSummary,
+                    item.suggestedAction,
+                    (item.reviewRiskFlags || []).join(" "),
+                    (item.reviewPositiveSignals || []).join(" "),
                     item.candidateReason,
                     item.manualReviewStatus,
                     item.manualReviewNote,
@@ -1077,6 +1156,7 @@
                     && (!strength || (item.candidateStrength || "NONE") === strength)
                     && (!source || itemSource === source)
                     && (!manualStatus || (item.manualReviewStatus || "PENDING") === manualStatus)
+                    && (!verdict || (item.reviewVerdict || "UNKNOWN") === verdict)
                     && (!candidateOnly || item.candidate)
                     && (!eligibleOnly || isAlertVisible(item));
             })
@@ -1153,7 +1233,12 @@
             ...item,
             manualReviewStatus: updated.manualReviewStatus,
             manualReviewNote: updated.manualReviewNote,
-            manualReviewedAt: updated.manualReviewedAt
+            manualReviewedAt: updated.manualReviewedAt,
+            reviewVerdict: updated.reviewVerdict,
+            reviewSummary: updated.reviewSummary,
+            reviewRiskFlags: updated.reviewRiskFlags,
+            reviewPositiveSignals: updated.reviewPositiveSignals,
+            suggestedAction: updated.suggestedAction
         } : item;
         state.articles = state.articles.map(apply);
         state.candidates = state.candidates.map(apply);
@@ -1161,6 +1246,19 @@
 
     function splitKeywords(value) {
         return value ? String(value).split("|").filter(Boolean) : [];
+    }
+
+    function chipList(label, values, kind) {
+        const list = Array.isArray(values) ? values : [];
+        if (list.length === 0) {
+            return `<div class="muted" style="margin-top: 7px;">${escapeText(label)}: none</div>`;
+        }
+        return `
+            <div class="muted" style="margin-top: 7px;">${escapeText(label)}</div>
+            <div class="chip-list">
+                ${list.map(value => `<span class="chip ${escapeAttr(kind)}">${escapeText(value)}</span>`).join("")}
+            </div>
+        `;
     }
 
     function kvRows(items) {

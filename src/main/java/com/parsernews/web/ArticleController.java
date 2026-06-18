@@ -9,6 +9,7 @@ import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
+import com.parsernews.service.CandidateReviewInsightService;
 import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,13 +30,16 @@ import java.util.List;
 public class ArticleController {
     private final NewsArticleRepository articleRepository;
     private final DetectedEventRepository eventRepository;
+    private final CandidateReviewInsightService reviewInsightService;
 
     public ArticleController(
             NewsArticleRepository articleRepository,
-            DetectedEventRepository eventRepository
+            DetectedEventRepository eventRepository,
+            CandidateReviewInsightService reviewInsightService
     ) {
         this.articleRepository = articleRepository;
         this.eventRepository = eventRepository;
+        this.reviewInsightService = reviewInsightService;
     }
 
     @GetMapping("/api/articles")
@@ -51,7 +55,11 @@ public class ArticleController {
         return articleRepository.findTop200ByOrderByCollectedAtDesc().stream()
                 .filter(article -> source == null || article.getSource().getName().toLowerCase().contains(source.toLowerCase()))
                 .limit(normalizedLimit(limit))
-                .map(article -> ArticleListResponse.from(article, eventRepository.findByArticle(article).orElse(null)))
+                .map(article -> ArticleListResponse.from(
+                        article,
+                        eventRepository.findByArticle(article).orElse(null),
+                        reviewInsightService
+                ))
                 .toList();
     }
 
@@ -66,7 +74,7 @@ public class ArticleController {
     public ArticleDetailResponse article(@PathVariable Long id) {
         NewsArticleEntity article = articleRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found"));
-        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null));
+        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null), reviewInsightService);
     }
 
     @PatchMapping("/api/articles/{id}/manual-review")
@@ -80,7 +88,7 @@ public class ArticleController {
         DetectedEventEntity event = eventRepository.findByArticle(article)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Article has no detected event to review"));
         event.updateManualReview(request.status(), request.note());
-        return ArticleDetailResponse.from(article, event);
+        return ArticleDetailResponse.from(article, event, reviewInsightService);
     }
 
     private List<ArticleListResponse> candidates(int limit) {
@@ -89,7 +97,7 @@ public class ArticleController {
                 .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
                         .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
                 .limit(normalizedLimit(limit))
-                .map(event -> ArticleListResponse.from(event.getArticle(), event))
+                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService))
                 .toList();
     }
 
@@ -123,12 +131,22 @@ public class ArticleController {
             String alertReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
+            com.parsernews.model.ReviewVerdict reviewVerdict,
+            String reviewSummary,
+            List<String> reviewRiskFlags,
+            List<String> reviewPositiveSignals,
+            String suggestedAction,
             String snippet,
             boolean hasFullText,
             int fullTextLength
     ) {
-        static ArticleListResponse from(NewsArticleEntity article, DetectedEventEntity event) {
+        static ArticleListResponse from(
+                NewsArticleEntity article,
+                DetectedEventEntity event,
+                CandidateReviewInsightService reviewInsightService
+        ) {
             String text = article.getArticleText();
+            CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
             return new ArticleListResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -152,6 +170,11 @@ public class ArticleController {
                     event == null ? null : event.getAlertReason(),
                     event == null ? null : event.getMatchedPositiveKeywords(),
                     event == null ? null : event.getMatchedNegativeKeywords(),
+                    insight.reviewVerdict(),
+                    insight.reviewSummary(),
+                    insight.reviewRiskFlags(),
+                    insight.reviewPositiveSignals(),
+                    insight.suggestedAction(),
                     buildSnippet(text, article.getHeadline()),
                     text != null && !text.isBlank(),
                     text == null ? 0 : text.length()
@@ -182,11 +205,21 @@ public class ArticleController {
             String alertReason,
             String matchedPositiveKeywords,
             String matchedNegativeKeywords,
+            com.parsernews.model.ReviewVerdict reviewVerdict,
+            String reviewSummary,
+            List<String> reviewRiskFlags,
+            List<String> reviewPositiveSignals,
+            String suggestedAction,
             String falsePositiveReasons,
             String explanation,
             String fullText
     ) {
-        static ArticleDetailResponse from(NewsArticleEntity article, DetectedEventEntity event) {
+        static ArticleDetailResponse from(
+                NewsArticleEntity article,
+                DetectedEventEntity event,
+                CandidateReviewInsightService reviewInsightService
+        ) {
+            CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
             return new ArticleDetailResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -210,6 +243,11 @@ public class ArticleController {
                     event == null ? null : event.getAlertReason(),
                     event == null ? null : event.getMatchedPositiveKeywords(),
                     event == null ? null : event.getMatchedNegativeKeywords(),
+                    insight.reviewVerdict(),
+                    insight.reviewSummary(),
+                    insight.reviewRiskFlags(),
+                    insight.reviewPositiveSignals(),
+                    insight.suggestedAction(),
                     event == null ? null : event.getFalsePositiveReasons(),
                     event == null ? null : event.getExplanation(),
                     ArticleTextCleaner.cleanTextForSnippet(article.getArticleText(), article.getHeadline())
