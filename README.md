@@ -93,6 +93,41 @@ because the public M&A page does not expose a simple RSS URL in the current
 scanner format; adding it should wait for either a stable RSS endpoint or a
 small source-specific parser.
 
+## Easy Local Launch
+
+For the simplest Windows launch, double-click:
+
+```text
+run-live.bat
+```
+
+Or run it from a terminal:
+
+```powershell
+.\run-live.bat
+```
+
+It starts the live dashboard on:
+
+```text
+http://localhost:8080/
+```
+
+Use `Ctrl+C` in the console window to stop the server. Telegram and alert
+dispatch remain disabled unless you configure them separately.
+
+If port `8080` is busy, use the backup launcher:
+
+```powershell
+.\run-live-8081.bat
+```
+
+or run the PowerShell launcher directly:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\start-live.ps1 -Port 8081 -OpenBrowser
+```
+
 ## Live RSS Smoke Check
 
 Start the app in live mode first:
