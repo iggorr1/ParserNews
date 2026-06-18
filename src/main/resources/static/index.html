@@ -360,46 +360,21 @@
             margin-bottom: 16px;
         }
 
-        .source-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 10px;
+        .source-table {
+            min-width: 980px;
         }
 
-        .source-card {
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            background: #ffffff;
-            padding: 12px;
-            text-align: left;
+        .source-table tr[data-source-filter] {
             cursor: pointer;
         }
 
-        .source-card:hover {
-            border-color: #9bcbbd;
+        .source-table tr[data-source-filter]:hover td {
+            background: #f5fbf9;
         }
 
         .source-name {
             font-weight: 700;
-            margin-bottom: 2px;
-        }
-
-        .source-metrics {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 7px;
-            margin-top: 10px;
-        }
-
-        .source-metric span {
-            display: block;
-            color: var(--muted);
-            font-size: 12px;
-        }
-
-        .source-metric strong {
-            display: block;
-            font-size: 18px;
+            max-width: 260px;
         }
 
         .warning {
@@ -419,14 +394,64 @@
             margin-top: 10px;
         }
 
+        .candidate-top {
+            display: grid;
+            grid-template-columns: minmax(260px, 1fr) auto;
+            gap: 10px;
+            align-items: start;
+        }
+
+        .candidate-meta {
+            justify-content: flex-end;
+        }
+
+        .candidate-summary {
+            display: grid;
+            gap: 4px;
+            margin: 10px 0;
+        }
+
+        .candidate-details {
+            margin-top: 10px;
+        }
+
+        .candidate-details,
+        .preview-details,
         .technical-details {
             margin-top: 14px;
         }
 
+        .candidate-details summary,
+        .preview-details summary,
         .technical-details summary {
             cursor: pointer;
             font-weight: 700;
             margin-bottom: 12px;
+        }
+
+        .preview-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .preview-list {
+            display: grid;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .preview-item {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #f8fafc;
+            padding: 9px;
+        }
+
+        .preview-item summary {
+            cursor: pointer;
+            font-weight: 700;
         }
 
         .kv {
@@ -562,8 +587,13 @@
             }
 
             .action-layout,
+            .candidate-top,
             .review-row {
                 grid-template-columns: 1fr;
+            }
+
+            .candidate-meta {
+                justify-content: flex-start;
             }
 
             .kv {
@@ -691,11 +721,30 @@
             </div>
             <span class="badge" id="sourceStatsCount">0</span>
         </div>
-        <div class="source-grid" id="sourceQuality"></div>
+        <div class="table-wrap">
+            <table class="source-table">
+                <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>Host</th>
+                    <th>Articles</th>
+                    <th>Candidates</th>
+                    <th>HIGH</th>
+                    <th>Likely deals</th>
+                    <th>Needs review</th>
+                    <th>Noise</th>
+                    <th>Useful</th>
+                    <th>Ignored</th>
+                    <th>Pending</th>
+                </tr>
+                </thead>
+                <tbody id="sourceQuality"></tbody>
+            </table>
+        </div>
     </section>
 
     <section class="grid">
-        <section class="panel span-7" id="candidateSection">
+        <section class="panel span-12" id="candidateSection">
             <div class="panel-head">
                 <h2>Candidates</h2>
                 <span class="badge" id="candidateCount">0</span>
@@ -703,13 +752,13 @@
             <div class="card-list" id="candidates"></div>
         </section>
 
-        <section class="panel span-5">
-            <div class="panel-head">
-                <h2>Alert Preview / Dry-run</h2>
+        <details class="panel span-12 preview-details" id="alertPreviewPanel">
+            <summary class="preview-header">
+                <span>Alert Preview / Dry-run</span>
                 <span class="badge" id="previewCount">0</span>
-            </div>
+            </summary>
             <div id="alertPreview"></div>
-        </section>
+        </details>
 
         <section class="panel span-12">
             <div class="panel-head">
@@ -809,6 +858,7 @@
         previews: [],
         scanRuns: [],
         sourceStats: [],
+        selectedPreviewId: null,
         autoRefreshTimer: null
     };
 
@@ -891,6 +941,7 @@
         setBusy(dryRunButtonTop, true, "Previewing");
         try {
             state.previews = await postJson("/api/alerts/dry-run");
+            state.selectedPreviewId = state.previews[0]?.detectedEventId || null;
             lastUpdated.textContent = new Date().toLocaleString();
             renderAlertPreview();
         } catch (error) {
@@ -910,8 +961,10 @@
         try {
             const preview = await fetchJson(`/api/alerts/candidates/${encodeURIComponent(alert.detectedEventId)}/preview`);
             state.previews = [preview, ...state.previews.filter(item => item.detectedEventId !== preview.detectedEventId)];
+            state.selectedPreviewId = preview.detectedEventId;
             renderAlertPreview();
-            document.querySelector("#alertPreview").scrollIntoView({behavior: "smooth", block: "start"});
+            document.querySelector("#alertPreviewPanel").open = true;
+            document.querySelector("#alertPreviewPanel").scrollIntoView({behavior: "smooth", block: "start"});
         } catch (error) {
             showError("Preview alert", error.message);
         }
@@ -983,29 +1036,25 @@
         const visibleStats = state.sourceStats.slice(0, 8);
         document.querySelector("#sourceStatsCount").textContent = `${visibleStats.length} / ${state.sourceStats.length}`;
         if (visibleStats.length === 0) {
-            target.innerHTML = `<div class="notice">No source stats yet.</div>`;
+            target.innerHTML = `<tr><td colspan="11" class="muted">No source stats yet.</td></tr>`;
             return;
         }
         target.innerHTML = visibleStats.map(item => {
             const noiseCount = item.lawFirmAlerts + item.financingOrOffering + item.likelyNoise;
             return `
-                <button class="source-card" type="button" data-source-filter="${escapeAttr(item.source)}">
-                    <div class="source-name">${escapeText(item.source)}</div>
-                    <div class="muted">${escapeText(item.host || "-")}</div>
-                    <div class="badge-row" style="margin-top: 8px;">
-                        ${badge(`${item.likelyDeals} likely deals`, item.likelyDeals > 0 ? "LIKELY_DEAL" : "disabled")}
-                        ${badge(`${item.needsReview} review`, item.needsReview > 0 ? "NEEDS_REVIEW" : "disabled")}
-                        ${badge(`${noiseCount} noise`, noiseCount > 0 ? "error" : "disabled")}
-                    </div>
-                    <div class="source-metrics">
-                        ${sourceMetric("Articles", item.totalArticles, "")}
-                        ${sourceMetric("Candidates", item.totalCandidates, "")}
-                        ${sourceMetric("HIGH", item.highCandidates, "ok")}
-                        ${sourceMetric("Useful", item.manualUseful, "ok")}
-                        ${sourceMetric("Ignored", item.manualIgnored, "error")}
-                        ${sourceMetric("Pending", item.manualPending, "warn")}
-                    </div>
-                </button>
+                <tr data-source-filter="${escapeAttr(item.source)}" title="Filter by ${escapeAttr(item.source)}">
+                    <td class="source-name">${escapeText(item.source)}</td>
+                    <td class="small-cell">${escapeText(item.host || "-")}</td>
+                    <td>${escapeText(item.totalArticles)}</td>
+                    <td>${escapeText(item.totalCandidates)}</td>
+                    <td>${badge(item.highCandidates, item.highCandidates > 0 ? "HIGH" : "disabled")}</td>
+                    <td>${badge(item.likelyDeals, item.likelyDeals > 0 ? "LIKELY_DEAL" : "disabled")}</td>
+                    <td>${badge(item.needsReview, item.needsReview > 0 ? "NEEDS_REVIEW" : "disabled")}</td>
+                    <td>${badge(noiseCount, noiseCount > 0 ? "error" : "disabled")}</td>
+                    <td>${badge(item.manualUseful, item.manualUseful > 0 ? "ok" : "disabled")}</td>
+                    <td>${badge(item.manualIgnored, item.manualIgnored > 0 ? "error" : "disabled")}</td>
+                    <td>${badge(item.manualPending, item.manualPending > 0 ? "warn" : "disabled")}</td>
+                </tr>
             `;
         }).join("");
     }
@@ -1106,32 +1155,36 @@
         }
         target.innerHTML = candidates.map(candidate => `
             <article class="candidate-card ${escapeAttr(candidate.candidateStrength)}">
-                <div class="candidate-title">${escapeText(candidate.title)}</div>
-                <div class="badge-row">
-                    ${badge(candidate.candidateStrength, candidate.candidateStrength)}
-                    ${badge(candidate.reviewVerdict || "UNKNOWN", candidate.reviewVerdict || "UNKNOWN")}
-                    ${badge(`score ${candidate.candidateScore}`, candidate.candidateStrength)}
-                    ${badge(isAlertVisible(candidate) ? "eligible" : "review", isAlertVisible(candidate) ? "eligible" : "disabled")}
-                    ${candidate.alertQueuedAt ? badge("queued", "queued") : ""}
-                    ${badge(`manual ${candidate.manualReviewStatus || "PENDING"}`, candidate.manualReviewStatus === "USEFUL" ? "ok" : candidate.manualReviewStatus === "IGNORED" ? "disabled" : "warn")}
-                    ${candidate.reviewStatus ? badge(candidate.reviewStatus, candidate.reviewStatus === "IGNORED" ? "disabled" : "ok") : ""}
+                <div class="candidate-top">
+                    <div class="candidate-title">${escapeText(candidate.title)}</div>
+                    <div class="badge-row candidate-meta">
+                        ${badge(candidate.reviewVerdict || "UNKNOWN", candidate.reviewVerdict || "UNKNOWN")}
+                        ${badge(candidate.candidateStrength, candidate.candidateStrength)}
+                        ${badge(`score ${candidate.candidateScore}`, candidate.candidateStrength)}
+                        ${badge(`manual ${candidate.manualReviewStatus || "PENDING"}`, candidate.manualReviewStatus === "USEFUL" ? "ok" : candidate.manualReviewStatus === "IGNORED" ? "disabled" : "warn")}
+                    </div>
                 </div>
                 ${candidate.candidateStrength === "HIGH" && candidate.reviewStatus === "IGNORED"
                     ? `<div class="warning">Automatic reviewStatus is IGNORED, but candidate strength is HIGH. Treat this as a candidate scoring signal and review manually.</div>`
                     : ""}
-                <div class="insight">
+                <div class="candidate-summary">
                     <strong>${escapeText(candidate.reviewSummary || "No review insight available.")}</strong>
                     <div class="muted" style="margin-top: 4px;">Suggested action: ${escapeText(candidate.suggestedAction || "-")}</div>
                     ${chipList("Positive signals", candidate.reviewPositiveSignals, "")}
                     ${chipList("Risk flags", candidate.reviewRiskFlags, "risk")}
                 </div>
-                <p class="snippet">${escapeText(candidate.snippet || "No snippet available.")}</p>
-                <div class="kv">
-                    <div><span>Source</span><strong title="${escapeAttr(candidate.source || candidate.host)}">${escapeText(candidate.source || candidate.host)}</strong></div>
-                    <div><span>Reason</span><strong title="${escapeAttr(candidate.candidateReason)}">${escapeText(candidate.candidateReason)}</strong></div>
-                    <div><span>Positive keywords</span><strong title="${escapeAttr(splitKeywords(candidate.matchedPositiveKeywords).join(", "))}">${escapeText(splitKeywords(candidate.matchedPositiveKeywords).join(", ") || "-")}</strong></div>
-                    <div><span>Manual note</span><strong title="${escapeAttr(candidate.manualReviewNote)}">${escapeText(candidate.manualReviewNote || "-")}</strong></div>
-                </div>
+                <details class="candidate-details">
+                    <summary>Details</summary>
+                    <p class="snippet">${escapeText(candidate.snippet || "No snippet available.")}</p>
+                    <div class="kv">
+                        <div><span>Source</span><strong title="${escapeAttr(candidate.source || candidate.host)}">${escapeText(candidate.source || candidate.host)}</strong></div>
+                        <div><span>Reason</span><strong title="${escapeAttr(candidate.candidateReason)}">${escapeText(candidate.candidateReason)}</strong></div>
+                        <div><span>Positive keywords</span><strong title="${escapeAttr(splitKeywords(candidate.matchedPositiveKeywords).join(", "))}">${escapeText(splitKeywords(candidate.matchedPositiveKeywords).join(", ") || "-")}</strong></div>
+                        <div><span>Alert state</span><strong>${escapeText(isAlertVisible(candidate) ? "eligible" : "not eligible")}${candidate.alertQueuedAt ? ", queued" : ""}</strong></div>
+                        <div><span>Automatic reviewStatus</span><strong>${escapeText(candidate.reviewStatus || "-")}</strong></div>
+                        <div><span>Manual note</span><strong title="${escapeAttr(candidate.manualReviewNote)}">${escapeText(candidate.manualReviewNote || "-")}</strong></div>
+                    </div>
+                </details>
                 <div class="review-row">
                     <input data-review-note="${escapeAttr(candidate.id)}" value="${escapeAttr(candidate.manualReviewNote)}" placeholder="Optional review note">
                     <button type="button" data-review-action="USEFUL" data-article-id="${escapeAttr(candidate.id)}">Mark useful</button>
@@ -1150,19 +1203,29 @@
         document.querySelector("#previewCount").textContent = String(state.previews.length);
         const target = document.querySelector("#alertPreview");
         if (state.previews.length === 0) {
-            target.innerHTML = `<div class="notice">No eligible non-queued alerts to preview.</div>`;
+            target.innerHTML = `<div class="notice">No alert preview loaded yet. Use Preview alert on a candidate, or run dry-run.</div>`;
             return;
         }
-        target.innerHTML = state.previews.slice(0, 5).map(preview => `
-            <div style="margin-bottom: 10px;">
-                <div class="badge-row" style="margin-bottom: 6px;">
-                    ${badge(preview.eligible ? "eligible" : "not eligible", preview.eligible ? "eligible" : "disabled")}
-                    ${badge(preview.queued ? "queued" : "not queued", preview.queued ? "queued" : "ok")}
-                    <span class="muted">event #${escapeText(preview.detectedEventId)}</span>
-                </div>
-                <pre>${escapeText(preview.message || preview.reason || "No preview message.")}</pre>
+        const selected = state.previews.find(preview => preview.detectedEventId === state.selectedPreviewId) || state.previews[0];
+        const others = state.previews.filter(preview => preview.detectedEventId !== selected.detectedEventId).slice(0, 4);
+        target.innerHTML = `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(selected.eligible ? "eligible" : "not eligible", selected.eligible ? "eligible" : "disabled")}
+                ${badge(selected.queued ? "queued" : "not queued", selected.queued ? "queued" : "ok")}
+                <span class="muted">event #${escapeText(selected.detectedEventId)}</span>
             </div>
-        `).join("");
+            <pre>${escapeText(selected.message || selected.reason || "No preview message.")}</pre>
+            ${others.length > 0 ? `
+                <div class="preview-list">
+                    ${others.map(preview => `
+                        <details class="preview-item">
+                            <summary>event #${escapeText(preview.detectedEventId)}</summary>
+                            <pre>${escapeText(preview.message || preview.reason || "No preview message.")}</pre>
+                        </details>
+                    `).join("")}
+                </div>
+            ` : ""}
+        `;
     }
 
     function renderArticles() {
@@ -1429,11 +1492,11 @@
     });
 
     document.querySelector("#sourceQuality").addEventListener("click", event => {
-        const sourceButton = event.target.closest("[data-source-filter]");
-        if (!sourceButton) {
+        const sourceRow = event.target.closest("[data-source-filter]");
+        if (!sourceRow) {
             return;
         }
-        sourceFilter.value = sourceButton.dataset.sourceFilter;
+        sourceFilter.value = sourceRow.dataset.sourceFilter;
         render();
         document.querySelector("#candidateSection").scrollIntoView({behavior: "smooth", block: "start"});
     });
