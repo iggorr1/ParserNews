@@ -1,15 +1,15 @@
 services:
-  postgres:
-    image: postgres:16
-    container_name: parsernews-postgres
-    environment:
-      POSTGRES_DB: parsernews
-      POSTGRES_USER: parsernews
-      POSTGRES_PASSWORD: parsernews
+  parsernews:
+    build:
+      context: .
+    container_name: parsernews
     ports:
-      - "5432:5432"
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=live
+      - SPRING_DATASOURCE_URL=jdbc:h2:file:/app/data/parsernews-dev;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
+      - alerts.telegram.enabled=false
+      - alerts.dispatch.enabled=false
     volumes:
-      - parsernews-postgres-data:/var/lib/postgresql/data
-
-volumes:
-  parsernews-postgres-data:
+      - ./data:/app/data
+      - ./output:/app/output

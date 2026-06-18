@@ -1,0 +1,16 @@
+.git
+.gitignore
+.idea
+.vscode
+target
+data
+output
+*.log
+*.tmp
+*.temp
+*.pid
+*.bak
+*.swp
+Thumbs.db
+Desktop.ini
+.DS_Store

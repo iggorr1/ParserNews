@@ -48,7 +48,7 @@ not mark candidates as queued/sent.
 
 - Java 24, as currently used by the project
 - Maven Wrapper from this repository
-- Optional: Docker for PostgreSQL mode
+- Optional: Docker for local container launch
 
 ## Run Tests
 
@@ -176,6 +176,55 @@ or run the PowerShell launcher directly:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-live.ps1 -Port 8081 -OpenBrowser
 ```
 
+## Docker Local Launch
+
+Docker v1 runs the Spring Boot app only, using the live profile and the local H2
+file database. It does not start PostgreSQL yet.
+
+Build and run:
+
+```powershell
+docker compose up --build
+```
+
+Run in the background:
+
+```powershell
+docker compose up -d --build
+```
+
+View logs:
+
+```powershell
+docker compose logs -f
+```
+
+Stop:
+
+```powershell
+docker compose down
+```
+
+Open the dashboard:
+
+```text
+http://localhost:8080/
+```
+
+On Windows, you can also run:
+
+```powershell
+.\run-docker.bat
+```
+
+Docker keeps H2 database files in the mounted local `./data` directory and scan
+reports in `./output`. Telegram and alert dispatch remain disabled by default in
+`docker-compose.yml`.
+
+This is a simple local/server-deployment foundation, not production hardening.
+PostgreSQL can be added later as a separate compose profile or deployment
+variant.
+
 ## Live RSS Smoke Check
 
 Start the app in live mode first:
@@ -213,18 +262,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\live-smoke.ps1
 
 ## PostgreSQL Mode
 
-```powershell
-docker compose up -d
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=db"
-```
+PostgreSQL is not part of the default Docker v1 launcher. The current Docker
+setup intentionally uses H2 so `docker compose up --build` starts one simple app
+container.
 
-Default local PostgreSQL values:
+Default future local PostgreSQL values:
 
 ```text
 database: parsernews
 user: parsernews
 password: parsernews
 ```
+
+PostgreSQL can be added later as a separate compose profile or server deployment
+variant.
 
 ## Main Manual Flow
 
