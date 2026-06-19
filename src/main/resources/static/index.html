@@ -877,6 +877,62 @@
         </div>
     </section>
 
+    <section class="panel review-quality">
+        <div class="panel-head">
+            <div>
+                <h2>Signal Inbox</h2>
+                <div class="muted">Unified review queue for RSS candidates and SEC filing signals.</div>
+            </div>
+            <span class="badge" id="signalInboxCount">0</span>
+        </div>
+        <div class="filters" style="margin-bottom: 12px;">
+            <div class="control">
+                <label for="signalSourceTypeFilter">Type</label>
+                <select id="signalSourceTypeFilter">
+                    <option value="">ALL</option>
+                    <option>RSS_NEWS</option>
+                    <option>SEC_FILING</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="signalPriorityFilter">Priority</label>
+                <select id="signalPriorityFilter">
+                    <option value="">ALL</option>
+                    <option>HIGH</option>
+                    <option>MEDIUM</option>
+                    <option>LOW</option>
+                    <option>NONE</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="signalReviewFilter">Review</label>
+                <select id="signalReviewFilter">
+                    <option value="">PENDING/USEFUL</option>
+                    <option>PENDING</option>
+                    <option>USEFUL</option>
+                    <option>IGNORED</option>
+                </select>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Title</th>
+                    <th>Priority</th>
+                    <th>Signal</th>
+                    <th>Summary</th>
+                    <th>Review</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody id="signalInbox"></tbody>
+            </table>
+        </div>
+    </section>
+
     <section class="panel source-quality">
         <div class="panel-head">
             <div>
@@ -1166,6 +1222,7 @@
         reviewed: [],
         secStatus: null,
         secFilings: [],
+        signals: [],
         selectedPreviewId: null,
         autoRefreshTimer: null
     };
@@ -1195,6 +1252,9 @@
     const secPriorityFilter = document.querySelector("#secPriorityFilter");
     const secTypeFilter = document.querySelector("#secTypeFilter");
     const secReviewFilter = document.querySelector("#secReviewFilter");
+    const signalSourceTypeFilter = document.querySelector("#signalSourceTypeFilter");
+    const signalPriorityFilter = document.querySelector("#signalPriorityFilter");
+    const signalReviewFilter = document.querySelector("#signalReviewFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -1227,6 +1287,9 @@
     secPriorityFilter.addEventListener("change", renderSecWatchlist);
     secTypeFilter.addEventListener("change", renderSecWatchlist);
     secReviewFilter.addEventListener("change", renderSecWatchlist);
+    signalSourceTypeFilter.addEventListener("change", loadSignals);
+    signalPriorityFilter.addEventListener("change", loadSignals);
+    signalReviewFilter.addEventListener("change", loadSignals);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -1244,7 +1307,8 @@
             fetchJson("/api/stats/sources"),
             fetchJson("/api/articles/reviewed?limit=100"),
             fetchJson("/api/sec/status"),
-            fetchJson("/api/sec/filings")
+            fetchJson("/api/sec/filings"),
+            fetchJson("/api/signals?limit=100")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1256,10 +1320,31 @@
         assignResult(results[7], "reviewed", [], "Reviewed candidates");
         assignResult(results[8], "secStatus", null, "SEC status");
         assignResult(results[9], "secFilings", [], "SEC filings");
+        assignResult(results[10], "signals", [], "Signal inbox");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
         setBusy(refreshButton, false, "Refresh dashboard");
+    }
+
+    async function loadSignals() {
+        try {
+            const params = new URLSearchParams();
+            if (signalSourceTypeFilter.value) {
+                params.set("sourceType", signalSourceTypeFilter.value);
+            }
+            if (signalPriorityFilter.value) {
+                params.set("priority", signalPriorityFilter.value);
+            }
+            if (signalReviewFilter.value) {
+                params.set("reviewStatus", signalReviewFilter.value);
+            }
+            params.set("limit", "100");
+            state.signals = await fetchJson(`/api/signals?${params.toString()}`);
+            renderSignalInbox();
+        } catch (error) {
+            showError("Signal inbox", error.message);
+        }
     }
 
     async function runManualScan() {
@@ -1351,6 +1436,7 @@
             });
             updateArticleInState(updated);
             render();
+            await loadSignals();
         } catch (error) {
             showError("Manual review", error.message);
         }
@@ -1367,6 +1453,7 @@
             });
             state.secFilings = state.secFilings.map(filing => filing.id === updated.id ? updated : filing);
             renderSecWatchlist();
+            await loadSignals();
         } catch (error) {
             showError("SEC manual review", error.message);
         }
@@ -1411,6 +1498,7 @@
 
     function render() {
         renderActionCenter();
+        renderSignalInbox();
         renderSourceQuality();
         renderReviewQuality();
         renderSecWatchlist();
@@ -1643,6 +1731,71 @@
         document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
         document.querySelector("#actionNeedsReviewCount").textContent = String(needsReview);
         document.querySelector("#actionScanStatus").textContent = latestScanStatus;
+    }
+
+    function renderSignalInbox() {
+        const target = document.querySelector("#signalInbox");
+        document.querySelector("#signalInboxCount").textContent = String(state.signals.length);
+        if (!state.signals.length) {
+            target.innerHTML = `<tr><td colspan="8" class="muted">No unified signals match current filters.</td></tr>`;
+            return;
+        }
+        target.innerHTML = state.signals.slice(0, 50).map(signal => {
+            const isRss = signal.sourceType === "RSS_NEWS";
+            const itemId = isRss ? signal.articleId : signal.id;
+            const noteAttr = isRss ? "data-review-note" : "data-sec-review-note";
+            const reasonAttr = isRss ? "data-review-reason" : "data-sec-review-reason";
+            const actionAttr = isRss ? "data-signal-rss-review-action" : "data-signal-sec-review-action";
+            const idAttr = isRss ? "data-article-id" : "data-sec-filing-id";
+            return `
+                <tr>
+                    <td>${badge(signal.sourceType || "UNKNOWN", signal.sourceType || "disabled")}</td>
+                    <td class="title-cell">
+                        ${escapeText(signal.title || "-")}
+                        <div class="small-cell">${escapeText(signal.source || signal.company || "")}${signal.host ? ` / ${escapeText(signal.host)}` : ""}</div>
+                    </td>
+                    <td>
+                        ${badge(signal.priority || "NONE", signal.priority || "disabled")}
+                        ${signal.alertEligible ? badge("alert eligible", "eligible") : ""}
+                    </td>
+                    <td>
+                        ${badge(signal.signalType || "UNKNOWN", signal.signalType || "disabled")}
+                        ${signal.secSignalPriority ? `<div class="small-cell">${escapeText(signal.secSignalPriority)}</div>` : ""}
+                    </td>
+                    <td>
+                        <div>${escapeText(signal.summary || "")}</div>
+                        ${signal.warnings ? `<div class="small-cell danger-text">${escapeText(signal.warnings)}</div>` : ""}
+                        ${signal.dealRelevance ? `<div class="small-cell">${escapeText(signal.dealRelevance)} / ${escapeText(signal.tradability || "UNKNOWN")} / ${escapeText(signal.dealTiming || "UNKNOWN")}</div>` : ""}
+                    </td>
+                    <td>
+                        ${badge(signal.reviewStatus || "PENDING", signal.reviewStatus === "USEFUL" ? "ok" : signal.reviewStatus === "IGNORED" ? "disabled" : "warn")}
+                        <div class="small-cell">${escapeText(signal.reviewReason || "")}</div>
+                    </td>
+                    <td>${escapeText(formatDate(signal.publishedAt || signal.filingDate || signal.discoveredAt))}</td>
+                    <td>
+                        <a href="${escapeAttr(signal.url)}" target="_blank" rel="noreferrer">Open</a>
+                        <select ${reasonAttr}="${escapeAttr(itemId)}">
+                            <option value="">Reason</option>
+                            <option>GOOD_SIGNAL</option>
+                            <option>FALSE_POSITIVE</option>
+                            <option>PRIVATE_COMPANY</option>
+                            <option>NOT_TRADABLE</option>
+                            <option>LATE_STAGE_UPDATE</option>
+                            <option>LAW_FIRM_OR_SHAREHOLDER_ALERT</option>
+                            <option>WRONG_EXTRACTION</option>
+                            <option>DUPLICATE_OR_UPDATE</option>
+                            <option>OTHER</option>
+                        </select>
+                        <input ${noteAttr}="${escapeAttr(itemId)}" placeholder="Note" value="${escapeAttr(signal.reviewNote || "")}">
+                        <div class="actions compact-actions">
+                            <button type="button" ${actionAttr}="USEFUL" ${idAttr}="${escapeAttr(itemId)}">Mark useful</button>
+                            <button type="button" ${actionAttr}="IGNORED" ${idAttr}="${escapeAttr(itemId)}">Ignore</button>
+                            <button type="button" ${actionAttr}="PENDING" ${idAttr}="${escapeAttr(itemId)}">Reset</button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join("");
     }
 
     function renderStatus() {
@@ -2213,6 +2366,18 @@
         const reviewButton = event.target.closest("[data-review-action]");
         if (reviewButton) {
             updateManualReview(Number(reviewButton.dataset.articleId), reviewButton.dataset.reviewAction);
+        }
+    });
+
+    document.querySelector("#signalInbox").addEventListener("click", event => {
+        const rssReviewButton = event.target.closest("[data-signal-rss-review-action]");
+        if (rssReviewButton) {
+            updateManualReview(Number(rssReviewButton.dataset.articleId), rssReviewButton.dataset.signalRssReviewAction);
+            return;
+        }
+        const secReviewButton = event.target.closest("[data-signal-sec-review-action]");
+        if (secReviewButton) {
+            updateSecManualReview(Number(secReviewButton.dataset.secFilingId), secReviewButton.dataset.signalSecReviewAction);
         }
     });
 
