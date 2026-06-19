@@ -2,6 +2,8 @@ package com.parsernews.persistence;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -59,6 +61,33 @@ public class SecFilingEntity {
 
     @Column(length = 1024)
     private String documentSignalReason;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 64)
+    private SecSignalType secSignalType = SecSignalType.UNKNOWN;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private SecSignalPriority secSignalPriority = SecSignalPriority.UNKNOWN;
+
+    @Column(length = 1024)
+    private String secSignalSummary;
+
+    @Column(length = 1024)
+    private String secSignalWarnings;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32)
+    private ManualReviewStatus manualReviewStatus = ManualReviewStatus.PENDING;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 64)
+    private ManualReviewReason manualReviewReason;
+
+    @Column(length = 1024)
+    private String manualReviewNote;
+
+    private Instant manualReviewedAt;
 
     @Column(nullable = false)
     private Instant processedAt = Instant.now();
@@ -156,13 +185,71 @@ public class SecFilingEntity {
         return documentSignalReason;
     }
 
-    public void markDocumentFetched(String documentUrl, String snippet, String signalStrength, String signalReason) {
+    public SecSignalType getSecSignalType() {
+        return secSignalType == null ? SecSignalType.UNKNOWN : secSignalType;
+    }
+
+    public SecSignalPriority getSecSignalPriority() {
+        return secSignalPriority == null ? SecSignalPriority.UNKNOWN : secSignalPriority;
+    }
+
+    public String getSecSignalSummary() {
+        return secSignalSummary;
+    }
+
+    public String getSecSignalWarnings() {
+        return secSignalWarnings;
+    }
+
+    public ManualReviewStatus getManualReviewStatus() {
+        return manualReviewStatus == null ? ManualReviewStatus.PENDING : manualReviewStatus;
+    }
+
+    public ManualReviewReason getManualReviewReason() {
+        return manualReviewReason;
+    }
+
+    public String getManualReviewNote() {
+        return manualReviewNote;
+    }
+
+    public Instant getManualReviewedAt() {
+        return manualReviewedAt;
+    }
+
+    public void markDocumentFetched(
+            String documentUrl,
+            String snippet,
+            String signalStrength,
+            String signalReason,
+            SecSignalType secSignalType,
+            SecSignalPriority secSignalPriority,
+            String secSignalSummary,
+            String secSignalWarnings
+    ) {
         this.documentUrl = documentUrl;
         this.documentTextSnippet = snippet;
         this.documentFetchedAt = Instant.now();
         this.documentFetchStatus = "FETCHED";
         this.documentSignalStrength = signalStrength;
         this.documentSignalReason = signalReason;
+        this.secSignalType = secSignalType == null ? SecSignalType.UNKNOWN : secSignalType;
+        this.secSignalPriority = secSignalPriority == null ? SecSignalPriority.UNKNOWN : secSignalPriority;
+        this.secSignalSummary = secSignalSummary;
+        this.secSignalWarnings = secSignalWarnings;
+    }
+
+    public void markDocumentFetched(String documentUrl, String snippet, String signalStrength, String signalReason) {
+        markDocumentFetched(
+                documentUrl,
+                snippet,
+                signalStrength,
+                signalReason,
+                SecSignalType.UNKNOWN,
+                SecSignalPriority.UNKNOWN,
+                signalReason,
+                null
+        );
     }
 
     public void markDocumentFetchFailed(String documentUrl, String signalReason) {
@@ -171,5 +258,20 @@ public class SecFilingEntity {
         this.documentFetchStatus = "FAILED";
         this.documentSignalStrength = "NONE";
         this.documentSignalReason = signalReason;
+        this.secSignalType = SecSignalType.UNKNOWN;
+        this.secSignalPriority = SecSignalPriority.UNKNOWN;
+        this.secSignalSummary = "Document could not be fetched for analysis.";
+        this.secSignalWarnings = signalReason;
+    }
+
+    public void updateManualReview(ManualReviewStatus manualReviewStatus, ManualReviewReason manualReviewReason, String manualReviewNote) {
+        this.manualReviewStatus = manualReviewStatus == null ? ManualReviewStatus.PENDING : manualReviewStatus;
+        this.manualReviewReason = this.manualReviewStatus == ManualReviewStatus.PENDING ? null : manualReviewReason;
+        this.manualReviewNote = this.manualReviewStatus == ManualReviewStatus.PENDING ? null : normalizeBlank(manualReviewNote);
+        this.manualReviewedAt = this.manualReviewStatus == ManualReviewStatus.PENDING ? null : Instant.now();
+    }
+
+    private String normalizeBlank(String value) {
+        return value == null || value.isBlank() ? null : value.trim();
     }
 }

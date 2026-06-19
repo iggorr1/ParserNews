@@ -82,6 +82,17 @@
             align-items: center;
         }
 
+        .compact-actions {
+            gap: 4px;
+            margin-top: 6px;
+        }
+
+        .compact-actions button {
+            min-height: 28px;
+            padding: 4px 7px;
+            font-size: 12px;
+        }
+
         .filters {
             display: grid;
             grid-template-columns: minmax(220px, 2fr) repeat(2, minmax(150px, 1fr)) minmax(160px, 1fr);
@@ -160,6 +171,10 @@
 
         .muted {
             color: var(--muted);
+        }
+
+        .danger-text {
+            color: var(--danger);
         }
 
         .grid {
@@ -910,12 +925,50 @@
                 <div class="muted">Selected CIK filings from SEC submissions API. Separate from RSS articles.</div>
             </div>
             <div class="actions">
+                <a class="button" id="exportSecCsv" href="/api/sec/filings/export.csv">Export SEC CSV</a>
                 <button id="secScanButton" type="button">Run SEC scan</button>
                 <button id="secFetchDocumentsButton" type="button">Fetch SEC documents</button>
                 <span class="badge" id="secStatusBadge">Loading</span>
             </div>
         </div>
         <div class="kv" id="secStatus"></div>
+        <div class="filters" style="margin-top: 12px;">
+            <div class="control">
+                <label for="secPriorityFilter">SEC priority</label>
+                <select id="secPriorityFilter">
+                    <option value="">ALL</option>
+                    <option>HIGH</option>
+                    <option>MEDIUM</option>
+                    <option>LOW</option>
+                    <option>NONE</option>
+                    <option>UNKNOWN</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="secTypeFilter">SEC signal type</label>
+                <select id="secTypeFilter">
+                    <option value="">ALL</option>
+                    <option>TENDER_OFFER</option>
+                    <option>GOING_PRIVATE</option>
+                    <option>MERGER_AGREEMENT</option>
+                    <option>DEFINITIVE_PROXY</option>
+                    <option>BUSINESS_COMBINATION</option>
+                    <option>OFFER_TO_PURCHASE</option>
+                    <option>CHANGE_IN_CONTROL</option>
+                    <option>ROUTINE_FILING</option>
+                    <option>UNKNOWN</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="secReviewFilter">SEC review</label>
+                <select id="secReviewFilter">
+                    <option value="">ALL</option>
+                    <option>PENDING</option>
+                    <option>USEFUL</option>
+                    <option>IGNORED</option>
+                </select>
+            </div>
+        </div>
         <div class="table-wrap" style="margin-top: 12px;">
             <table>
                 <thead>
@@ -927,6 +980,7 @@
                     <th>Signal</th>
                     <th>Document</th>
                     <th>Document signal</th>
+                    <th>Review</th>
                     <th>URL</th>
                 </tr>
                 </thead>
@@ -1138,12 +1192,16 @@
     const dealTimingFilter = document.querySelector("#dealTimingFilter");
     const reviewedStatusFilter = document.querySelector("#reviewedStatusFilter");
     const reviewedReasonFilter = document.querySelector("#reviewedReasonFilter");
+    const secPriorityFilter = document.querySelector("#secPriorityFilter");
+    const secTypeFilter = document.querySelector("#secTypeFilter");
+    const secReviewFilter = document.querySelector("#secReviewFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
     const lastUpdated = document.querySelector("#lastUpdated");
     const exportCandidatesCsv = document.querySelector("#exportCandidatesCsv");
     const exportReviewedCsv = document.querySelector("#exportReviewedCsv");
+    const exportSecCsv = document.querySelector("#exportSecCsv");
 
     refreshButton.addEventListener("click", loadDashboard);
     scanButton.addEventListener("click", runManualScan);
@@ -1166,6 +1224,9 @@
     dealTimingFilter.addEventListener("change", render);
     reviewedStatusFilter.addEventListener("change", renderReviewedCandidates);
     reviewedReasonFilter.addEventListener("change", renderReviewedCandidates);
+    secPriorityFilter.addEventListener("change", renderSecWatchlist);
+    secTypeFilter.addEventListener("change", renderSecWatchlist);
+    secReviewFilter.addEventListener("change", renderSecWatchlist);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -1295,6 +1356,22 @@
         }
     }
 
+    async function updateSecManualReview(filingId, status) {
+        const note = document.querySelector(`[data-sec-review-note="${CSS.escape(String(filingId))}"]`)?.value || "";
+        const reason = document.querySelector(`[data-sec-review-reason="${CSS.escape(String(filingId))}"]`)?.value || null;
+        try {
+            const updated = await patchJson(`/api/sec/filings/${encodeURIComponent(filingId)}/manual-review`, {
+                status,
+                reason,
+                note
+            });
+            state.secFilings = state.secFilings.map(filing => filing.id === updated.id ? updated : filing);
+            renderSecWatchlist();
+        } catch (error) {
+            showError("SEC manual review", error.message);
+        }
+    }
+
     async function fetchJson(url) {
         const response = await fetch(url, {cache: "no-store"});
         return readJsonResponse(response, url);
@@ -1410,11 +1487,23 @@
         ]);
 
         const target = document.querySelector("#secFilings");
-        if (!state.secFilings.length) {
-            target.innerHTML = `<tr><td colspan="8" class="muted">No SEC filings saved yet.</td></tr>`;
+        const priority = secPriorityFilter.value;
+        const type = secTypeFilter.value;
+        const review = secReviewFilter.value;
+        const filings = state.secFilings
+            .filter(filing => !priority || filing.secSignalPriority === priority)
+            .filter(filing => !type || filing.secSignalType === type)
+            .filter(filing => !review || filing.manualReviewStatus === review);
+        exportSecCsv.href = exportUrl("/api/sec/filings/export.csv", {
+            priority,
+            type,
+            status: review
+        });
+        if (!filings.length) {
+            target.innerHTML = `<tr><td colspan="9" class="muted">No SEC filings match current filters.</td></tr>`;
             return;
         }
-        target.innerHTML = state.secFilings.slice(0, 20).map(filing => `
+        target.innerHTML = filings.slice(0, 20).map(filing => `
             <tr>
                 <td class="title-cell">${escapeText(filing.companyName || "-")}</td>
                 <td>${escapeText(filing.cik || "-")}</td>
@@ -1429,8 +1518,29 @@
                     <div class="small-cell">${formatDate(filing.documentFetchedAt)}</div>
                 </td>
                 <td>
-                    ${badge(filing.documentSignalStrength || "NONE", filing.documentSignalStrength || "disabled")}
-                    <div class="small-cell">${escapeText(filing.documentSignalReason || "")}</div>
+                    ${badge(filing.secSignalPriority || filing.documentSignalStrength || "NONE", filing.secSignalPriority || "disabled")}
+                    ${badge(filing.secSignalType || "UNKNOWN", filing.secSignalType || "disabled")}
+                    <div class="small-cell">${escapeText(filing.secSignalSummary || filing.documentSignalReason || "")}</div>
+                    ${filing.secSignalWarnings ? `<div class="small-cell danger-text">${escapeText(filing.secSignalWarnings)}</div>` : ""}
+                </td>
+                <td>
+                    ${badge(filing.manualReviewStatus || "PENDING", filing.manualReviewStatus || "disabled")}
+                    <div class="small-cell">${escapeText(filing.manualReviewReason || "")}</div>
+                    <select data-sec-review-reason="${escapeAttr(filing.id)}">
+                        <option value="">Reason</option>
+                        <option>GOOD_SIGNAL</option>
+                        <option>FALSE_POSITIVE</option>
+                        <option>LATE_STAGE_UPDATE</option>
+                        <option>WRONG_EXTRACTION</option>
+                        <option>DUPLICATE_OR_UPDATE</option>
+                        <option>OTHER</option>
+                    </select>
+                    <input data-sec-review-note="${escapeAttr(filing.id)}" placeholder="Note" value="${escapeAttr(filing.manualReviewNote || "")}">
+                    <div class="actions compact-actions">
+                        <button type="button" onclick="updateSecManualReview(${Number(filing.id)}, 'USEFUL')">Mark useful</button>
+                        <button type="button" onclick="updateSecManualReview(${Number(filing.id)}, 'IGNORED')">Ignore</button>
+                        <button type="button" onclick="updateSecManualReview(${Number(filing.id)}, 'PENDING')">Reset</button>
+                    </div>
                 </td>
                 <td><a href="${escapeAttr(filing.filingUrl)}" target="_blank" rel="noreferrer">SEC filing</a></td>
             </tr>

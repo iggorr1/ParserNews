@@ -9,4 +9,5 @@ public interface SecFilingRepository extends JpaRepository<SecFilingEntity, Long
     List<SecFilingEntity> findTop100ByOrderByFilingDateDescProcessedAtDesc();
     List<SecFilingEntity> findTop50ByOrderByFilingDateDescProcessedAtDesc();
     List<SecFilingEntity> findTop50ByDocumentFetchedAtIsNullOrderByFilingDateDescProcessedAtDesc();
+    List<SecFilingEntity> findTop200ByManualReviewStatusInOrderByManualReviewedAtDesc(List<ManualReviewStatus> statuses);
 }

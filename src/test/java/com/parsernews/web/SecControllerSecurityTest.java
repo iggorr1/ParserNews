@@ -1,18 +1,28 @@
 package com.parsernews.web;
 
+import com.parsernews.persistence.ManualReviewReason;
+import com.parsernews.persistence.ManualReviewStatus;
+import com.parsernews.persistence.SecFilingEntity;
 import com.parsernews.config.SecurityConfig;
 import com.parsernews.persistence.SecFilingRepository;
+import com.parsernews.persistence.SecSignalPriority;
+import com.parsernews.persistence.SecSignalType;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
 import com.parsernews.service.SecFilingDocumentFetcher;
 import com.parsernews.service.SecWatchlistScanner;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Optional;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
@@ -95,5 +105,72 @@ class SecControllerSecurityTest {
                 .andExpect(jsonPath("$.attemptedCount").value(2))
                 .andExpect(jsonPath("$.fetchedCount").value(1))
                 .andExpect(jsonPath("$.failedCount").value(1));
+    }
+
+    @Test
+    void authenticatedSecManualReviewUpdatesFiling() throws Exception {
+        SecFilingEntity filing = filing();
+        when(filingRepository.findById(1L)).thenReturn(Optional.of(filing));
+
+        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/sec/filings/1/manual-review")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"status":"USEFUL","reason":"GOOD_SIGNAL","note":"Looks important"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.manualReviewStatus").value("USEFUL"))
+                .andExpect(jsonPath("$.manualReviewReason").value("GOOD_SIGNAL"))
+                .andExpect(jsonPath("$.manualReviewNote").value("Looks important"));
+    }
+
+    @Test
+    void authenticatedReviewedSecFilingsReturnsReviewedOnly() throws Exception {
+        SecFilingEntity filing = filing();
+        filing.updateManualReview(ManualReviewStatus.IGNORED, ManualReviewReason.FALSE_POSITIVE, "Noise");
+        when(filingRepository.findTop200ByManualReviewStatusInOrderByManualReviewedAtDesc(List.of(ManualReviewStatus.USEFUL, ManualReviewStatus.IGNORED)))
+                .thenReturn(List.of(filing));
+
+        mockMvc.perform(get("/api/sec/filings/reviewed").with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].manualReviewStatus").value("IGNORED"))
+                .andExpect(jsonPath("$[0].manualReviewReason").value("FALSE_POSITIVE"));
+    }
+
+    @Test
+    void authenticatedSecCsvExportReturnsCsv() throws Exception {
+        SecFilingEntity filing = filing();
+        filing.markDocumentFetched(
+                filing.getFilingUrl(),
+                "Merger text",
+                "HIGH",
+                "Document text mentions merger agreement language.",
+                SecSignalType.MERGER_AGREEMENT,
+                SecSignalPriority.HIGH,
+                "Document text mentions merger agreement language.",
+                null
+        );
+        when(filingRepository.findAll()).thenReturn(List.of(filing));
+
+        mockMvc.perform(get("/api/sec/filings/export.csv")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(org.hamcrest.Matchers.containsString("secSignalPriority")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(org.hamcrest.Matchers.containsString("MICROSOFT CORP")))
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(org.hamcrest.Matchers.containsString("MERGER_AGREEMENT")));
+    }
+
+    private SecFilingEntity filing() {
+        return new SecFilingEntity(
+                "0000789019",
+                "MICROSOFT CORP",
+                "8-K",
+                LocalDate.of(2026, 6, 5),
+                "0001193125-26-258667",
+                "d26760d8k.htm",
+                "https://www.sec.gov/Archives/edgar/data/789019/000119312526258667/d26760d8k.htm",
+                "WATCHLIST_FORM",
+                "Interesting SEC form for watchlist review."
+        );
     }
 }

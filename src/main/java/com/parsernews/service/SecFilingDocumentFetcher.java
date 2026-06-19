@@ -2,6 +2,8 @@ package com.parsernews.service;
 
 import com.parsernews.persistence.SecFilingEntity;
 import com.parsernews.persistence.SecFilingRepository;
+import com.parsernews.persistence.SecSignalPriority;
+import com.parsernews.persistence.SecSignalType;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -69,7 +71,16 @@ public class SecFilingDocumentFetcher {
             String cleanedText = cleanText(rawText);
             String snippet = truncate(cleanedText, SNIPPET_MAX_LENGTH);
             SecDocumentSignal signal = analyze(cleanedText);
-            filing.markDocumentFetched(documentUrl, snippet, signal.strength(), signal.reason());
+            filing.markDocumentFetched(
+                    documentUrl,
+                    snippet,
+                    signal.priority().name(),
+                    signal.summary(),
+                    signal.type(),
+                    signal.priority(),
+                    signal.summary(),
+                    signal.warnings()
+            );
             return true;
         } catch (IOException | RuntimeException exception) {
             filing.markDocumentFetchFailed(documentUrl, truncate("Document fetch failed: " + exception.getMessage(), FAILURE_REASON_MAX_LENGTH));
@@ -115,25 +126,92 @@ public class SecFilingDocumentFetcher {
 
     static SecDocumentSignal analyze(String text) {
         String normalized = normalize(text);
-        if (containsAny(normalized, "agreement and plan of merger", "merger agreement")) {
-            return new SecDocumentSignal("HIGH", "Document text mentions merger agreement language.");
+        if (containsAny(normalized, "offer to purchase")) {
+            return new SecDocumentSignal(
+                    SecSignalType.OFFER_TO_PURCHASE,
+                    SecSignalPriority.HIGH,
+                    "Document text mentions offer-to-purchase language.",
+                    null
+            );
         }
-        if (containsAny(normalized, "tender offer", "offer to purchase")) {
-            return new SecDocumentSignal("HIGH", "Document text mentions tender offer / offer to purchase language.");
+        if (containsAny(normalized, "tender offer")) {
+            return new SecDocumentSignal(
+                    SecSignalType.TENDER_OFFER,
+                    SecSignalPriority.HIGH,
+                    "Document text mentions tender offer language.",
+                    null
+            );
         }
         if (containsAny(normalized, "going private", "go private")) {
-            return new SecDocumentSignal("HIGH", "Document text mentions going-private language.");
+            return new SecDocumentSignal(
+                    SecSignalType.GOING_PRIVATE,
+                    SecSignalPriority.HIGH,
+                    "Document text mentions going-private language.",
+                    null
+            );
+        }
+        if (containsAny(normalized, "agreement and plan of merger", "merger agreement")) {
+            return new SecDocumentSignal(
+                    SecSignalType.MERGER_AGREEMENT,
+                    SecSignalPriority.HIGH,
+                    "Document text mentions merger agreement language.",
+                    null
+            );
         }
         if (containsAny(normalized, "acquisition agreement")) {
-            return new SecDocumentSignal("HIGH", "Document text mentions acquisition agreement language.");
+            return new SecDocumentSignal(
+                    SecSignalType.MERGER_AGREEMENT,
+                    SecSignalPriority.HIGH,
+                    "Document text mentions acquisition agreement language.",
+                    null
+            );
         }
         if (containsAny(normalized, "sale of substantially all assets")) {
-            return new SecDocumentSignal("HIGH", "Document text mentions sale of substantially all assets.");
+            return new SecDocumentSignal(
+                    SecSignalType.BUSINESS_COMBINATION,
+                    SecSignalPriority.HIGH,
+                    "Document text mentions sale of substantially all assets.",
+                    "Asset-sale transaction; review whether it is tradable M&A."
+            );
         }
-        if (containsAny(normalized, "definitive proxy statement", "business combination", "change in control")) {
-            return new SecDocumentSignal("MEDIUM", "Document text mentions proxy, business combination, or change-in-control language.");
+        if (containsAny(normalized, "definitive proxy statement")) {
+            return new SecDocumentSignal(
+                    SecSignalType.DEFINITIVE_PROXY,
+                    SecSignalPriority.MEDIUM,
+                    "Document text mentions definitive proxy statement language.",
+                    "Proxy filings may be mid/late-stage; review timing."
+            );
         }
-        return new SecDocumentSignal("NONE", "No strong M&A document signal found.");
+        if (containsAny(normalized, "business combination")) {
+            return new SecDocumentSignal(
+                    SecSignalType.BUSINESS_COMBINATION,
+                    SecSignalPriority.MEDIUM,
+                    "Document text mentions business combination language.",
+                    null
+            );
+        }
+        if (containsAny(normalized, "change in control")) {
+            return new SecDocumentSignal(
+                    SecSignalType.CHANGE_IN_CONTROL,
+                    SecSignalPriority.MEDIUM,
+                    "Document text mentions change-in-control language.",
+                    null
+            );
+        }
+        if (containsAny(normalized, "form 8 k", "current report", "securities exchange act")) {
+            return new SecDocumentSignal(
+                    SecSignalType.ROUTINE_FILING,
+                    SecSignalPriority.LOW,
+                    "Routine SEC filing text without strong M&A document signal.",
+                    "Weak signal; likely needs manual context review."
+            );
+        }
+        return new SecDocumentSignal(
+                SecSignalType.UNKNOWN,
+                SecSignalPriority.NONE,
+                "No strong M&A document signal found.",
+                null
+        );
     }
 
     private static String normalize(String text) {
@@ -189,6 +267,11 @@ public class SecFilingDocumentFetcher {
     ) {
     }
 
-    record SecDocumentSignal(String strength, String reason) {
+    record SecDocumentSignal(
+            SecSignalType type,
+            SecSignalPriority priority,
+            String summary,
+            String warnings
+    ) {
     }
 }

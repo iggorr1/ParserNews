@@ -2,6 +2,8 @@ package com.parsernews.service;
 
 import com.parsernews.persistence.SecFilingEntity;
 import com.parsernews.persistence.SecFilingRepository;
+import com.parsernews.persistence.SecSignalPriority;
+import com.parsernews.persistence.SecSignalType;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
@@ -35,12 +37,16 @@ class SecFilingDocumentFetcherTest {
 
     @Test
     void detectsStrongDocumentSignals() {
-        assertThat(SecFilingDocumentFetcher.analyze("The parties entered into an Agreement and Plan of Merger.").strength())
-                .isEqualTo("HIGH");
-        assertThat(SecFilingDocumentFetcher.analyze("This filing includes a definitive proxy statement.").strength())
-                .isEqualTo("MEDIUM");
-        assertThat(SecFilingDocumentFetcher.analyze("Ordinary quarterly disclosure.").strength())
-                .isEqualTo("NONE");
+        assertThat(SecFilingDocumentFetcher.analyze("The parties launched a tender offer.").priority())
+                .isEqualTo(SecSignalPriority.HIGH);
+        assertThat(SecFilingDocumentFetcher.analyze("The parties launched a tender offer.").type())
+                .isEqualTo(SecSignalType.TENDER_OFFER);
+        assertThat(SecFilingDocumentFetcher.analyze("The parties entered into an Agreement and Plan of Merger.").priority())
+                .isEqualTo(SecSignalPriority.HIGH);
+        assertThat(SecFilingDocumentFetcher.analyze("This filing includes a definitive proxy statement.").priority())
+                .isEqualTo(SecSignalPriority.MEDIUM);
+        assertThat(SecFilingDocumentFetcher.analyze("Ordinary quarterly disclosure.").priority())
+                .isEqualTo(SecSignalPriority.NONE);
     }
 
     @Test
@@ -62,6 +68,8 @@ class SecFilingDocumentFetcherTest {
         assertThat(filing.getDocumentTextSnippet()).contains("agreement and plan of merger");
         assertThat(filing.getDocumentTextSnippet()).doesNotContain("googletagmanager");
         assertThat(filing.getDocumentSignalStrength()).isEqualTo("HIGH");
+        assertThat(filing.getSecSignalType()).isEqualTo(SecSignalType.MERGER_AGREEMENT);
+        assertThat(filing.getSecSignalPriority()).isEqualTo(SecSignalPriority.HIGH);
     }
 
     @Test
