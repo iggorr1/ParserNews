@@ -14,7 +14,10 @@ echo.
 echo [INFO] Docker containers stopped.
 echo [INFO] PostgreSQL data volume was NOT deleted.
 echo.
-echo If you ever want to fully reset database, use manually:
+echo WARNING:
+echo   docker compose down -v deletes database data and should be used only for full reset.
+echo.
+echo If you ever want to fully reset the database, use manually:
 echo   docker compose down -v
 echo.
 pause

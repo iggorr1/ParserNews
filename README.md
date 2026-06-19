@@ -214,11 +214,33 @@ or run the PowerShell launcher directly:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-live.ps1 -Port 8081 -OpenBrowser
 ```
 
+Do not run Docker mode on `8080` and local H2 mode on `8080` at the same time,
+because both dashboards use the same port.
+
 ## Docker PostgreSQL Launch
 
 Docker Compose runs the Spring Boot app plus PostgreSQL. The app starts with
 the `live,postgres` profiles, Flyway applies database migrations, and Hibernate
 validates the schema instead of creating it dynamically.
+
+On Windows, the easiest Docker/PostgreSQL launch is:
+
+```powershell
+.\run-docker.bat
+```
+
+This opens:
+
+```text
+http://localhost:8080/
+```
+
+Docker Basic Auth defaults:
+
+```text
+username: admin
+password: change-me
+```
 
 Build and run:
 
@@ -244,22 +266,26 @@ Stop:
 docker compose down
 ```
 
+Or use:
+
+```powershell
+.\stop-docker.bat
+```
+
 Open the dashboard:
 
 ```text
 http://localhost:8080/
 ```
 
-On Windows, you can also run:
-
-```powershell
-.\run-docker.bat
-```
-
 Docker stores PostgreSQL data in the named Docker volume
 `parsernews-postgres-data` and scan reports in the mounted local `./output`
 directory. Telegram and alert dispatch remain disabled by default in
 `docker-compose.yml`.
+
+`stop-docker.bat` / `docker compose down` stops containers but does not delete
+the PostgreSQL volume. `docker compose down -v` deletes database data and should
+be used only for a full reset.
 
 This is a simple local/server-deployment foundation, not production hardening.
 Do not commit real credentials; the compose file uses safe local defaults only.
