@@ -32,6 +32,9 @@ services:
       SPRING_DATASOURCE_PASSWORD: parsernews
       ALERTS_TELEGRAM_ENABLED: "false"
       ALERTS_DISPATCH_ENABLED: "false"
+      PARSERNEWS_AUTH_ENABLED: "true"
+      PARSERNEWS_AUTH_USERNAME: admin
+      PARSERNEWS_AUTH_PASSWORD: change-me
     volumes:
       - ./output:/app/output
 

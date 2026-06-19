@@ -34,6 +34,7 @@ alerts.
 
 Local development is safe by default:
 
+- Basic Auth is enabled by default
 - `alerts.telegram.enabled=false`
 - `alerts.dispatch.enabled=false`
 - `scanner.monitoring.enabled=false`
@@ -43,6 +44,43 @@ Local development is safe by default:
 
 If Telegram is disabled, alert send/dispatch paths return no-op responses and do
 not mark candidates as queued/sent.
+
+## Basic Auth
+
+The dashboard and API are protected by HTTP Basic Auth:
+
+- `/`
+- `/index.html`
+- `/api/**`
+- `/actuator/**`
+
+Credentials are configured with environment variables:
+
+```text
+PARSERNEWS_AUTH_USERNAME
+PARSERNEWS_AUTH_PASSWORD
+```
+
+Local H2 development defaults are:
+
+```text
+username: admin
+password: admin
+```
+
+Docker Compose sets:
+
+```text
+username: admin
+password: change-me
+```
+
+Change the password before exposing the app outside localhost, Tailscale, or a
+private network. Do not commit real passwords.
+
+CSRF is disabled intentionally because the static same-origin dashboard already
+uses authenticated `POST` and `PATCH` API calls without CSRF tokens. CORS is not
+opened.
 
 ## Requirements
 

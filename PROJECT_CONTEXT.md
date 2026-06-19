@@ -91,10 +91,16 @@ server yet.
 
 ## Auth
 
-There is no authentication or user system yet.
+HTTP Basic Auth protects the dashboard and API by default.
 
-Current endpoints are local development endpoints only. If this becomes
-internet-facing later, auth and access control must be added before deployment.
+Credentials come from:
+
+- `PARSERNEWS_AUTH_USERNAME`
+- `PARSERNEWS_AUTH_PASSWORD`
+
+Local H2 defaults are `admin` / `admin`. Docker Compose sets `admin` /
+`change-me`. Change the password before exposing the app outside localhost or a
+private network.
 
 ## Core Task Logic
 
