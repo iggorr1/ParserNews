@@ -4,6 +4,7 @@ import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
@@ -68,6 +69,7 @@ class ArticleControllerTest {
         assertThat(response.getFirst().candidateStrength()).isEqualTo(CandidateStrength.HIGH);
         assertThat(response.getFirst().candidateReason()).contains("HIGH");
         assertThat(response.getFirst().manualReviewStatus()).isEqualTo(ManualReviewStatus.PENDING);
+        assertThat(response.getFirst().manualReviewReason()).isNull();
         assertThat(response.getFirst().offerPrice()).isEqualByComparingTo("5.00");
         assertThat(response.getFirst().paymentType()).isEqualTo(com.parsernews.model.PaymentType.CASH);
         assertThat(response.getFirst().tradability()).isNotNull();
@@ -138,20 +140,42 @@ class ArticleControllerTest {
 
         ArticleController.ArticleDetailResponse response = controller.updateManualReview(
                 7L,
-                new ArticleController.ManualReviewRequest(ManualReviewStatus.USEFUL, "Looks actionable")
+                new ArticleController.ManualReviewRequest(ManualReviewStatus.USEFUL, ManualReviewReason.GOOD_SIGNAL, "Looks actionable")
         );
 
         assertThat(response.manualReviewStatus()).isEqualTo(ManualReviewStatus.USEFUL);
+        assertThat(response.manualReviewReason()).isEqualTo(ManualReviewReason.GOOD_SIGNAL);
         assertThat(response.manualReviewNote()).isEqualTo("Looks actionable");
         assertThat(response.manualReviewedAt()).isNotNull();
         assertThat(response.reviewStatus()).isEqualTo(ReviewStatus.HIGH_PRIORITY_SIGNAL);
     }
 
     @Test
+    void manualReviewCanStoreIgnoredReason() {
+        NewsArticleEntity article = article(10L, "Private company acquisition", "https://example.com/private");
+        DetectedEventEntity event = event(article, 90, CandidateStrength.HIGH);
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(articleRepository.findById(10L)).thenReturn(Optional.of(article));
+        when(eventRepository.findByArticle(article)).thenReturn(Optional.of(event));
+        ArticleController controller = controller(articleRepository, eventRepository);
+
+        ArticleController.ArticleDetailResponse response = controller.updateManualReview(
+                10L,
+                new ArticleController.ManualReviewRequest(ManualReviewStatus.IGNORED, ManualReviewReason.PRIVATE_COMPANY, "No public target")
+        );
+
+        assertThat(response.manualReviewStatus()).isEqualTo(ManualReviewStatus.IGNORED);
+        assertThat(response.manualReviewReason()).isEqualTo(ManualReviewReason.PRIVATE_COMPANY);
+        assertThat(response.manualReviewNote()).isEqualTo("No public target");
+        assertThat(response.manualReviewedAt()).isNotNull();
+    }
+
+    @Test
     void manualReviewCanResetArticleEventToPending() {
         NewsArticleEntity article = article(8L, "Target to be acquired", "https://example.com/reset");
         DetectedEventEntity event = event(article, 90, CandidateStrength.HIGH);
-        event.updateManualReview(ManualReviewStatus.IGNORED, "Not useful");
+        event.updateManualReview(ManualReviewStatus.IGNORED, ManualReviewReason.PRIVATE_COMPANY, "Not useful");
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
         when(articleRepository.findById(8L)).thenReturn(Optional.of(article));
@@ -160,10 +184,11 @@ class ArticleControllerTest {
 
         ArticleController.ArticleDetailResponse response = controller.updateManualReview(
                 8L,
-                new ArticleController.ManualReviewRequest(ManualReviewStatus.PENDING, "")
+                new ArticleController.ManualReviewRequest(ManualReviewStatus.PENDING, ManualReviewReason.PRIVATE_COMPANY, "")
         );
 
         assertThat(response.manualReviewStatus()).isEqualTo(ManualReviewStatus.PENDING);
+        assertThat(response.manualReviewReason()).isNull();
         assertThat(response.manualReviewNote()).isNull();
         assertThat(response.manualReviewedAt()).isNull();
     }
@@ -179,7 +204,7 @@ class ArticleControllerTest {
 
         assertThatThrownBy(() -> controller.updateManualReview(
                 9L,
-                new ArticleController.ManualReviewRequest(ManualReviewStatus.USEFUL, null)
+                new ArticleController.ManualReviewRequest(ManualReviewStatus.USEFUL, ManualReviewReason.GOOD_SIGNAL, null)
         ))
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("400 BAD_REQUEST");

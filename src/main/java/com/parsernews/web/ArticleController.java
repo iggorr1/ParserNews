@@ -4,6 +4,7 @@ import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.persistence.NewsArticleEntity;
 import com.parsernews.persistence.NewsArticleRepository;
@@ -103,7 +104,7 @@ public class ArticleController {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found"));
         DetectedEventEntity event = eventRepository.findByArticle(article)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Article has no detected event to review"));
-        event.updateManualReview(request.status(), request.note());
+        event.updateManualReview(request.status(), request.reason(), request.note());
         return ArticleDetailResponse.from(article, event, reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService);
     }
 
@@ -140,6 +141,7 @@ public class ArticleController {
             CandidateStrength candidateStrength,
             String candidateReason,
             ManualReviewStatus manualReviewStatus,
+            ManualReviewReason manualReviewReason,
             String manualReviewNote,
             Instant manualReviewedAt,
             boolean alertEligible,
@@ -204,6 +206,7 @@ public class ArticleController {
                     event == null ? CandidateStrength.NONE : event.getCandidateStrength(),
                     event == null ? "No detected M&A candidate event." : event.getCandidateReason(),
                     event == null ? ManualReviewStatus.PENDING : event.getManualReviewStatus(),
+                    event == null ? null : event.getManualReviewReason(),
                     event == null ? null : event.getManualReviewNote(),
                     event == null ? null : event.getManualReviewedAt(),
                     event != null && event.isAlertEligible(),
@@ -258,6 +261,7 @@ public class ArticleController {
             CandidateStrength candidateStrength,
             String candidateReason,
             ManualReviewStatus manualReviewStatus,
+            ManualReviewReason manualReviewReason,
             String manualReviewNote,
             Instant manualReviewedAt,
             boolean alertEligible,
@@ -321,6 +325,7 @@ public class ArticleController {
                     event == null ? CandidateStrength.NONE : event.getCandidateStrength(),
                     event == null ? "No detected M&A candidate event." : event.getCandidateReason(),
                     event == null ? ManualReviewStatus.PENDING : event.getManualReviewStatus(),
+                    event == null ? null : event.getManualReviewReason(),
                     event == null ? null : event.getManualReviewNote(),
                     event == null ? null : event.getManualReviewedAt(),
                     event != null && event.isAlertEligible(),
@@ -377,6 +382,7 @@ public class ArticleController {
 
     public record ManualReviewRequest(
             ManualReviewStatus status,
+            ManualReviewReason reason,
             String note
     ) {
     }

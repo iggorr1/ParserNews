@@ -75,6 +75,10 @@ public class DetectedEventEntity {
     @Column(length = 32, columnDefinition = "varchar(32)")
     private ManualReviewStatus manualReviewStatus = ManualReviewStatus.PENDING;
 
+    @Enumerated(EnumType.STRING)
+    @Column(length = 64, columnDefinition = "varchar(64)")
+    private ManualReviewReason manualReviewReason;
+
     @Column(length = 2048)
     private String manualReviewNote;
 
@@ -223,6 +227,10 @@ public class DetectedEventEntity {
         return manualReviewStatus == null ? ManualReviewStatus.PENDING : manualReviewStatus;
     }
 
+    public ManualReviewReason getManualReviewReason() {
+        return manualReviewReason;
+    }
+
     public String getManualReviewNote() {
         return manualReviewNote;
     }
@@ -278,8 +286,13 @@ public class DetectedEventEntity {
     }
 
     public void updateManualReview(ManualReviewStatus manualReviewStatus, String manualReviewNote) {
+        updateManualReview(manualReviewStatus, null, manualReviewNote);
+    }
+
+    public void updateManualReview(ManualReviewStatus manualReviewStatus, ManualReviewReason manualReviewReason, String manualReviewNote) {
         this.manualReviewStatus = manualReviewStatus == null ? ManualReviewStatus.PENDING : manualReviewStatus;
-        this.manualReviewNote = normalizeBlank(manualReviewNote);
+        this.manualReviewReason = this.manualReviewStatus == ManualReviewStatus.PENDING ? null : manualReviewReason;
+        this.manualReviewNote = this.manualReviewStatus == ManualReviewStatus.PENDING ? null : normalizeBlank(manualReviewNote);
         this.manualReviewedAt = this.manualReviewStatus == ManualReviewStatus.PENDING ? null : Instant.now();
     }
 

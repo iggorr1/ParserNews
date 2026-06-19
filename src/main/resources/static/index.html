@@ -419,10 +419,14 @@
 
         .review-row {
             display: grid;
-            grid-template-columns: minmax(180px, 1fr) auto auto auto;
+            grid-template-columns: minmax(150px, 0.8fr) minmax(180px, 1fr) auto auto auto;
             gap: 8px;
             align-items: center;
             margin-top: 10px;
+        }
+
+        .review-quality {
+            margin-bottom: 16px;
         }
 
         .candidate-top {
@@ -888,6 +892,17 @@
         </div>
     </section>
 
+    <section class="panel review-quality">
+        <div class="panel-head">
+            <div>
+                <h2>Review Quality</h2>
+                <div class="muted">Manual feedback reasons for tuning rules and extraction.</div>
+            </div>
+            <span class="badge" id="reviewQualityCount">0 reviewed</span>
+        </div>
+        <div class="kv" id="reviewQuality"></div>
+    </section>
+
     <section class="grid">
         <section class="panel span-12" id="candidateSection">
             <div class="panel-head">
@@ -1127,9 +1142,11 @@
 
     async function updateManualReview(articleId, status) {
         const note = document.querySelector(`[data-review-note="${CSS.escape(String(articleId))}"]`)?.value || "";
+        const reason = document.querySelector(`[data-review-reason="${CSS.escape(String(articleId))}"]`)?.value || null;
         try {
             const updated = await patchJson(`/api/articles/${encodeURIComponent(articleId)}/manual-review`, {
                 status,
+                reason,
                 note
             });
             updateArticleInState(updated);
@@ -1179,6 +1196,7 @@
     function render() {
         renderActionCenter();
         renderSourceQuality();
+        renderReviewQuality();
         renderStatus();
         renderCandidates();
         renderAlertPreview();
@@ -1212,6 +1230,28 @@
                 </tr>
             `;
         }).join("");
+    }
+
+    function renderReviewQuality() {
+        const reviewed = state.candidates.filter(candidate => (candidate.manualReviewStatus || "PENDING") !== "PENDING");
+        const useful = reviewed.filter(candidate => candidate.manualReviewStatus === "USEFUL").length;
+        const ignored = reviewed.filter(candidate => candidate.manualReviewStatus === "IGNORED").length;
+        const reasonCounts = reviewed.reduce((counts, candidate) => {
+            const reason = candidate.manualReviewReason || "OTHER";
+            counts[reason] = (counts[reason] || 0) + 1;
+            return counts;
+        }, {});
+        document.querySelector("#reviewQualityCount").textContent = `${reviewed.length} reviewed`;
+        document.querySelector("#reviewQuality").innerHTML = kvRows([
+            ["Useful", useful],
+            ["Ignored", ignored],
+            ["Private company", reasonCounts.PRIVATE_COMPANY || 0],
+            ["Not tradable", reasonCounts.NOT_TRADABLE || 0],
+            ["Late-stage", reasonCounts.LATE_STAGE_UPDATE || 0],
+            ["Law firm/shareholder alert", reasonCounts.LAW_FIRM_OR_SHAREHOLDER_ALERT || 0],
+            ["Wrong extraction", reasonCounts.WRONG_EXTRACTION || 0],
+            ["Duplicate/update", reasonCounts.DUPLICATE_OR_UPDATE || 0]
+        ]);
     }
 
     function renderActionCenter() {
@@ -1346,6 +1386,7 @@
                         ${badge(candidate.candidateStrength, candidate.candidateStrength)}
                         ${badge(`score ${candidate.candidateScore}`, candidate.candidateStrength)}
                         ${badge(`manual ${candidate.manualReviewStatus || "PENDING"}`, candidate.manualReviewStatus === "USEFUL" ? "ok" : candidate.manualReviewStatus === "IGNORED" ? "disabled" : "warn")}
+                        ${candidate.manualReviewReason ? badge(candidate.manualReviewReason, candidate.manualReviewStatus === "USEFUL" ? "ok" : "warn") : ""}
                     </div>
                 </div>
                 ${candidate.candidateStrength === "HIGH" && candidate.reviewStatus === "IGNORED"
@@ -1393,11 +1434,13 @@
                         <div><span>Positive keywords</span><strong title="${escapeAttr(splitKeywords(candidate.matchedPositiveKeywords).join(", "))}">${escapeText(splitKeywords(candidate.matchedPositiveKeywords).join(", ") || "-")}</strong></div>
                         <div><span>Alert state</span><strong>${escapeText(isAlertVisible(candidate) ? "eligible" : "not eligible")}${candidate.alertQueuedAt ? ", queued" : ""}</strong></div>
                         <div><span>Automatic reviewStatus</span><strong>${escapeText(candidate.reviewStatus || "-")}</strong></div>
+                        <div><span>Manual reason</span><strong>${escapeText(candidate.manualReviewReason || "-")}</strong></div>
                         <div><span>Manual note</span><strong title="${escapeAttr(candidate.manualReviewNote)}">${escapeText(candidate.manualReviewNote || "-")}</strong></div>
                         <div><span>Deal summary</span><strong title="${escapeAttr(candidate.dealSummary)}">${escapeText(candidate.dealSummary || "-")}</strong></div>
                     </div>
                 </details>
                 <div class="review-row">
+                    ${reviewReasonSelect(candidate)}
                     <input data-review-note="${escapeAttr(candidate.id)}" value="${escapeAttr(candidate.manualReviewNote)}" placeholder="Optional review note">
                     <button type="button" data-review-action="USEFUL" data-article-id="${escapeAttr(candidate.id)}">Mark useful</button>
                     <button type="button" data-review-action="IGNORED" data-article-id="${escapeAttr(candidate.id)}">Ignore</button>
@@ -1461,6 +1504,7 @@
                 </td>
                 <td>
                     <div>${badge(article.manualReviewStatus || "PENDING", article.manualReviewStatus === "USEFUL" ? "ok" : article.manualReviewStatus === "IGNORED" ? "disabled" : "warn")}</div>
+                    ${article.manualReviewReason ? `<div>${badge(article.manualReviewReason, article.manualReviewStatus === "USEFUL" ? "ok" : "warn")}</div>` : ""}
                     <a href="${escapeAttr(article.url)}" target="_blank" rel="noreferrer">Open</a>
                 </td>
             </tr>
@@ -1539,6 +1583,7 @@
                     (item.reviewPositiveSignals || []).join(" "),
                     item.candidateReason,
                     item.manualReviewStatus,
+                    item.manualReviewReason,
                     item.manualReviewNote,
                     item.snippet
                 ].join(" ").toLowerCase();
@@ -1627,6 +1672,7 @@
         const apply = item => item.id === updated.id ? {
             ...item,
             manualReviewStatus: updated.manualReviewStatus,
+            manualReviewReason: updated.manualReviewReason,
             manualReviewNote: updated.manualReviewNote,
             manualReviewedAt: updated.manualReviewedAt,
             reviewVerdict: updated.reviewVerdict,
@@ -1642,6 +1688,50 @@
         } : item;
         state.articles = state.articles.map(apply);
         state.candidates = state.candidates.map(apply);
+    }
+
+    function reviewReasonSelect(candidate) {
+        const selected = candidate.manualReviewReason || suggestedReviewReason(candidate);
+        const reasons = [
+            "GOOD_SIGNAL",
+            "FALSE_POSITIVE",
+            "PRIVATE_COMPANY",
+            "NOT_TRADABLE",
+            "LATE_STAGE_UPDATE",
+            "LAW_FIRM_OR_SHAREHOLDER_ALERT",
+            "WRONG_EXTRACTION",
+            "DUPLICATE_OR_UPDATE",
+            "OTHER"
+        ];
+        return `
+            <select data-review-reason="${escapeAttr(candidate.id)}" title="Review reason">
+                ${reasons.map(reason => `
+                    <option value="${escapeAttr(reason)}" ${reason === selected ? "selected" : ""}>${escapeText(reason)}</option>
+                `).join("")}
+            </select>
+        `;
+    }
+
+    function suggestedReviewReason(candidate) {
+        if (candidate.dealRelevance === "PRIVATE_COMPANY_ACQUISITION") {
+            return "PRIVATE_COMPANY";
+        }
+        if (candidate.tradability === "NOT_TRADABLE" || candidate.dealRelevance === "REVERSE_TAKEOVER") {
+            return "NOT_TRADABLE";
+        }
+        if (candidate.dealTiming === "LATE_STAGE" || candidate.dealTiming === "POST_CLOSE") {
+            return "LATE_STAGE_UPDATE";
+        }
+        if (candidate.reviewVerdict === "LAW_FIRM_ALERT" || candidate.dealRelevance === "LAW_FIRM_OR_SHAREHOLDER_ALERT") {
+            return "LAW_FIRM_OR_SHAREHOLDER_ALERT";
+        }
+        if (hasMissingDealTerms(candidate)) {
+            return "WRONG_EXTRACTION";
+        }
+        if (candidate.reviewVerdict === "LIKELY_DEAL" && candidate.tradability === "HIGH") {
+            return "GOOD_SIGNAL";
+        }
+        return "OTHER";
     }
 
     function splitKeywords(value) {
