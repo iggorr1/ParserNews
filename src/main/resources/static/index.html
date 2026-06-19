@@ -906,6 +906,35 @@
     <section class="panel review-quality">
         <div class="panel-head">
             <div>
+                <h2>SEC Watchlist</h2>
+                <div class="muted">Selected CIK filings from SEC submissions API. Separate from RSS articles.</div>
+            </div>
+            <div class="actions">
+                <button id="secScanButton" type="button">Run SEC scan</button>
+                <span class="badge" id="secStatusBadge">Loading</span>
+            </div>
+        </div>
+        <div class="kv" id="secStatus"></div>
+        <div class="table-wrap" style="margin-top: 12px;">
+            <table>
+                <thead>
+                <tr>
+                    <th>Company</th>
+                    <th>CIK</th>
+                    <th>Form</th>
+                    <th>Filing date</th>
+                    <th>Signal</th>
+                    <th>URL</th>
+                </tr>
+                </thead>
+                <tbody id="secFilings"></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="panel review-quality">
+        <div class="panel-head">
+            <div>
                 <h2>Reviewed Candidates</h2>
                 <div class="muted">Already reviewed candidates and the reason they were marked useful or ignored.</div>
             </div>
@@ -1078,6 +1107,8 @@
         scanRuns: [],
         sourceStats: [],
         reviewed: [],
+        secStatus: null,
+        secFilings: [],
         selectedPreviewId: null,
         autoRefreshTimer: null
     };
@@ -1088,6 +1119,7 @@
     const dryRunButton = document.querySelector("#dryRunButton");
     const dryRunButtonTop = document.querySelector("#dryRunButtonTop");
     const reviewHighButton = document.querySelector("#reviewHighButton");
+    const secScanButton = document.querySelector("#secScanButton");
     const errors = document.querySelector("#errors");
     const searchInput = document.querySelector("#searchInput");
     const strengthFilter = document.querySelector("#strengthFilter");
@@ -1115,6 +1147,7 @@
     dryRunButton.addEventListener("click", runDryRun);
     dryRunButtonTop.addEventListener("click", runDryRun);
     reviewHighButton.addEventListener("click", reviewHighCandidates);
+    secScanButton.addEventListener("click", runSecScan);
     searchInput.addEventListener("input", render);
     strengthFilter.addEventListener("change", render);
     sourceFilter.addEventListener("change", render);
@@ -1143,7 +1176,9 @@
             fetchJson("/api/scan-runs"),
             postJson("/api/alerts/dry-run"),
             fetchJson("/api/stats/sources"),
-            fetchJson("/api/articles/reviewed?limit=100")
+            fetchJson("/api/articles/reviewed?limit=100"),
+            fetchJson("/api/sec/status"),
+            fetchJson("/api/sec/filings")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1153,6 +1188,8 @@
         assignResult(results[5], "previews", [], "Alert dry-run");
         assignResult(results[6], "sourceStats", [], "Source stats");
         assignResult(results[7], "reviewed", [], "Reviewed candidates");
+        assignResult(results[8], "secStatus", null, "SEC status");
+        assignResult(results[9], "secFilings", [], "SEC filings");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -1187,6 +1224,21 @@
         } finally {
             setBusy(dryRunButton, false, "Run alert dry-run");
             setBusy(dryRunButtonTop, false, "Run dry-run");
+        }
+    }
+
+    async function runSecScan() {
+        setBusy(secScanButton, true, "Scanning SEC");
+        try {
+            await postJson("/api/sec/scan");
+            state.secStatus = await fetchJson("/api/sec/status");
+            state.secFilings = await fetchJson("/api/sec/filings");
+            lastUpdated.textContent = new Date().toLocaleString();
+            renderSecWatchlist();
+        } catch (error) {
+            showError("SEC scan", error.message);
+        } finally {
+            setBusy(secScanButton, false, "Run SEC scan");
         }
     }
 
@@ -1265,6 +1317,7 @@
         renderActionCenter();
         renderSourceQuality();
         renderReviewQuality();
+        renderSecWatchlist();
         renderReviewedCandidates();
         renderStatus();
         renderCandidates();
@@ -1322,6 +1375,39 @@
             ["Wrong extraction", reasonCounts.WRONG_EXTRACTION || 0],
             ["Duplicate/update", reasonCounts.DUPLICATE_OR_UPDATE || 0]
         ]);
+    }
+
+    function renderSecWatchlist() {
+        const status = state.secStatus || {};
+        const enabled = Boolean(status.enabled);
+        const badgeTarget = document.querySelector("#secStatusBadge");
+        badgeTarget.textContent = enabled ? "Enabled" : "Disabled";
+        badgeTarget.className = `badge ${enabled ? "ok" : "disabled"}`;
+        document.querySelector("#secStatus").innerHTML = kvRows([
+            ["Enabled", enabled ? "Yes" : "No"],
+            ["Watchlist CIKs", status.watchlistCount ?? 0],
+            ["Max filings / CIK", status.maxFilingsPerCik ?? 20],
+            ["Saved filings", status.savedFilings ?? 0]
+        ]);
+
+        const target = document.querySelector("#secFilings");
+        if (!state.secFilings.length) {
+            target.innerHTML = `<tr><td colspan="6" class="muted">No SEC filings saved yet.</td></tr>`;
+            return;
+        }
+        target.innerHTML = state.secFilings.slice(0, 20).map(filing => `
+            <tr>
+                <td class="title-cell">${escapeText(filing.companyName || "-")}</td>
+                <td>${escapeText(filing.cik || "-")}</td>
+                <td>${badge(filing.form || "-", filing.form || "disabled")}</td>
+                <td>${formatDate(filing.filingDate)}</td>
+                <td>
+                    ${badge(filing.signalType || "WATCHLIST_FORM", filing.signalType || "disabled")}
+                    <div class="small-cell">${escapeText(filing.signalReason || "")}</div>
+                </td>
+                <td><a href="${escapeAttr(filing.filingUrl)}" target="_blank" rel="noreferrer">SEC filing</a></td>
+            </tr>
+        `).join("");
     }
 
     function renderReviewedCandidates() {

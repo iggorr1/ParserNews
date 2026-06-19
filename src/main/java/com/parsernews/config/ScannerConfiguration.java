@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
         ConsoleSettings.class,
         RssSettings.class,
         SafetySettings.class,
+        SecScannerSettings.class,
         TelegramAlertSettings.class
 })
 public class ScannerConfiguration {
