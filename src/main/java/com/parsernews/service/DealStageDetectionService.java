@@ -25,6 +25,7 @@ public class DealStageDetectionService {
     ) {
         String lower = combinedText(article, event, dealTerms, reviewInsight, relevanceInsight)
                 .toLowerCase(Locale.ROOT);
+        String headlineLower = article.getHeadline() == null ? "" : article.getHeadline().toLowerCase(Locale.ROOT);
         List<String> warnings = new ArrayList<>();
         List<String> positives = new ArrayList<>();
 
@@ -110,17 +111,6 @@ public class DealStageDetectionService {
                     positives
             );
         }
-        if (containsAny(lower, "expected to close", "closing expected", "expected effective date",
-                "expected to be completed", "anticipated closing")) {
-            warnings.add("late-stage closing language");
-            return new StageInsight(
-                    DealStage.CLOSING_EXPECTED,
-                    DealTiming.LATE_STAGE,
-                    "Closing timing language suggests the deal is already well underway.",
-                    warnings,
-                    positives
-            );
-        }
         if (containsAny(lower, "raises offer", "increases offer", "improved proposal", "revised proposal")) {
             positives.add("offer increase");
             return new StageInsight(
@@ -137,6 +127,16 @@ public class DealStageDetectionService {
                     DealStage.RUMOR_OR_EXPLORATION,
                     DealTiming.EARLY,
                     "Early rumor or exploration language; useful only with manual review.",
+                    warnings,
+                positives
+            );
+        }
+        if (isClosingExpectedUpdate(headlineLower)) {
+            warnings.add("late-stage closing language");
+            return new StageInsight(
+                    DealStage.CLOSING_EXPECTED,
+                    DealTiming.LATE_STAGE,
+                    "Closing timing language suggests the deal is already well underway.",
                     warnings,
                     positives
             );
@@ -161,7 +161,7 @@ public class DealStageDetectionService {
                     DealTiming.EARLY,
                     "Definitive agreement language usually belongs near the initial deal announcement.",
                     warnings,
-                    positives
+                positives
             );
         }
         return new StageInsight(
@@ -205,6 +205,12 @@ public class DealStageDetectionService {
                 "pending regulatory approval", "pending regulatory approvals",
                 "requires regulatory approval", "requires regulatory approvals",
                 "customary closing conditions, including regulatory approvals", "approval required");
+    }
+
+    private boolean isClosingExpectedUpdate(String headlineLower) {
+        return containsAny(headlineLower, "announces expected closing date", "expected closing date",
+                "expected to close", "closing expected", "expected effective date",
+                "anticipated closing");
     }
 
     private boolean containsReverseTakeover(String lower) {

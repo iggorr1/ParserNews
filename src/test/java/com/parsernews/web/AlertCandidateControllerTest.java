@@ -104,6 +104,9 @@ class AlertCandidateControllerTest {
         assertThat(response.message()).contains("Score: 90");
         assertThat(response.message()).contains("Matched HIGH candidate signal.");
         assertThat(response.message()).contains("https://example.com/news/30");
+        assertThat(response.dealRelevance()).isEqualTo(com.parsernews.model.DealRelevance.PUBLIC_CASH_ACQUISITION);
+        assertThat(response.tradability()).isEqualTo(com.parsernews.model.Tradability.HIGH);
+        assertThat(response.dealTiming()).isEqualTo(com.parsernews.model.DealTiming.EARLY);
     }
 
     @Test

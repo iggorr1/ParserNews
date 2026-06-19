@@ -22,8 +22,8 @@ class CandidateRecomputeServiceTest {
     @Test
     void recomputeUpdatesOldEventWithMissingScoreFields() {
         DetectedEventEntity event = event(
-                "Old Company enters merger agreement",
-                "Old Company will be acquired by Buyer LLC in an all-cash transaction.",
+                "Old Company to be acquired by Buyer Inc.",
+                "NASDAQ: TEST shareholders will receive $5.00 per share in cash in an all-cash transaction.",
                 "https://example.com/news/old-company"
         );
         setField(event, "candidateScore", null);
@@ -39,7 +39,7 @@ class CandidateRecomputeServiceTest {
         assertThat(event.getCandidateStrength()).isEqualTo(CandidateStrength.HIGH);
         assertThat(event.getCandidateReason()).contains("HIGH");
         assertThat(event.isAlertEligible()).isTrue();
-        assertThat(event.getAlertReason()).contains("trusted source");
+        assertThat(event.getAlertReason()).contains("Strategy-eligible");
         assertThat(summary.scannedEvents()).isEqualTo(1);
         assertThat(summary.updatedEvents()).isEqualTo(1);
         assertThat(summary.highCount()).isEqualTo(1);

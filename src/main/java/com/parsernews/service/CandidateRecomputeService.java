@@ -36,12 +36,8 @@ public class CandidateRecomputeService {
                     article.getArticleText()
             );
             boolean alreadyQueued = event.getAlertQueuedAt() != null;
-            AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(
-                    score.strength(),
-                    score.score(),
-                    article.getUrl(),
-                    alreadyQueued
-            );
+            event.updateCandidateScore(score.score(), score.strength(), score.reason());
+            AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
             boolean alertEligible = eligibility.eligible();
 
             counter.countStrength(score.strength());
@@ -55,7 +51,6 @@ public class CandidateRecomputeService {
                 counter.updatedEvents++;
             }
 
-            event.updateCandidateScore(score.score(), score.strength(), score.reason());
             event.updateAlertEligibility(alertEligible, eligibility.reason());
         }
         return counter.toSummary();

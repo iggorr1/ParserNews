@@ -1,7 +1,14 @@
 package com.parsernews.service;
 
+import com.parsernews.model.DealRelevance;
+import com.parsernews.model.DealStage;
+import com.parsernews.model.DealTiming;
+import com.parsernews.model.ReviewVerdict;
+import com.parsernews.model.Tradability;
 import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.DetectedEventEntity;
+import com.parsernews.persistence.ManualReviewStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -16,6 +23,33 @@ public class AlertEligibilityService {
             "sec.gov",
             "example.com"
     );
+
+    private final CandidateReviewInsightService reviewInsightService;
+    private final DealTermsExtractionService dealTermsExtractionService;
+    private final DealRelevanceService dealRelevanceService;
+    private final DealStageDetectionService dealStageDetectionService;
+
+    public AlertEligibilityService() {
+        this(
+                new CandidateReviewInsightService(),
+                new DealTermsExtractionService(),
+                new DealRelevanceService(),
+                new DealStageDetectionService()
+        );
+    }
+
+    @Autowired
+    public AlertEligibilityService(
+            CandidateReviewInsightService reviewInsightService,
+            DealTermsExtractionService dealTermsExtractionService,
+            DealRelevanceService dealRelevanceService,
+            DealStageDetectionService dealStageDetectionService
+    ) {
+        this.reviewInsightService = reviewInsightService;
+        this.dealTermsExtractionService = dealTermsExtractionService;
+        this.dealRelevanceService = dealRelevanceService;
+        this.dealStageDetectionService = dealStageDetectionService;
+    }
 
     public AlertEligibility evaluate(
             CandidateStrength candidateStrength,
@@ -42,11 +76,82 @@ public class AlertEligibilityService {
         if (NewsTextPatterns.isRoundupAggregator(event.getArticle().getHeadline(), event.getArticle().getArticleText())) {
             return new AlertEligibility(false, "Roundup/aggregator article is not eligible for alert queueing.");
         }
-        return evaluate(
-                event.getCandidateStrength(),
-                event.getCandidateScore(),
-                event.getArticle().getUrl(),
-                event.getAlertQueuedAt() != null
+        if (event.getAlertQueuedAt() != null) {
+            return new AlertEligibility(false, "Candidate was already queued for alert.");
+        }
+        if (event.getCandidateStrength() != CandidateStrength.HIGH
+                && event.getCandidateStrength() != CandidateStrength.MEDIUM) {
+            return new AlertEligibility(false, "Candidate strength is not HIGH or MEDIUM.");
+        }
+        if (event.getCandidateScore() <= 0) {
+            return new AlertEligibility(false, "Candidate score is not positive.");
+        }
+        if (event.getManualReviewStatus() == ManualReviewStatus.IGNORED) {
+            return new AlertEligibility(false, "Candidate was manually ignored.");
+        }
+        if (!isTrustedHost(event.getArticle().getUrl())) {
+            return new AlertEligibility(false, "Source host is not trusted for alert queueing.");
+        }
+
+        CandidateReviewInsightService.ReviewInsight reviewInsight = reviewInsightService.insight(event.getArticle(), event);
+        DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(event.getArticle(), event, reviewInsight);
+        DealRelevanceService.RelevanceInsight relevanceInsight = dealRelevanceService.assess(
+                event.getArticle(),
+                event,
+                reviewInsight,
+                dealTerms
+        );
+        DealStageDetectionService.StageInsight stageInsight = dealStageDetectionService.detect(
+                event.getArticle(),
+                event,
+                dealTerms,
+                reviewInsight,
+                relevanceInsight
+        );
+
+        if (reviewInsight.reviewVerdict() == ReviewVerdict.LIKELY_NOISE) {
+            return withStrategy(false, "Review verdict is LIKELY_NOISE.", relevanceInsight, stageInsight);
+        }
+        if (relevanceInsight.dealRelevance() != DealRelevance.PUBLIC_TAKE_PRIVATE
+                && relevanceInsight.dealRelevance() != DealRelevance.PUBLIC_CASH_ACQUISITION) {
+            String reason = "Deal relevance is " + relevanceInsight.dealRelevance()
+                    + ", not a public cash/take-private alert.";
+            if (!relevanceInsight.relevanceWarnings().isEmpty()) {
+                reason += " Warnings: " + String.join(", ", relevanceInsight.relevanceWarnings()) + ".";
+            }
+            return withStrategy(false, reason, relevanceInsight, stageInsight);
+        }
+        if (relevanceInsight.tradability() != Tradability.HIGH && relevanceInsight.tradability() != Tradability.MEDIUM) {
+            return withStrategy(false, "Tradability is " + relevanceInsight.tradability() + ".", relevanceInsight, stageInsight);
+        }
+        if (stageInsight.dealTiming() == DealTiming.LATE_STAGE
+                || stageInsight.dealTiming() == DealTiming.POST_CLOSE
+                || stageInsight.dealTiming() == DealTiming.NOISE) {
+            return withStrategy(false, "Deal timing is " + stageInsight.dealTiming() + ".", relevanceInsight, stageInsight);
+        }
+        if (stageInsight.dealStage() == DealStage.SHAREHOLDER_APPROVAL
+                || stageInsight.dealStage() == DealStage.REGULATORY_APPROVAL
+                || stageInsight.dealStage() == DealStage.CLOSING_EXPECTED
+                || stageInsight.dealStage() == DealStage.COMPLETION_OR_CLOSED
+                || stageInsight.dealStage() == DealStage.LITIGATION_OR_LAW_FIRM_UPDATE) {
+            return withStrategy(false, "Deal stage is " + stageInsight.dealStage() + ".", relevanceInsight, stageInsight);
+        }
+        return withStrategy(true, "Strategy-eligible public cash/take-private candidate.", relevanceInsight, stageInsight);
+    }
+
+    private AlertEligibility withStrategy(
+            boolean eligible,
+            String reason,
+            DealRelevanceService.RelevanceInsight relevanceInsight,
+            DealStageDetectionService.StageInsight stageInsight
+    ) {
+        return new AlertEligibility(
+                eligible,
+                reason,
+                relevanceInsight.dealRelevance(),
+                relevanceInsight.tradability(),
+                stageInsight.dealStage(),
+                stageInsight.dealTiming()
         );
     }
 
@@ -66,7 +171,14 @@ public class AlertEligibilityService {
 
     public record AlertEligibility(
             boolean eligible,
-            String reason
+            String reason,
+            DealRelevance dealRelevance,
+            Tradability tradability,
+            DealStage dealStage,
+            DealTiming dealTiming
     ) {
+        public AlertEligibility(boolean eligible, String reason) {
+            this(eligible, reason, null, null, null, null);
+        }
     }
 }

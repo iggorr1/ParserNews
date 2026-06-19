@@ -108,7 +108,8 @@ class DealStageDetectionServiceTest {
     void subjectToRegulatoryApprovalDoesNotBecomeLateStageApproval() {
         NewsArticleEntity article = article(
                 "MDA Space announces definitive agreement to acquire US-based Blue Canyon Technologies LLC",
-                "The transaction is subject to regulatory approvals and customary closing conditions."
+                "The transaction is subject to regulatory approvals and customary closing conditions. "
+                        + "It is expected to close in Q4."
         );
 
         DealStageDetectionService.StageInsight insight = service.detect(
@@ -123,6 +124,45 @@ class DealStageDetectionServiceTest {
         assertThat(insight.dealStage()).isNotEqualTo(DealStage.REGULATORY_APPROVAL);
         assertThat(insight.dealTiming()).isEqualTo(DealTiming.EARLY);
         assertThat(insight.dealTiming()).isNotEqualTo(DealTiming.LATE_STAGE);
+    }
+
+    @Test
+    void definitiveAgreementWithExpectedCloseBoilerplateIsNotClosingExpected() {
+        NewsArticleEntity article = article(
+                "Company X announces definitive agreement to acquire Company Y",
+                "The transaction is expected to close in Q4 subject to customary closing conditions."
+        );
+
+        DealStageDetectionService.StageInsight insight = service.detect(
+                article,
+                event(article),
+                terms(DealStatus.DEFINITIVE_AGREEMENT),
+                likelyDeal(),
+                relevance(DealRelevance.PUBLIC_CASH_ACQUISITION, Tradability.HIGH)
+        );
+
+        assertThat(insight.dealStage()).isIn(DealStage.INITIAL_ANNOUNCEMENT, DealStage.DEFINITIVE_AGREEMENT);
+        assertThat(insight.dealStage()).isNotEqualTo(DealStage.CLOSING_EXPECTED);
+        assertThat(insight.dealTiming()).isEqualTo(DealTiming.EARLY);
+    }
+
+    @Test
+    void expectedClosingDateHeadlineIsLateStageClosingUpdate() {
+        NewsArticleEntity article = article(
+                "Company X announces expected closing date for merger",
+                "The merger is expected to close next week."
+        );
+
+        DealStageDetectionService.StageInsight insight = service.detect(
+                article,
+                event(article),
+                terms(DealStatus.UNKNOWN),
+                likelyDeal(),
+                relevance(DealRelevance.PUBLIC_PUBLIC_MERGER, Tradability.MEDIUM)
+        );
+
+        assertThat(insight.dealStage()).isEqualTo(DealStage.CLOSING_EXPECTED);
+        assertThat(insight.dealTiming()).isEqualTo(DealTiming.LATE_STAGE);
     }
 
     @Test

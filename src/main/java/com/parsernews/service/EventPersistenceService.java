@@ -85,13 +85,7 @@ public class EventPersistenceService {
                 newsEvent.headline(),
                 newsEvent.body()
         );
-        AlertEligibilityService.AlertEligibility alertEligibility = alertEligibilityService.evaluate(
-                candidateScore.strength(),
-                candidateScore.score(),
-                newsEvent.sourceUrl(),
-                false
-        );
-        eventRepository.save(new DetectedEventEntity(
+        DetectedEventEntity event = new DetectedEventEntity(
                 article,
                 mapEventType(analysisResult.eventType()),
                 mapReviewStatus(analysisResult.status()),
@@ -105,13 +99,16 @@ public class EventPersistenceService {
                 candidateScore.score(),
                 candidateScore.strength(),
                 candidateScore.reason(),
-                alertEligibility.eligible(),
-                alertEligibility.reason(),
+                false,
+                "Alert eligibility has not been evaluated yet.",
                 join(analysisResult.matchedPositiveKeywords()),
                 join(analysisResult.matchedNegativeKeywords()),
                 join(falsePositiveFilter.reasons(newsEvent.fullText())),
                 analysisResult.reason()
-        ));
+        );
+        AlertEligibilityService.AlertEligibility alertEligibility = alertEligibilityService.evaluate(event);
+        event.updateAlertEligibility(alertEligibility.eligible(), alertEligibility.reason());
+        eventRepository.save(event);
     }
 
     private boolean shouldPersistDetectedEvent(AnalysisResult result) {

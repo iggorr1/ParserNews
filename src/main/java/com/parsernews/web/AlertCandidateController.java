@@ -3,6 +3,10 @@ package com.parsernews.web;
 import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
+import com.parsernews.model.DealRelevance;
+import com.parsernews.model.DealStage;
+import com.parsernews.model.DealTiming;
+import com.parsernews.model.Tradability;
 import com.parsernews.service.AlertDispatchService;
 import com.parsernews.service.AlertEligibilityService;
 import com.parsernews.service.AlertMessageFormatter;
@@ -46,10 +50,13 @@ public class AlertCandidateController {
     @Transactional(readOnly = true)
     public List<AlertCandidateResponse> candidates() {
         return eventRepository.findTop200ByOrderByDetectedAtDesc().stream()
-                .filter(event -> event.isAlertEligible() && event.getAlertQueuedAt() == null)
-                .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
-                        .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
-                .map(AlertCandidateResponse::from)
+                .map(event -> new AlertCandidateWithEligibility(event, alertEligibilityService.evaluate(event)))
+                .filter(candidate -> candidate.event().isAlertEligible()
+                        && candidate.event().getAlertQueuedAt() == null
+                        && candidate.eligibility().eligible())
+                .sorted(Comparator.comparingInt((AlertCandidateWithEligibility candidate) -> candidate.event().getCandidateScore()).reversed()
+                        .thenComparing(candidate -> candidate.event().getDetectedAt(), Comparator.reverseOrder()))
+                .map(candidate -> AlertCandidateResponse.from(candidate.event(), candidate.eligibility()))
                 .toList();
     }
 
@@ -63,7 +70,7 @@ public class AlertCandidateController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, eligibility.reason());
         }
         event.markAlertQueued();
-        return AlertCandidateResponse.from(event);
+        return AlertCandidateResponse.from(event, eligibility);
     }
 
     @GetMapping("/api/alerts/candidates/{id}/preview")
@@ -72,9 +79,6 @@ public class AlertCandidateController {
         DetectedEventEntity event = eventRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Alert candidate not found"));
         AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
-        if (!event.isAlertEligible() || !eligibility.eligible()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, eligibility.reason());
-        }
         return AlertPreviewResponse.from(event, eligibility, alertMessageFormatter.format(event));
     }
 
@@ -104,13 +108,16 @@ public class AlertCandidateController {
     @Transactional(readOnly = true)
     public List<AlertPreviewResponse> dryRun() {
         return eventRepository.findTop200ByOrderByDetectedAtDesc().stream()
-                .filter(event -> event.isAlertEligible() && event.getAlertQueuedAt() == null)
-                .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
-                        .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
-                .map(event -> AlertPreviewResponse.from(
-                        event,
-                        alertEligibilityService.evaluate(event),
-                        alertMessageFormatter.format(event)
+                .map(event -> new AlertCandidateWithEligibility(event, alertEligibilityService.evaluate(event)))
+                .filter(candidate -> candidate.event().isAlertEligible()
+                        && candidate.event().getAlertQueuedAt() == null
+                        && candidate.eligibility().eligible())
+                .sorted(Comparator.comparingInt((AlertCandidateWithEligibility candidate) -> candidate.event().getCandidateScore()).reversed()
+                        .thenComparing(candidate -> candidate.event().getDetectedAt(), Comparator.reverseOrder()))
+                .map(candidate -> AlertPreviewResponse.from(
+                        candidate.event(),
+                        candidate.eligibility(),
+                        alertMessageFormatter.format(candidate.event())
                 ))
                 .toList();
     }
@@ -127,9 +134,16 @@ public class AlertCandidateController {
             String candidateReason,
             boolean alertEligible,
             Instant alertQueuedAt,
-            String alertReason
+            String alertReason,
+            DealRelevance dealRelevance,
+            Tradability tradability,
+            DealStage dealStage,
+            DealTiming dealTiming
     ) {
-        static AlertCandidateResponse from(DetectedEventEntity event) {
+        static AlertCandidateResponse from(
+                DetectedEventEntity event,
+                AlertEligibilityService.AlertEligibility eligibility
+        ) {
             return new AlertCandidateResponse(
                     event.getId(),
                     event.getArticle().getId(),
@@ -140,9 +154,13 @@ public class AlertCandidateController {
                     event.getCandidateScore(),
                     event.getCandidateStrength(),
                     event.getCandidateReason(),
-                    event.isAlertEligible(),
+                    event.isAlertEligible() && eligibility.eligible(),
                     event.getAlertQueuedAt(),
-                    event.getAlertReason()
+                    eligibility.reason(),
+                    eligibility.dealRelevance(),
+                    eligibility.tradability(),
+                    eligibility.dealStage(),
+                    eligibility.dealTiming()
             );
         }
     }
@@ -153,6 +171,10 @@ public class AlertCandidateController {
             boolean eligible,
             boolean queued,
             String reason,
+            DealRelevance dealRelevance,
+            Tradability tradability,
+            DealStage dealStage,
+            DealTiming dealTiming,
             String message
     ) {
         static AlertPreviewResponse from(
@@ -166,6 +188,10 @@ public class AlertCandidateController {
                     eligibility.eligible(),
                     event.getAlertQueuedAt() != null,
                     eligibility.reason(),
+                    eligibility.dealRelevance(),
+                    eligibility.tradability(),
+                    eligibility.dealStage(),
+                    eligibility.dealTiming(),
                     message
             );
         }
@@ -206,5 +232,11 @@ public class AlertCandidateController {
         } catch (RuntimeException exception) {
             return null;
         }
+    }
+
+    private record AlertCandidateWithEligibility(
+            DetectedEventEntity event,
+            AlertEligibilityService.AlertEligibility eligibility
+    ) {
     }
 }
