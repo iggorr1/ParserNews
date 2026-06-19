@@ -1,0 +1,241 @@
+package com.parsernews.service;
+
+import com.parsernews.model.DealRelevance;
+import com.parsernews.model.PaymentType;
+import com.parsernews.model.ReviewVerdict;
+import com.parsernews.model.Tradability;
+import com.parsernews.persistence.DetectedEventEntity;
+import com.parsernews.persistence.NewsArticleEntity;
+import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
+
+@Service
+public class DealRelevanceService {
+    private static final Pattern PUBLIC_TICKER = Pattern.compile(
+            "(?i)(?:NASDAQ|NYSE|NYSEAMERICAN|NYSE\\s+American|AMEX|OTC|OTCQB|OTCQX|OTCMKTS|TSX|TSXV)\\s*:\\s*[A-Z][A-Z0-9.-]{0,9}"
+    );
+
+    public RelevanceInsight assess(
+            NewsArticleEntity article,
+            DetectedEventEntity event,
+            CandidateReviewInsightService.ReviewInsight reviewInsight,
+            DealTermsExtractionService.DealTerms dealTerms
+    ) {
+        String text = combinedText(article, event, reviewInsight, dealTerms);
+        String lower = text.toLowerCase(Locale.ROOT);
+        List<String> warnings = new ArrayList<>();
+        List<String> positives = new ArrayList<>();
+
+        boolean lawFirm = reviewInsight != null
+                && reviewInsight.reviewVerdict() == ReviewVerdict.LAW_FIRM_ALERT
+                || containsAny(lower, "shareholder alert", "stockholder alert", "law firm", "class action");
+        if (lawFirm) {
+            warnings.add("law firm/shareholder alert");
+            return new RelevanceInsight(
+                    DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT,
+                    Tradability.NOT_TRADABLE,
+                    "Looks like a law firm/shareholder alert, not primary tradable deal news.",
+                    warnings,
+                    positives
+            );
+        }
+
+        boolean publicTarget = hasPublicTargetSignal(article, event, lower);
+        boolean publicBuyer = hasPublicBuyerSignal(event, lower);
+        boolean cash = dealTerms.paymentType() == PaymentType.CASH || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
+        boolean stock = dealTerms.paymentType() == PaymentType.STOCK || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
+        boolean perShare = lower.contains("per share") || lower.contains("a share");
+        boolean takePrivate = containsAny(lower, "take private", "going private", "privately held", "private equity");
+        boolean publicPublicMerger = publicTarget && publicBuyer
+                || containsAny(lower, "public-public", "combined company", "surviving entity", "stock-for-stock");
+        boolean privateCompanySignal = containsAny(lower, "portfolio company", "privately held", "private company", "terms were not disclosed", "terms undisclosed");
+
+        if (!publicTarget) {
+            warnings.add("target ticker missing");
+            warnings.add("no public target signal");
+        } else {
+            positives.add("public target signal");
+        }
+        if (!publicBuyer && publicPublicMerger) {
+            warnings.add("buyer ticker missing");
+        } else if (publicBuyer) {
+            positives.add("public buyer signal");
+        }
+        if (dealTerms.offerPrice() == null) {
+            warnings.add("offer price missing");
+        }
+        if (dealTerms.paymentType() == PaymentType.UNKNOWN) {
+            warnings.add("payment type unknown");
+        }
+        if (stock && !cash) {
+            warnings.add("all-stock deal");
+        }
+        if (privateCompanySignal) {
+            warnings.add("private-company acquisition");
+        }
+        if (containsAny(lower, "terms were not disclosed", "terms undisclosed")) {
+            warnings.add("terms undisclosed");
+        }
+
+        if (takePrivate && publicTarget && cash && perShare) {
+            positives.add("take-private cash/per-share signal");
+            return new RelevanceInsight(
+                    DealRelevance.PUBLIC_TAKE_PRIVATE,
+                    Tradability.HIGH,
+                    "High-relevance public take-private style deal with cash/per-share language.",
+                    warnings,
+                    positives
+            );
+        }
+        if (publicTarget && cash && perShare) {
+            positives.add("public cash acquisition signal");
+            return new RelevanceInsight(
+                    DealRelevance.PUBLIC_CASH_ACQUISITION,
+                    dealTerms.offerPrice() == null ? Tradability.MEDIUM : Tradability.HIGH,
+                    "Public target with cash/per-share acquisition terms.",
+                    warnings,
+                    positives
+            );
+        }
+        if (publicPublicMerger && stock) {
+            warnings.add("not take-private");
+            warnings.add("public-public merger");
+            positives.add("public merger signal");
+            return new RelevanceInsight(
+                    DealRelevance.PUBLIC_PUBLIC_MERGER,
+                    Tradability.MEDIUM,
+                    "Real public-company merger, but not a take-private cash acquisition.",
+                    warnings,
+                    positives
+            );
+        }
+        if (publicTarget && stock) {
+            warnings.add("not take-private");
+            positives.add("public stock merger signal");
+            return new RelevanceInsight(
+                    DealRelevance.PUBLIC_STOCK_MERGER,
+                    Tradability.LOW,
+                    "Public target stock-based merger; relevance is lower for cash/take-private strategy.",
+                    warnings,
+                    positives
+            );
+        }
+        if (!publicTarget && (privateCompanySignal || lower.contains("acquire") || lower.contains("acquisition"))) {
+            warnings.add("private-company acquisition");
+            return new RelevanceInsight(
+                    DealRelevance.PRIVATE_COMPANY_ACQUISITION,
+                    dealTerms.offerPrice() == null ? Tradability.NOT_TRADABLE : Tradability.LOW,
+                    "Looks like a real acquisition, but no public target signal was found.",
+                    warnings,
+                    positives
+            );
+        }
+        if (!publicTarget && dealTerms.offerPrice() == null) {
+            return new RelevanceInsight(
+                    DealRelevance.NOT_TRADABLE,
+                    Tradability.NOT_TRADABLE,
+                    "No public target ticker or offer price found.",
+                    warnings,
+                    positives
+            );
+        }
+        return new RelevanceInsight(
+                DealRelevance.UNKNOWN,
+                Tradability.UNKNOWN,
+                "Not enough deterministic evidence to classify strategy relevance.",
+                warnings,
+                positives
+        );
+    }
+
+    private boolean hasPublicTargetSignal(NewsArticleEntity article, DetectedEventEntity event, String lower) {
+        if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())) {
+            return true;
+        }
+        if (event != null && event.getTargetTicker() != null && !event.getTargetTicker().isBlank()
+                && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())) {
+            return true;
+        }
+        return PUBLIC_TICKER.matcher(lower).find();
+    }
+
+    private boolean hasPublicBuyerSignal(DetectedEventEntity event, String lower) {
+        if (event != null && event.getAcquirer() != null && PUBLIC_TICKER.matcher(event.getAcquirer()).find()) {
+            return true;
+        }
+        MatcherCount matcherCount = tickerCount(lower);
+        return matcherCount.count() >= 2;
+    }
+
+    private MatcherCount tickerCount(String lower) {
+        java.util.regex.Matcher matcher = PUBLIC_TICKER.matcher(lower);
+        int count = 0;
+        while (matcher.find()) {
+            count++;
+        }
+        return new MatcherCount(count);
+    }
+
+    private String combinedText(
+            NewsArticleEntity article,
+            DetectedEventEntity event,
+            CandidateReviewInsightService.ReviewInsight reviewInsight,
+            DealTermsExtractionService.DealTerms dealTerms
+    ) {
+        List<String> values = new ArrayList<>();
+        values.add(article.getHeadline());
+        values.add(article.getArticleText());
+        values.add(article.getTicker());
+        values.add(article.getCompanyName());
+        if (event != null) {
+            values.add(event.getTargetTicker());
+            values.add(event.getTargetCompany());
+            values.add(event.getAcquirer());
+            values.add(event.getCashOrStock());
+            values.add(event.getMatchedPositiveKeywords());
+            values.add(event.getMatchedNegativeKeywords());
+            values.add(event.getExplanation());
+        }
+        if (reviewInsight != null) {
+            values.add(reviewInsight.reviewVerdict().name());
+            values.add(String.join(" ", reviewInsight.reviewRiskFlags()));
+            values.add(String.join(" ", reviewInsight.reviewPositiveSignals()));
+        }
+        if (dealTerms != null) {
+            values.add(dealTerms.targetCompany());
+            values.add(dealTerms.buyerCompany());
+            values.add(dealTerms.paymentType().name());
+            values.add(dealTerms.dealStatus().name());
+            values.add(dealTerms.dealSummary());
+            values.add(String.join(" ", dealTerms.dealWarnings()));
+        }
+        return String.join(" ", values.stream()
+                .filter(value -> value != null && !value.isBlank())
+                .toList());
+    }
+
+    private boolean containsAny(String lower, String... phrases) {
+        for (String phrase : phrases) {
+            if (lower.contains(phrase)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public record RelevanceInsight(
+            DealRelevance dealRelevance,
+            Tradability tradability,
+            String relevanceSummary,
+            List<String> relevanceWarnings,
+            List<String> relevancePositiveSignals
+    ) {
+    }
+
+    private record MatcherCount(int count) {
+    }
+}

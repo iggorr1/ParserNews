@@ -10,6 +10,7 @@ import com.parsernews.persistence.NewsArticleRepository;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
 import com.parsernews.service.CandidateReviewInsightService;
+import com.parsernews.service.DealRelevanceService;
 import com.parsernews.service.DealTermsExtractionService;
 import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.http.HttpStatus;
@@ -34,17 +35,20 @@ public class ArticleController {
     private final DetectedEventRepository eventRepository;
     private final CandidateReviewInsightService reviewInsightService;
     private final DealTermsExtractionService dealTermsExtractionService;
+    private final DealRelevanceService dealRelevanceService;
 
     public ArticleController(
             NewsArticleRepository articleRepository,
             DetectedEventRepository eventRepository,
             CandidateReviewInsightService reviewInsightService,
-            DealTermsExtractionService dealTermsExtractionService
+            DealTermsExtractionService dealTermsExtractionService,
+            DealRelevanceService dealRelevanceService
     ) {
         this.articleRepository = articleRepository;
         this.eventRepository = eventRepository;
         this.reviewInsightService = reviewInsightService;
         this.dealTermsExtractionService = dealTermsExtractionService;
+        this.dealRelevanceService = dealRelevanceService;
     }
 
     @GetMapping("/api/articles")
@@ -64,7 +68,8 @@ public class ArticleController {
                         article,
                         eventRepository.findByArticle(article).orElse(null),
                         reviewInsightService,
-                        dealTermsExtractionService
+                        dealTermsExtractionService,
+                        dealRelevanceService
                 ))
                 .toList();
     }
@@ -80,7 +85,7 @@ public class ArticleController {
     public ArticleDetailResponse article(@PathVariable Long id) {
         NewsArticleEntity article = articleRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found"));
-        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null), reviewInsightService, dealTermsExtractionService);
+        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null), reviewInsightService, dealTermsExtractionService, dealRelevanceService);
     }
 
     @PatchMapping("/api/articles/{id}/manual-review")
@@ -94,7 +99,7 @@ public class ArticleController {
         DetectedEventEntity event = eventRepository.findByArticle(article)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Article has no detected event to review"));
         event.updateManualReview(request.status(), request.note());
-        return ArticleDetailResponse.from(article, event, reviewInsightService, dealTermsExtractionService);
+        return ArticleDetailResponse.from(article, event, reviewInsightService, dealTermsExtractionService, dealRelevanceService);
     }
 
     private List<ArticleListResponse> candidates(int limit) {
@@ -103,7 +108,7 @@ public class ArticleController {
                 .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
                         .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
                 .limit(normalizedLimit(limit))
-                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService))
+                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService, dealRelevanceService))
                 .toList();
     }
 
@@ -151,6 +156,11 @@ public class ArticleController {
             com.parsernews.model.DealConfidence dealConfidence,
             List<String> dealWarnings,
             String dealSummary,
+            com.parsernews.model.DealRelevance dealRelevance,
+            com.parsernews.model.Tradability tradability,
+            String relevanceSummary,
+            List<String> relevanceWarnings,
+            List<String> relevancePositiveSignals,
             String snippet,
             boolean hasFullText,
             int fullTextLength
@@ -159,11 +169,13 @@ public class ArticleController {
                 NewsArticleEntity article,
                 DetectedEventEntity event,
                 CandidateReviewInsightService reviewInsightService,
-                DealTermsExtractionService dealTermsExtractionService
+                DealTermsExtractionService dealTermsExtractionService,
+                DealRelevanceService dealRelevanceService
         ) {
             String text = article.getArticleText();
             CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
             DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(article, event, insight);
+            DealRelevanceService.RelevanceInsight relevance = dealRelevanceService.assess(article, event, insight, dealTerms);
             return new ArticleListResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -201,6 +213,11 @@ public class ArticleController {
                     dealTerms.dealConfidence(),
                     dealTerms.dealWarnings(),
                     dealTerms.dealSummary(),
+                    relevance.dealRelevance(),
+                    relevance.tradability(),
+                    relevance.relevanceSummary(),
+                    relevance.relevanceWarnings(),
+                    relevance.relevancePositiveSignals(),
                     buildSnippet(text, article.getHeadline()),
                     text != null && !text.isBlank(),
                     text == null ? 0 : text.length()
@@ -245,6 +262,11 @@ public class ArticleController {
             com.parsernews.model.DealConfidence dealConfidence,
             List<String> dealWarnings,
             String dealSummary,
+            com.parsernews.model.DealRelevance dealRelevance,
+            com.parsernews.model.Tradability tradability,
+            String relevanceSummary,
+            List<String> relevanceWarnings,
+            List<String> relevancePositiveSignals,
             String falsePositiveReasons,
             String explanation,
             String fullText
@@ -253,10 +275,12 @@ public class ArticleController {
                 NewsArticleEntity article,
                 DetectedEventEntity event,
                 CandidateReviewInsightService reviewInsightService,
-                DealTermsExtractionService dealTermsExtractionService
+                DealTermsExtractionService dealTermsExtractionService,
+                DealRelevanceService dealRelevanceService
         ) {
             CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
             DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(article, event, insight);
+            DealRelevanceService.RelevanceInsight relevance = dealRelevanceService.assess(article, event, insight, dealTerms);
             return new ArticleDetailResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -294,6 +318,11 @@ public class ArticleController {
                     dealTerms.dealConfidence(),
                     dealTerms.dealWarnings(),
                     dealTerms.dealSummary(),
+                    relevance.dealRelevance(),
+                    relevance.tradability(),
+                    relevance.relevanceSummary(),
+                    relevance.relevanceWarnings(),
+                    relevance.relevancePositiveSignals(),
                     event == null ? null : event.getFalsePositiveReasons(),
                     event == null ? null : event.getExplanation(),
                     ArticleTextCleaner.cleanTextForSnippet(article.getArticleText(), article.getHeadline())

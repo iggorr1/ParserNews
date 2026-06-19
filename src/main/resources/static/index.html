@@ -261,6 +261,8 @@
 
         .badge.ok,
         .badge.HIGH,
+        .badge.PUBLIC_TAKE_PRIVATE,
+        .badge.PUBLIC_CASH_ACQUISITION,
         .badge.CASH,
         .badge.HIGH_CONFIDENCE,
         .badge.DEFINITIVE_AGREEMENT,
@@ -275,6 +277,8 @@
 
         .badge.warn,
         .badge.MEDIUM,
+        .badge.PUBLIC_STOCK_MERGER,
+        .badge.PUBLIC_PUBLIC_MERGER,
         .badge.CASH_AND_STOCK,
         .badge.MEDIUM_CONFIDENCE,
         .badge.PROPOSAL,
@@ -289,6 +293,8 @@
         .badge.LOW,
         .badge.NONE,
         .badge.UNKNOWN,
+        .badge.PRIVATE_COMPANY_ACQUISITION,
+        .badge.NOT_TRADABLE,
         .badge.STOCK,
         .badge.LOW_CONFIDENCE,
         .badge.RUMOR_OR_EXPLORATION,
@@ -302,6 +308,7 @@
 
         .badge.FAILED,
         .badge.error,
+        .badge.LAW_FIRM_OR_SHAREHOLDER_ALERT,
         .badge.LAW_FIRM_ALERT,
         .badge.FINANCING_OR_OFFERING {
             color: var(--danger);
@@ -429,6 +436,14 @@
             border: 1px solid var(--line);
             border-radius: 8px;
             background: #f8fafc;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .strategy-relevance {
+            border: 1px solid #d7e5f8;
+            border-radius: 8px;
+            background: #f6f9ff;
             padding: 10px;
             margin: 10px 0;
         }
@@ -725,6 +740,31 @@
                 <option value="UNKNOWN">UNKNOWN</option>
             </select>
         </div>
+        <div class="control">
+            <label for="relevanceFilter">Relevance</label>
+            <select id="relevanceFilter">
+                <option value="">ALL</option>
+                <option value="PUBLIC_TAKE_PRIVATE">PUBLIC_TAKE_PRIVATE</option>
+                <option value="PUBLIC_CASH_ACQUISITION">PUBLIC_CASH_ACQUISITION</option>
+                <option value="PUBLIC_STOCK_MERGER">PUBLIC_STOCK_MERGER</option>
+                <option value="PUBLIC_PUBLIC_MERGER">PUBLIC_PUBLIC_MERGER</option>
+                <option value="PRIVATE_COMPANY_ACQUISITION">PRIVATE_COMPANY_ACQUISITION</option>
+                <option value="LAW_FIRM_OR_SHAREHOLDER_ALERT">LAW_FIRM_OR_SHAREHOLDER_ALERT</option>
+                <option value="NOT_TRADABLE">NOT_TRADABLE</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+        </div>
+        <div class="control">
+            <label for="tradabilityFilter">Tradability</label>
+            <select id="tradabilityFilter">
+                <option value="">ALL</option>
+                <option value="HIGH">HIGH</option>
+                <option value="MEDIUM">MEDIUM</option>
+                <option value="LOW">LOW</option>
+                <option value="NOT_TRADABLE">NOT_TRADABLE</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+        </div>
         <label class="toggle">
             <input id="candidateOnlyToggle" type="checkbox">
             Candidate-only articles
@@ -931,6 +971,8 @@
     const manualReviewFilter = document.querySelector("#manualReviewFilter");
     const verdictFilter = document.querySelector("#verdictFilter");
     const dealStatusFilter = document.querySelector("#dealStatusFilter");
+    const relevanceFilter = document.querySelector("#relevanceFilter");
+    const tradabilityFilter = document.querySelector("#tradabilityFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -949,6 +991,8 @@
     manualReviewFilter.addEventListener("change", render);
     verdictFilter.addEventListener("change", render);
     dealStatusFilter.addEventListener("change", render);
+    relevanceFilter.addEventListener("change", render);
+    tradabilityFilter.addEventListener("change", render);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -1118,12 +1162,13 @@
 
     function renderActionCenter() {
         const health = state.status?.status || "WARN";
-        const likelyDeals = state.candidates.filter(candidate =>
-            candidate.reviewVerdict === "LIKELY_DEAL" && candidate.manualReviewStatus !== "IGNORED"
+        const highTradableDeals = state.candidates.filter(candidate =>
+            candidate.manualReviewStatus !== "IGNORED"
+                && ["PUBLIC_TAKE_PRIVATE", "PUBLIC_CASH_ACQUISITION"].includes(candidate.dealRelevance)
+                && candidate.tradability === "HIGH"
         ).length;
-        const highConfidenceDeals = state.candidates.filter(candidate =>
-            candidate.reviewVerdict === "LIKELY_DEAL"
-                && candidate.dealConfidence === "HIGH"
+        const likelyDeals = state.candidates.filter(candidate =>
+            ["PUBLIC_TAKE_PRIVATE", "PUBLIC_CASH_ACQUISITION"].includes(candidate.dealRelevance)
                 && candidate.manualReviewStatus !== "IGNORED"
         ).length;
         const needsReview = state.candidates.filter(candidate =>
@@ -1132,6 +1177,12 @@
                     || (candidate.reviewVerdict === "LIKELY_DEAL" && hasMissingDealTerms(candidate)))
         ).length;
         const actionable = likelyDeals + needsReview;
+        const onlyLowTradability = state.candidates.length > 0
+            && highTradableDeals === 0
+            && state.candidates.every(candidate =>
+                ["LOW", "NOT_TRADABLE", "UNKNOWN"].includes(candidate.tradability)
+                    || candidate.manualReviewStatus === "IGNORED"
+            );
         const hasOnlyNoise = state.candidates.length > 0
             && actionable === 0
             && state.candidates.every(candidate =>
@@ -1141,23 +1192,25 @@
         const latestScanStatus = state.status?.latestScan?.status || "-";
         const message = health === "WARN"
             ? "System warning: latest scan failed"
-            : highConfidenceDeals > 0
-                ? `${highConfidenceDeals} high-confidence likely deal${highConfidenceDeals === 1 ? "" : "s"}`
+            : highTradableDeals > 0
+                ? `${highTradableDeals} high-relevance public deal${highTradableDeals === 1 ? "" : "s"} needs review`
                 : likelyDeals > 0
                 ? `${likelyDeals} likely deal${likelyDeals === 1 ? "" : "s"} needs review`
                 : needsReview > 0
                     ? `${needsReview} candidate${needsReview === 1 ? "" : "s"} need review`
+                    : onlyLowTradability
+                        ? "Only low-tradability deals found"
                     : hasOnlyNoise
                         ? "Only likely noise found"
-                        : "No likely deals right now";
+                        : "No tradable deals right now";
 
         document.querySelector("#actionMessage").textContent = message;
         document.querySelector("#actionSubtext").textContent = health === "WARN"
             ? "Open technical details and check the latest scan run."
-            : highConfidenceDeals > 0
-                ? "Start with high-confidence deal terms, then verify source article manually."
+            : highTradableDeals > 0
+                ? "Start with public cash/take-private relevance, then verify source article manually."
                 : actionable > 0
-                ? "Start with the candidate cards below. Check verdict, risk flags, and suggested action."
+                ? "Start with the candidate cards below. Check relevance, deal terms, and warnings."
                 : "The monitor is running. Review latest articles if you want to tune rules.";
         document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
         document.querySelector("#actionNeedsReviewCount").textContent = String(needsReview);
@@ -1250,6 +1303,15 @@
                     <div class="deal-term"><span>Confidence</span>${badge(candidate.dealConfidence || "UNKNOWN", `${candidate.dealConfidence || "UNKNOWN"}_CONFIDENCE`)}</div>
                 </div>
                 ${chipList("Deal warnings", candidate.dealWarnings, "risk")}
+                <div class="strategy-relevance">
+                    <div class="badge-row" style="margin-bottom: 7px;">
+                        ${badge(candidate.dealRelevance || "UNKNOWN", candidate.dealRelevance || "UNKNOWN")}
+                        ${badge(`tradability ${candidate.tradability || "UNKNOWN"}`, candidate.tradability || "UNKNOWN")}
+                    </div>
+                    <strong>${escapeText(candidate.relevanceSummary || "No strategy relevance summary available.")}</strong>
+                    ${chipList("Relevance signals", candidate.relevancePositiveSignals, "")}
+                    ${chipList("Relevance warnings", candidate.relevanceWarnings, "risk")}
+                </div>
                 <details class="candidate-details">
                     <summary>Details</summary>
                     <p class="snippet">${escapeText(candidate.snippet || "No snippet available.")}</p>
@@ -1367,6 +1429,8 @@
         const manualStatus = manualReviewFilter.value;
         const verdict = verdictFilter.value;
         const dealStatus = dealStatusFilter.value;
+        const relevance = relevanceFilter.value;
+        const tradability = tradabilityFilter.value;
         const candidateOnly = options.articleList && candidateOnlyToggle.checked;
         const eligibleOnly = options.candidateList && eligibleOnlyToggle.checked;
         return [...items]
@@ -1385,6 +1449,11 @@
                     item.paymentType,
                     item.dealSummary,
                     (item.dealWarnings || []).join(" "),
+                    item.dealRelevance,
+                    item.tradability,
+                    item.relevanceSummary,
+                    (item.relevanceWarnings || []).join(" "),
+                    (item.relevancePositiveSignals || []).join(" "),
                     item.reviewSummary,
                     item.suggestedAction,
                     (item.reviewRiskFlags || []).join(" "),
@@ -1400,6 +1469,8 @@
                     && (!manualStatus || (item.manualReviewStatus || "PENDING") === manualStatus)
                     && (!verdict || (item.reviewVerdict || "UNKNOWN") === verdict)
                     && (!dealStatus || (item.dealStatus || "UNKNOWN") === dealStatus)
+                    && (!relevance || (item.dealRelevance || "UNKNOWN") === relevance)
+                    && (!tradability || (item.tradability || "UNKNOWN") === tradability)
                     && (!candidateOnly || item.candidate)
                     && (!eligibleOnly || isAlertVisible(item));
             })
