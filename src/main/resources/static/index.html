@@ -265,6 +265,9 @@
         .badge.PUBLIC_CASH_ACQUISITION,
         .badge.CASH,
         .badge.HIGH_CONFIDENCE,
+        .badge.INITIAL_ANNOUNCEMENT,
+        .badge.OFFER_INCREASE,
+        .badge.EARLY,
         .badge.DEFINITIVE_AGREEMENT,
         .badge.MERGER_AGREEMENT,
         .badge.LIKELY_DEAL,
@@ -281,6 +284,11 @@
         .badge.PUBLIC_PUBLIC_MERGER,
         .badge.CASH_AND_STOCK,
         .badge.MEDIUM_CONFIDENCE,
+        .badge.MID_STAGE,
+        .badge.SHAREHOLDER_APPROVAL,
+        .badge.REGULATORY_APPROVAL,
+        .badge.CLOSING_EXPECTED,
+        .badge.LATE_STAGE,
         .badge.PROPOSAL,
         .badge.TENDER_OFFER,
         .badge.NEEDS_REVIEW,
@@ -298,6 +306,8 @@
         .badge.STOCK,
         .badge.LOW_CONFIDENCE,
         .badge.RUMOR_OR_EXPLORATION,
+        .badge.COMPLETION_OR_CLOSED,
+        .badge.POST_CLOSE,
         .badge.LIKELY_NOISE,
         .badge.disabled,
         .badge.queued {
@@ -309,6 +319,8 @@
         .badge.FAILED,
         .badge.error,
         .badge.LAW_FIRM_OR_SHAREHOLDER_ALERT,
+        .badge.LITIGATION_OR_LAW_FIRM_UPDATE,
+        .badge.NOISE,
         .badge.LAW_FIRM_ALERT,
         .badge.FINANCING_OR_OFFERING {
             color: var(--danger);
@@ -444,6 +456,14 @@
             border: 1px solid #d7e5f8;
             border-radius: 8px;
             background: #f6f9ff;
+            padding: 10px;
+            margin: 10px 0;
+        }
+
+        .deal-stage {
+            border: 1px solid #f1d191;
+            border-radius: 8px;
+            background: #fffaf0;
             padding: 10px;
             margin: 10px 0;
         }
@@ -765,6 +785,34 @@
                 <option value="UNKNOWN">UNKNOWN</option>
             </select>
         </div>
+        <div class="control">
+            <label for="dealStageFilter">Deal stage</label>
+            <select id="dealStageFilter">
+                <option value="">ALL</option>
+                <option value="INITIAL_ANNOUNCEMENT">INITIAL_ANNOUNCEMENT</option>
+                <option value="OFFER_INCREASE">OFFER_INCREASE</option>
+                <option value="DEFINITIVE_AGREEMENT">DEFINITIVE_AGREEMENT</option>
+                <option value="SHAREHOLDER_APPROVAL">SHAREHOLDER_APPROVAL</option>
+                <option value="REGULATORY_APPROVAL">REGULATORY_APPROVAL</option>
+                <option value="CLOSING_EXPECTED">CLOSING_EXPECTED</option>
+                <option value="COMPLETION_OR_CLOSED">COMPLETION_OR_CLOSED</option>
+                <option value="LITIGATION_OR_LAW_FIRM_UPDATE">LITIGATION_OR_LAW_FIRM_UPDATE</option>
+                <option value="RUMOR_OR_EXPLORATION">RUMOR_OR_EXPLORATION</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+        </div>
+        <div class="control">
+            <label for="dealTimingFilter">Deal timing</label>
+            <select id="dealTimingFilter">
+                <option value="">ALL</option>
+                <option value="EARLY">EARLY</option>
+                <option value="MID_STAGE">MID_STAGE</option>
+                <option value="LATE_STAGE">LATE_STAGE</option>
+                <option value="POST_CLOSE">POST_CLOSE</option>
+                <option value="NOISE">NOISE</option>
+                <option value="UNKNOWN">UNKNOWN</option>
+            </select>
+        </div>
         <label class="toggle">
             <input id="candidateOnlyToggle" type="checkbox">
             Candidate-only articles
@@ -973,6 +1021,8 @@
     const dealStatusFilter = document.querySelector("#dealStatusFilter");
     const relevanceFilter = document.querySelector("#relevanceFilter");
     const tradabilityFilter = document.querySelector("#tradabilityFilter");
+    const dealStageFilter = document.querySelector("#dealStageFilter");
+    const dealTimingFilter = document.querySelector("#dealTimingFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -993,6 +1043,8 @@
     dealStatusFilter.addEventListener("change", render);
     relevanceFilter.addEventListener("change", render);
     tradabilityFilter.addEventListener("change", render);
+    dealStageFilter.addEventListener("change", render);
+    dealTimingFilter.addEventListener("change", render);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -1162,10 +1214,11 @@
 
     function renderActionCenter() {
         const health = state.status?.status || "WARN";
-        const highTradableDeals = state.candidates.filter(candidate =>
+        const earlyHighTradableDeals = state.candidates.filter(candidate =>
             candidate.manualReviewStatus !== "IGNORED"
                 && ["PUBLIC_TAKE_PRIVATE", "PUBLIC_CASH_ACQUISITION"].includes(candidate.dealRelevance)
                 && candidate.tradability === "HIGH"
+                && ["EARLY", "MID_STAGE"].includes(candidate.dealTiming)
         ).length;
         const likelyDeals = state.candidates.filter(candidate =>
             ["PUBLIC_TAKE_PRIVATE", "PUBLIC_CASH_ACQUISITION"].includes(candidate.dealRelevance)
@@ -1177,8 +1230,14 @@
                     || (candidate.reviewVerdict === "LIKELY_DEAL" && hasMissingDealTerms(candidate)))
         ).length;
         const actionable = likelyDeals + needsReview;
+        const onlyLateStageUpdates = state.candidates.length > 0
+            && earlyHighTradableDeals === 0
+            && state.candidates.every(candidate =>
+                ["LATE_STAGE", "POST_CLOSE", "NOISE", "UNKNOWN"].includes(candidate.dealTiming)
+                    || candidate.manualReviewStatus === "IGNORED"
+            );
         const onlyLowTradability = state.candidates.length > 0
-            && highTradableDeals === 0
+            && earlyHighTradableDeals === 0
             && state.candidates.every(candidate =>
                 ["LOW", "NOT_TRADABLE", "UNKNOWN"].includes(candidate.tradability)
                     || candidate.manualReviewStatus === "IGNORED"
@@ -1192,12 +1251,14 @@
         const latestScanStatus = state.status?.latestScan?.status || "-";
         const message = health === "WARN"
             ? "System warning: latest scan failed"
-            : highTradableDeals > 0
-                ? `${highTradableDeals} high-relevance public deal${highTradableDeals === 1 ? "" : "s"} needs review`
+            : earlyHighTradableDeals > 0
+                ? `${earlyHighTradableDeals} early high-relevance deal${earlyHighTradableDeals === 1 ? "" : "s"} needs review`
                 : likelyDeals > 0
                 ? `${likelyDeals} likely deal${likelyDeals === 1 ? "" : "s"} needs review`
                 : needsReview > 0
                     ? `${needsReview} candidate${needsReview === 1 ? "" : "s"} need review`
+                    : onlyLateStageUpdates
+                        ? "Only late-stage deal updates found"
                     : onlyLowTradability
                         ? "Only low-tradability deals found"
                     : hasOnlyNoise
@@ -1207,10 +1268,10 @@
         document.querySelector("#actionMessage").textContent = message;
         document.querySelector("#actionSubtext").textContent = health === "WARN"
             ? "Open technical details and check the latest scan run."
-            : highTradableDeals > 0
-                ? "Start with public cash/take-private relevance, then verify source article manually."
+            : earlyHighTradableDeals > 0
+                ? "Start with early public cash/take-private relevance, then verify source article manually."
                 : actionable > 0
-                ? "Start with the candidate cards below. Check relevance, deal terms, and warnings."
+                ? "Start with the candidate cards below. Check stage, relevance, deal terms, and warnings."
                 : "The monitor is running. Review latest articles if you want to tune rules.";
         document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
         document.querySelector("#actionNeedsReviewCount").textContent = String(needsReview);
@@ -1311,6 +1372,15 @@
                     <strong>${escapeText(candidate.relevanceSummary || "No strategy relevance summary available.")}</strong>
                     ${chipList("Relevance signals", candidate.relevancePositiveSignals, "")}
                     ${chipList("Relevance warnings", candidate.relevanceWarnings, "risk")}
+                </div>
+                <div class="deal-stage">
+                    <div class="badge-row" style="margin-bottom: 7px;">
+                        ${badge(candidate.dealStage || "UNKNOWN", candidate.dealStage || "UNKNOWN")}
+                        ${badge(`timing ${candidate.dealTiming || "UNKNOWN"}`, candidate.dealTiming || "UNKNOWN")}
+                    </div>
+                    <strong>${escapeText(candidate.stageSummary || "No deal stage summary available.")}</strong>
+                    ${chipList("Stage signals", candidate.stagePositiveSignals, "")}
+                    ${chipList("Stage warnings", candidate.stageWarnings, "risk")}
                 </div>
                 <details class="candidate-details">
                     <summary>Details</summary>
@@ -1431,6 +1501,8 @@
         const dealStatus = dealStatusFilter.value;
         const relevance = relevanceFilter.value;
         const tradability = tradabilityFilter.value;
+        const dealStage = dealStageFilter.value;
+        const dealTiming = dealTimingFilter.value;
         const candidateOnly = options.articleList && candidateOnlyToggle.checked;
         const eligibleOnly = options.candidateList && eligibleOnlyToggle.checked;
         return [...items]
@@ -1454,6 +1526,11 @@
                     item.relevanceSummary,
                     (item.relevanceWarnings || []).join(" "),
                     (item.relevancePositiveSignals || []).join(" "),
+                    item.dealStage,
+                    item.dealTiming,
+                    item.stageSummary,
+                    (item.stageWarnings || []).join(" "),
+                    (item.stagePositiveSignals || []).join(" "),
                     item.reviewSummary,
                     item.suggestedAction,
                     (item.reviewRiskFlags || []).join(" "),
@@ -1471,6 +1548,8 @@
                     && (!dealStatus || (item.dealStatus || "UNKNOWN") === dealStatus)
                     && (!relevance || (item.dealRelevance || "UNKNOWN") === relevance)
                     && (!tradability || (item.tradability || "UNKNOWN") === tradability)
+                    && (!dealStage || (item.dealStage || "UNKNOWN") === dealStage)
+                    && (!dealTiming || (item.dealTiming || "UNKNOWN") === dealTiming)
                     && (!candidateOnly || item.candidate)
                     && (!eligibleOnly || isAlertVisible(item));
             })
@@ -1552,7 +1631,12 @@
             reviewSummary: updated.reviewSummary,
             reviewRiskFlags: updated.reviewRiskFlags,
             reviewPositiveSignals: updated.reviewPositiveSignals,
-            suggestedAction: updated.suggestedAction
+            suggestedAction: updated.suggestedAction,
+            dealStage: updated.dealStage,
+            dealTiming: updated.dealTiming,
+            stageSummary: updated.stageSummary,
+            stageWarnings: updated.stageWarnings,
+            stagePositiveSignals: updated.stagePositiveSignals
         } : item;
         state.articles = state.articles.map(apply);
         state.candidates = state.candidates.map(apply);

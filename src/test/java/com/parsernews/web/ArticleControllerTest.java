@@ -12,6 +12,7 @@ import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
 import com.parsernews.service.CandidateReviewInsightService;
 import com.parsernews.service.DealRelevanceService;
+import com.parsernews.service.DealStageDetectionService;
 import com.parsernews.service.DealTermsExtractionService;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.server.ResponseStatusException;
@@ -70,6 +71,7 @@ class ArticleControllerTest {
         assertThat(response.getFirst().offerPrice()).isEqualByComparingTo("5.00");
         assertThat(response.getFirst().paymentType()).isEqualTo(com.parsernews.model.PaymentType.CASH);
         assertThat(response.getFirst().tradability()).isNotNull();
+        assertThat(response.getFirst().dealTiming()).isNotNull();
     }
 
     @Test
@@ -196,7 +198,8 @@ class ArticleControllerTest {
                 eventRepository,
                 new CandidateReviewInsightService(),
                 new DealTermsExtractionService(),
-                new DealRelevanceService()
+                new DealRelevanceService(),
+                new DealStageDetectionService()
         );
     }
 

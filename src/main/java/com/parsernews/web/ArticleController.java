@@ -11,6 +11,7 @@ import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.ReviewStatus;
 import com.parsernews.service.CandidateReviewInsightService;
 import com.parsernews.service.DealRelevanceService;
+import com.parsernews.service.DealStageDetectionService;
 import com.parsernews.service.DealTermsExtractionService;
 import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.http.HttpStatus;
@@ -36,19 +37,22 @@ public class ArticleController {
     private final CandidateReviewInsightService reviewInsightService;
     private final DealTermsExtractionService dealTermsExtractionService;
     private final DealRelevanceService dealRelevanceService;
+    private final DealStageDetectionService dealStageDetectionService;
 
     public ArticleController(
             NewsArticleRepository articleRepository,
             DetectedEventRepository eventRepository,
             CandidateReviewInsightService reviewInsightService,
             DealTermsExtractionService dealTermsExtractionService,
-            DealRelevanceService dealRelevanceService
+            DealRelevanceService dealRelevanceService,
+            DealStageDetectionService dealStageDetectionService
     ) {
         this.articleRepository = articleRepository;
         this.eventRepository = eventRepository;
         this.reviewInsightService = reviewInsightService;
         this.dealTermsExtractionService = dealTermsExtractionService;
         this.dealRelevanceService = dealRelevanceService;
+        this.dealStageDetectionService = dealStageDetectionService;
     }
 
     @GetMapping("/api/articles")
@@ -69,7 +73,8 @@ public class ArticleController {
                         eventRepository.findByArticle(article).orElse(null),
                         reviewInsightService,
                         dealTermsExtractionService,
-                        dealRelevanceService
+                        dealRelevanceService,
+                        dealStageDetectionService
                 ))
                 .toList();
     }
@@ -85,7 +90,7 @@ public class ArticleController {
     public ArticleDetailResponse article(@PathVariable Long id) {
         NewsArticleEntity article = articleRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Article not found"));
-        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null), reviewInsightService, dealTermsExtractionService, dealRelevanceService);
+        return ArticleDetailResponse.from(article, eventRepository.findByArticle(article).orElse(null), reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService);
     }
 
     @PatchMapping("/api/articles/{id}/manual-review")
@@ -99,7 +104,7 @@ public class ArticleController {
         DetectedEventEntity event = eventRepository.findByArticle(article)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Article has no detected event to review"));
         event.updateManualReview(request.status(), request.note());
-        return ArticleDetailResponse.from(article, event, reviewInsightService, dealTermsExtractionService, dealRelevanceService);
+        return ArticleDetailResponse.from(article, event, reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService);
     }
 
     private List<ArticleListResponse> candidates(int limit) {
@@ -108,7 +113,7 @@ public class ArticleController {
                 .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
                         .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
                 .limit(normalizedLimit(limit))
-                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService, dealRelevanceService))
+                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService))
                 .toList();
     }
 
@@ -161,6 +166,11 @@ public class ArticleController {
             String relevanceSummary,
             List<String> relevanceWarnings,
             List<String> relevancePositiveSignals,
+            com.parsernews.model.DealStage dealStage,
+            com.parsernews.model.DealTiming dealTiming,
+            String stageSummary,
+            List<String> stageWarnings,
+            List<String> stagePositiveSignals,
             String snippet,
             boolean hasFullText,
             int fullTextLength
@@ -170,12 +180,14 @@ public class ArticleController {
                 DetectedEventEntity event,
                 CandidateReviewInsightService reviewInsightService,
                 DealTermsExtractionService dealTermsExtractionService,
-                DealRelevanceService dealRelevanceService
+                DealRelevanceService dealRelevanceService,
+                DealStageDetectionService dealStageDetectionService
         ) {
             String text = article.getArticleText();
             CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
             DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(article, event, insight);
             DealRelevanceService.RelevanceInsight relevance = dealRelevanceService.assess(article, event, insight, dealTerms);
+            DealStageDetectionService.StageInsight stage = dealStageDetectionService.detect(article, event, dealTerms, insight, relevance);
             return new ArticleListResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -218,6 +230,11 @@ public class ArticleController {
                     relevance.relevanceSummary(),
                     relevance.relevanceWarnings(),
                     relevance.relevancePositiveSignals(),
+                    stage.dealStage(),
+                    stage.dealTiming(),
+                    stage.stageSummary(),
+                    stage.stageWarnings(),
+                    stage.stagePositiveSignals(),
                     buildSnippet(text, article.getHeadline()),
                     text != null && !text.isBlank(),
                     text == null ? 0 : text.length()
@@ -267,6 +284,11 @@ public class ArticleController {
             String relevanceSummary,
             List<String> relevanceWarnings,
             List<String> relevancePositiveSignals,
+            com.parsernews.model.DealStage dealStage,
+            com.parsernews.model.DealTiming dealTiming,
+            String stageSummary,
+            List<String> stageWarnings,
+            List<String> stagePositiveSignals,
             String falsePositiveReasons,
             String explanation,
             String fullText
@@ -276,11 +298,13 @@ public class ArticleController {
                 DetectedEventEntity event,
                 CandidateReviewInsightService reviewInsightService,
                 DealTermsExtractionService dealTermsExtractionService,
-                DealRelevanceService dealRelevanceService
+                DealRelevanceService dealRelevanceService,
+                DealStageDetectionService dealStageDetectionService
         ) {
             CandidateReviewInsightService.ReviewInsight insight = reviewInsightService.insight(article, event);
             DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(article, event, insight);
             DealRelevanceService.RelevanceInsight relevance = dealRelevanceService.assess(article, event, insight, dealTerms);
+            DealStageDetectionService.StageInsight stage = dealStageDetectionService.detect(article, event, dealTerms, insight, relevance);
             return new ArticleDetailResponse(
                     article.getId(),
                     article.getHeadline(),
@@ -323,6 +347,11 @@ public class ArticleController {
                     relevance.relevanceSummary(),
                     relevance.relevanceWarnings(),
                     relevance.relevancePositiveSignals(),
+                    stage.dealStage(),
+                    stage.dealTiming(),
+                    stage.stageSummary(),
+                    stage.stageWarnings(),
+                    stage.stagePositiveSignals(),
                     event == null ? null : event.getFalsePositiveReasons(),
                     event == null ? null : event.getExplanation(),
                     ArticleTextCleaner.cleanTextForSnippet(article.getArticleText(), article.getHeadline())
