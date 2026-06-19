@@ -4,6 +4,7 @@ import com.parsernews.config.SecurityConfig;
 import com.parsernews.persistence.SecFilingRepository;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
+import com.parsernews.service.SecFilingDocumentFetcher;
 import com.parsernews.service.SecWatchlistScanner;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +37,9 @@ class SecControllerSecurityTest {
 
     @MockitoBean
     private SecFilingRepository filingRepository;
+
+    @MockitoBean
+    private SecFilingDocumentFetcher documentFetcher;
 
     @MockitoBean
     private NewsScannerService newsScannerService;
@@ -75,5 +79,21 @@ class SecControllerSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.savedFilings").value(2))
                 .andExpect(jsonPath("$.duplicatesSkipped").value(1));
+    }
+
+    @Test
+    void authenticatedSecDocumentFetchReturnsSummary() throws Exception {
+        when(documentFetcher.fetchPendingDocuments()).thenReturn(new SecFilingDocumentFetcher.SecDocumentFetchSummary(
+                2,
+                1,
+                0,
+                1
+        ));
+
+        mockMvc.perform(post("/api/sec/fetch-documents").with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attemptedCount").value(2))
+                .andExpect(jsonPath("$.fetchedCount").value(1))
+                .andExpect(jsonPath("$.failedCount").value(1));
     }
 }

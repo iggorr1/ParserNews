@@ -8,4 +8,5 @@ public interface SecFilingRepository extends JpaRepository<SecFilingEntity, Long
     boolean existsByAccessionNumber(String accessionNumber);
     List<SecFilingEntity> findTop100ByOrderByFilingDateDescProcessedAtDesc();
     List<SecFilingEntity> findTop50ByOrderByFilingDateDescProcessedAtDesc();
+    List<SecFilingEntity> findTop50ByDocumentFetchedAtIsNullOrderByFilingDateDescProcessedAtDesc();
 }

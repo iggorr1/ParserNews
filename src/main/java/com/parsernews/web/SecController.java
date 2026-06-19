@@ -2,11 +2,16 @@ package com.parsernews.web;
 
 import com.parsernews.persistence.SecFilingEntity;
 import com.parsernews.persistence.SecFilingRepository;
+import com.parsernews.service.SecFilingDocumentFetcher;
 import com.parsernews.service.SecWatchlistScanner;
+import jakarta.persistence.EntityNotFoundException;
+import org.springframework.http.HttpStatus;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -16,10 +21,16 @@ import java.util.List;
 public class SecController {
     private final SecWatchlistScanner secWatchlistScanner;
     private final SecFilingRepository filingRepository;
+    private final SecFilingDocumentFetcher documentFetcher;
 
-    public SecController(SecWatchlistScanner secWatchlistScanner, SecFilingRepository filingRepository) {
+    public SecController(
+            SecWatchlistScanner secWatchlistScanner,
+            SecFilingRepository filingRepository,
+            SecFilingDocumentFetcher documentFetcher
+    ) {
         this.secWatchlistScanner = secWatchlistScanner;
         this.filingRepository = filingRepository;
+        this.documentFetcher = documentFetcher;
     }
 
     @PostMapping("/api/sec/scan")
@@ -40,6 +51,29 @@ public class SecController {
                 .toList();
     }
 
+    @GetMapping("/api/sec/filings/{id}")
+    @Transactional(readOnly = true)
+    public SecFilingResponse filing(@PathVariable Long id) {
+        return filingRepository.findById(id)
+                .map(SecFilingResponse::from)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SEC filing not found"));
+    }
+
+    @PostMapping("/api/sec/filings/{id}/fetch-document")
+    @Transactional
+    public SecFilingResponse fetchDocument(@PathVariable Long id) {
+        try {
+            return SecFilingResponse.from(documentFetcher.fetchDocument(id));
+        } catch (EntityNotFoundException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SEC filing not found", exception);
+        }
+    }
+
+    @PostMapping("/api/sec/fetch-documents")
+    public SecFilingDocumentFetcher.SecDocumentFetchSummary fetchDocuments() {
+        return documentFetcher.fetchPendingDocuments();
+    }
+
     public record SecFilingResponse(
             Long id,
             String cik,
@@ -51,7 +85,13 @@ public class SecController {
             String filingUrl,
             String signalType,
             String signalReason,
-            Instant processedAt
+            Instant processedAt,
+            String documentUrl,
+            String documentTextSnippet,
+            Instant documentFetchedAt,
+            String documentFetchStatus,
+            String documentSignalStrength,
+            String documentSignalReason
     ) {
         static SecFilingResponse from(SecFilingEntity filing) {
             return new SecFilingResponse(
@@ -65,7 +105,13 @@ public class SecController {
                     filing.getFilingUrl(),
                     filing.getSignalType(),
                     filing.getSignalReason(),
-                    filing.getProcessedAt()
+                    filing.getProcessedAt(),
+                    filing.getDocumentUrl(),
+                    filing.getDocumentTextSnippet(),
+                    filing.getDocumentFetchedAt(),
+                    filing.getDocumentFetchStatus(),
+                    filing.getDocumentSignalStrength(),
+                    filing.getDocumentSignalReason()
             );
         }
     }

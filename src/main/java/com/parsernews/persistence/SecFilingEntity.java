@@ -43,6 +43,23 @@ public class SecFilingEntity {
     @Column(length = 1024)
     private String signalReason;
 
+    @Column(length = 2048)
+    private String documentUrl;
+
+    @Column(length = 4000)
+    private String documentTextSnippet;
+
+    private Instant documentFetchedAt;
+
+    @Column(length = 32)
+    private String documentFetchStatus;
+
+    @Column(length = 32)
+    private String documentSignalStrength;
+
+    @Column(length = 1024)
+    private String documentSignalReason;
+
     @Column(nullable = false)
     private Instant processedAt = Instant.now();
 
@@ -113,5 +130,46 @@ public class SecFilingEntity {
 
     public Instant getProcessedAt() {
         return processedAt;
+    }
+
+    public String getDocumentUrl() {
+        return documentUrl;
+    }
+
+    public String getDocumentTextSnippet() {
+        return documentTextSnippet;
+    }
+
+    public Instant getDocumentFetchedAt() {
+        return documentFetchedAt;
+    }
+
+    public String getDocumentFetchStatus() {
+        return documentFetchStatus;
+    }
+
+    public String getDocumentSignalStrength() {
+        return documentSignalStrength;
+    }
+
+    public String getDocumentSignalReason() {
+        return documentSignalReason;
+    }
+
+    public void markDocumentFetched(String documentUrl, String snippet, String signalStrength, String signalReason) {
+        this.documentUrl = documentUrl;
+        this.documentTextSnippet = snippet;
+        this.documentFetchedAt = Instant.now();
+        this.documentFetchStatus = "FETCHED";
+        this.documentSignalStrength = signalStrength;
+        this.documentSignalReason = signalReason;
+    }
+
+    public void markDocumentFetchFailed(String documentUrl, String signalReason) {
+        this.documentUrl = documentUrl;
+        this.documentFetchedAt = Instant.now();
+        this.documentFetchStatus = "FAILED";
+        this.documentSignalStrength = "NONE";
+        this.documentSignalReason = signalReason;
     }
 }

@@ -911,6 +911,7 @@
             </div>
             <div class="actions">
                 <button id="secScanButton" type="button">Run SEC scan</button>
+                <button id="secFetchDocumentsButton" type="button">Fetch SEC documents</button>
                 <span class="badge" id="secStatusBadge">Loading</span>
             </div>
         </div>
@@ -924,6 +925,8 @@
                     <th>Form</th>
                     <th>Filing date</th>
                     <th>Signal</th>
+                    <th>Document</th>
+                    <th>Document signal</th>
                     <th>URL</th>
                 </tr>
                 </thead>
@@ -1120,6 +1123,7 @@
     const dryRunButtonTop = document.querySelector("#dryRunButtonTop");
     const reviewHighButton = document.querySelector("#reviewHighButton");
     const secScanButton = document.querySelector("#secScanButton");
+    const secFetchDocumentsButton = document.querySelector("#secFetchDocumentsButton");
     const errors = document.querySelector("#errors");
     const searchInput = document.querySelector("#searchInput");
     const strengthFilter = document.querySelector("#strengthFilter");
@@ -1148,6 +1152,7 @@
     dryRunButtonTop.addEventListener("click", runDryRun);
     reviewHighButton.addEventListener("click", reviewHighCandidates);
     secScanButton.addEventListener("click", runSecScan);
+    secFetchDocumentsButton.addEventListener("click", runSecFetchDocuments);
     searchInput.addEventListener("input", render);
     strengthFilter.addEventListener("change", render);
     sourceFilter.addEventListener("change", render);
@@ -1239,6 +1244,20 @@
             showError("SEC scan", error.message);
         } finally {
             setBusy(secScanButton, false, "Run SEC scan");
+        }
+    }
+
+    async function runSecFetchDocuments() {
+        setBusy(secFetchDocumentsButton, true, "Fetching SEC docs");
+        try {
+            await postJson("/api/sec/fetch-documents");
+            state.secFilings = await fetchJson("/api/sec/filings");
+            lastUpdated.textContent = new Date().toLocaleString();
+            renderSecWatchlist();
+        } catch (error) {
+            showError("SEC document fetch", error.message);
+        } finally {
+            setBusy(secFetchDocumentsButton, false, "Fetch SEC documents");
         }
     }
 
@@ -1392,7 +1411,7 @@
 
         const target = document.querySelector("#secFilings");
         if (!state.secFilings.length) {
-            target.innerHTML = `<tr><td colspan="6" class="muted">No SEC filings saved yet.</td></tr>`;
+            target.innerHTML = `<tr><td colspan="8" class="muted">No SEC filings saved yet.</td></tr>`;
             return;
         }
         target.innerHTML = state.secFilings.slice(0, 20).map(filing => `
@@ -1404,6 +1423,14 @@
                 <td>
                     ${badge(filing.signalType || "WATCHLIST_FORM", filing.signalType || "disabled")}
                     <div class="small-cell">${escapeText(filing.signalReason || "")}</div>
+                </td>
+                <td>
+                    ${badge(filing.documentFetchStatus || "NOT_FETCHED", filing.documentFetchStatus || "disabled")}
+                    <div class="small-cell">${formatDate(filing.documentFetchedAt)}</div>
+                </td>
+                <td>
+                    ${badge(filing.documentSignalStrength || "NONE", filing.documentSignalStrength || "disabled")}
+                    <div class="small-cell">${escapeText(filing.documentSignalReason || "")}</div>
                 </td>
                 <td><a href="${escapeAttr(filing.filingUrl)}" target="_blank" rel="noreferrer">SEC filing</a></td>
             </tr>
