@@ -903,6 +903,59 @@
         <div class="kv" id="reviewQuality"></div>
     </section>
 
+    <section class="panel review-quality">
+        <div class="panel-head">
+            <div>
+                <h2>Reviewed Candidates</h2>
+                <div class="muted">Already reviewed candidates and the reason they were marked useful or ignored.</div>
+            </div>
+            <span class="badge" id="reviewedCount">0</span>
+        </div>
+        <div class="filters" style="margin-bottom: 12px;">
+            <div class="control">
+                <label for="reviewedStatusFilter">Review status</label>
+                <select id="reviewedStatusFilter">
+                    <option value="">ALL</option>
+                    <option value="USEFUL">USEFUL</option>
+                    <option value="IGNORED">IGNORED</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="reviewedReasonFilter">Review reason</label>
+                <select id="reviewedReasonFilter">
+                    <option value="">ALL</option>
+                    <option value="GOOD_SIGNAL">GOOD_SIGNAL</option>
+                    <option value="FALSE_POSITIVE">FALSE_POSITIVE</option>
+                    <option value="PRIVATE_COMPANY">PRIVATE_COMPANY</option>
+                    <option value="NOT_TRADABLE">NOT_TRADABLE</option>
+                    <option value="LATE_STAGE_UPDATE">LATE_STAGE_UPDATE</option>
+                    <option value="LAW_FIRM_OR_SHAREHOLDER_ALERT">LAW_FIRM_OR_SHAREHOLDER_ALERT</option>
+                    <option value="WRONG_EXTRACTION">WRONG_EXTRACTION</option>
+                    <option value="DUPLICATE_OR_UPDATE">DUPLICATE_OR_UPDATE</option>
+                    <option value="OTHER">OTHER</option>
+                </select>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Source</th>
+                    <th>Status</th>
+                    <th>Reason</th>
+                    <th>Relevance</th>
+                    <th>Tradability</th>
+                    <th>Stage</th>
+                    <th>Reviewed at</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody id="reviewedCandidates"></tbody>
+            </table>
+        </div>
+    </section>
+
     <section class="grid">
         <section class="panel span-12" id="candidateSection">
             <div class="panel-head">
@@ -1018,6 +1071,7 @@
         previews: [],
         scanRuns: [],
         sourceStats: [],
+        reviewed: [],
         selectedPreviewId: null,
         autoRefreshTimer: null
     };
@@ -1040,6 +1094,8 @@
     const tradabilityFilter = document.querySelector("#tradabilityFilter");
     const dealStageFilter = document.querySelector("#dealStageFilter");
     const dealTimingFilter = document.querySelector("#dealTimingFilter");
+    const reviewedStatusFilter = document.querySelector("#reviewedStatusFilter");
+    const reviewedReasonFilter = document.querySelector("#reviewedReasonFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -1062,6 +1118,8 @@
     tradabilityFilter.addEventListener("change", render);
     dealStageFilter.addEventListener("change", render);
     dealTimingFilter.addEventListener("change", render);
+    reviewedStatusFilter.addEventListener("change", renderReviewedCandidates);
+    reviewedReasonFilter.addEventListener("change", renderReviewedCandidates);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -1076,7 +1134,8 @@
             fetchJson("/api/alerts/candidates"),
             fetchJson("/api/scan-runs"),
             postJson("/api/alerts/dry-run"),
-            fetchJson("/api/stats/sources")
+            fetchJson("/api/stats/sources"),
+            fetchJson("/api/articles/reviewed?limit=100")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1085,6 +1144,7 @@
         assignResult(results[4], "scanRuns", [], "Scan runs");
         assignResult(results[5], "previews", [], "Alert dry-run");
         assignResult(results[6], "sourceStats", [], "Source stats");
+        assignResult(results[7], "reviewed", [], "Reviewed candidates");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -1197,6 +1257,7 @@
         renderActionCenter();
         renderSourceQuality();
         renderReviewQuality();
+        renderReviewedCandidates();
         renderStatus();
         renderCandidates();
         renderAlertPreview();
@@ -1233,7 +1294,7 @@
     }
 
     function renderReviewQuality() {
-        const reviewed = state.candidates.filter(candidate => (candidate.manualReviewStatus || "PENDING") !== "PENDING");
+        const reviewed = state.reviewed;
         const useful = reviewed.filter(candidate => candidate.manualReviewStatus === "USEFUL").length;
         const ignored = reviewed.filter(candidate => candidate.manualReviewStatus === "IGNORED").length;
         const reasonCounts = reviewed.reduce((counts, candidate) => {
@@ -1252,6 +1313,37 @@
             ["Wrong extraction", reasonCounts.WRONG_EXTRACTION || 0],
             ["Duplicate/update", reasonCounts.DUPLICATE_OR_UPDATE || 0]
         ]);
+    }
+
+    function renderReviewedCandidates() {
+        const status = reviewedStatusFilter.value;
+        const reason = reviewedReasonFilter.value;
+        const reviewed = state.reviewed
+            .filter(item => !status || item.manualReviewStatus === status)
+            .filter(item => !reason || item.manualReviewReason === reason)
+            .sort((left, right) => dateValue(right.manualReviewedAt) - dateValue(left.manualReviewedAt));
+        document.querySelector("#reviewedCount").textContent = `${reviewed.length} / ${state.reviewed.length}`;
+        const target = document.querySelector("#reviewedCandidates");
+        if (reviewed.length === 0) {
+            target.innerHTML = `<tr><td colspan="9" class="muted">No reviewed candidates match current filters.</td></tr>`;
+            return;
+        }
+        target.innerHTML = reviewed.map(item => `
+            <tr>
+                <td class="title-cell">${escapeText(item.title)}</td>
+                <td>${escapeText(item.source || item.host)}<div class="small-cell">${escapeText(item.host || "")}</div></td>
+                <td>${badge(item.manualReviewStatus || "PENDING", item.manualReviewStatus === "USEFUL" ? "ok" : "disabled")}</td>
+                <td>${badge(item.manualReviewReason || "OTHER", item.manualReviewStatus === "USEFUL" ? "ok" : "warn")}${item.manualReviewNote ? `<div class="small-cell">${escapeText(item.manualReviewNote)}</div>` : ""}</td>
+                <td>${badge(item.dealRelevance || "UNKNOWN", item.dealRelevance || "UNKNOWN")}</td>
+                <td>${badge(item.tradability || "UNKNOWN", item.tradability || "UNKNOWN")}</td>
+                <td>${badge(item.dealStage || "UNKNOWN", item.dealStage || "UNKNOWN")}</td>
+                <td>${escapeText(formatDate(item.manualReviewedAt))}</td>
+                <td>
+                    <a href="${escapeAttr(item.url)}" target="_blank" rel="noreferrer">Open source</a>
+                    <button type="button" data-review-action="PENDING" data-article-id="${escapeAttr(item.id)}">Reset review</button>
+                </td>
+            </tr>
+        `).join("");
     }
 
     function renderActionCenter() {
@@ -1688,6 +1780,13 @@
         } : item;
         state.articles = state.articles.map(apply);
         state.candidates = state.candidates.map(apply);
+        if ((updated.manualReviewStatus || "PENDING") === "PENDING") {
+            state.reviewed = state.reviewed.filter(item => item.id !== updated.id);
+        } else {
+            const exists = state.reviewed.some(item => item.id === updated.id);
+            state.reviewed = (exists ? state.reviewed.map(apply) : [updated, ...state.reviewed])
+                    .sort((left, right) => dateValue(right.manualReviewedAt) - dateValue(left.manualReviewedAt));
+        }
     }
 
     function reviewReasonSelect(candidate) {
@@ -1845,6 +1944,13 @@
         const previewButton = event.target.closest("[data-preview-article-id]");
         if (previewButton) {
             previewCandidate(Number(previewButton.dataset.previewArticleId));
+        }
+    });
+
+    document.querySelector("#reviewedCandidates").addEventListener("click", event => {
+        const reviewButton = event.target.closest("[data-review-action]");
+        if (reviewButton) {
+            updateManualReview(Number(reviewButton.dataset.articleId), reviewButton.dataset.reviewAction);
         }
     });
 

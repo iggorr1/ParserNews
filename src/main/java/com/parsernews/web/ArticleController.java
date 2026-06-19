@@ -86,6 +86,27 @@ public class ArticleController {
         return candidates(limit);
     }
 
+    @GetMapping("/api/articles/reviewed")
+    @Transactional(readOnly = true)
+    public List<ArticleListResponse> reviewedArticles(
+            @RequestParam(required = false) ManualReviewStatus status,
+            @RequestParam(required = false) ManualReviewReason reason,
+            @RequestParam(defaultValue = "50") int limit
+    ) {
+        return eventRepository.findAll().stream()
+                .filter(event -> event.getCandidateStrength() != CandidateStrength.NONE)
+                .filter(event -> event.getManualReviewStatus() != ManualReviewStatus.PENDING)
+                .filter(event -> status == null || event.getManualReviewStatus() == status)
+                .filter(event -> reason == null || event.getManualReviewReason() == reason)
+                .sorted(Comparator.comparing(
+                        DetectedEventEntity::getManualReviewedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .limit(normalizedLimit(limit))
+                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService))
+                .toList();
+    }
+
     @GetMapping("/api/articles/{id}")
     @Transactional(readOnly = true)
     public ArticleDetailResponse article(@PathVariable Long id) {

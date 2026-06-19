@@ -96,6 +96,56 @@ class ArticleControllerTest {
     }
 
     @Test
+    void reviewedArticlesReturnOnlyReviewedCandidatesLatestFirst() {
+        NewsArticleEntity usefulArticle = article(11L, "Useful candidate", "https://example.com/useful");
+        NewsArticleEntity ignoredArticle = article(12L, "Ignored candidate", "https://example.com/ignored");
+        NewsArticleEntity pendingArticle = article(13L, "Pending candidate", "https://example.com/pending");
+        DetectedEventEntity useful = event(usefulArticle, 90, CandidateStrength.HIGH);
+        DetectedEventEntity ignored = event(ignoredArticle, 80, CandidateStrength.HIGH);
+        DetectedEventEntity pending = event(pendingArticle, 70, CandidateStrength.HIGH);
+        useful.updateManualReview(ManualReviewStatus.USEFUL, ManualReviewReason.GOOD_SIGNAL, "Good");
+        ignored.updateManualReview(ManualReviewStatus.IGNORED, ManualReviewReason.PRIVATE_COMPANY, "Private");
+        setField(useful, "manualReviewedAt", Instant.parse("2026-06-17T08:00:00Z"));
+        setField(ignored, "manualReviewedAt", Instant.parse("2026-06-17T09:00:00Z"));
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(eventRepository.findAll()).thenReturn(List.of(pending, useful, ignored));
+        ArticleController controller = controller(articleRepository, eventRepository);
+
+        List<ArticleController.ArticleListResponse> response = controller.reviewedArticles(null, null, 50);
+
+        assertThat(response).extracting(ArticleController.ArticleListResponse::id)
+                .containsExactly(12L, 11L);
+        assertThat(response.getFirst().manualReviewStatus()).isEqualTo(ManualReviewStatus.IGNORED);
+        assertThat(response.getFirst().manualReviewReason()).isEqualTo(ManualReviewReason.PRIVATE_COMPANY);
+    }
+
+    @Test
+    void reviewedArticlesCanFilterByStatusAndReason() {
+        NewsArticleEntity usefulArticle = article(14L, "Useful candidate", "https://example.com/useful-filter");
+        NewsArticleEntity ignoredArticle = article(15L, "Ignored candidate", "https://example.com/ignored-filter");
+        DetectedEventEntity useful = event(usefulArticle, 90, CandidateStrength.HIGH);
+        DetectedEventEntity ignored = event(ignoredArticle, 80, CandidateStrength.HIGH);
+        useful.updateManualReview(ManualReviewStatus.USEFUL, ManualReviewReason.GOOD_SIGNAL, "Good");
+        ignored.updateManualReview(ManualReviewStatus.IGNORED, ManualReviewReason.PRIVATE_COMPANY, "Private");
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(eventRepository.findAll()).thenReturn(List.of(useful, ignored));
+        ArticleController controller = controller(articleRepository, eventRepository);
+
+        List<ArticleController.ArticleListResponse> response = controller.reviewedArticles(
+                ManualReviewStatus.IGNORED,
+                ManualReviewReason.PRIVATE_COMPANY,
+                50
+        );
+
+        assertThat(response).hasSize(1);
+        assertThat(response.getFirst().id()).isEqualTo(15L);
+        assertThat(response.getFirst().manualReviewStatus()).isEqualTo(ManualReviewStatus.IGNORED);
+        assertThat(response.getFirst().manualReviewReason()).isEqualTo(ManualReviewReason.PRIVATE_COMPANY);
+    }
+
+    @Test
     void returnsNotFoundForMissingArticleId() {
         NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
         DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
@@ -276,10 +326,14 @@ class ArticleControllerTest {
     }
 
     private void setId(Object entity, Long id) {
+        setField(entity, "id", id);
+    }
+
+    private void setField(Object entity, String name, Object value) {
         try {
-            Field field = entity.getClass().getDeclaredField("id");
+            Field field = entity.getClass().getDeclaredField(name);
             field.setAccessible(true);
-            field.set(entity, id);
+            field.set(entity, value);
         } catch (ReflectiveOperationException exception) {
             throw new IllegalStateException(exception);
         }
