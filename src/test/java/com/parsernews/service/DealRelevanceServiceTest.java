@@ -88,6 +88,32 @@ class DealRelevanceServiceTest {
     }
 
     @Test
+    void classifiesPublicBuyerAcquiringPrivateLlcTargetAsPrivateCompanyAcquisition() {
+        NewsArticleEntity article = article(
+                "MDA Space announces definitive agreement to acquire US-based Blue Canyon Technologies LLC",
+                "MDA Space Ltd. (TSX:MDA) will acquire Blue Canyon Technologies LLC. "
+                        + "The transaction is subject to regulatory approvals and customary closing conditions."
+        );
+        DetectedEventEntity event = event(article, "MDA", CandidateStrength.HIGH, ReviewStatus.HIGH_PRIORITY_SIGNAL);
+
+        DealRelevanceService.RelevanceInsight insight = service.assess(article, event, likelyDeal(), terms(
+                "Blue Canyon Technologies LLC",
+                "MDA Space",
+                null,
+                PaymentType.UNKNOWN,
+                DealStatus.DEFINITIVE_AGREEMENT
+        ));
+
+        assertThat(insight.dealRelevance()).isEqualTo(DealRelevance.PRIVATE_COMPANY_ACQUISITION);
+        assertThat(insight.tradability()).isIn(Tradability.LOW, Tradability.NOT_TRADABLE);
+        assertThat(insight.relevanceWarnings()).contains(
+                "private company target",
+                "no public target signal",
+                "not directly tradable via target shares"
+        );
+    }
+
+    @Test
     void classifiesLawFirmAlertAsNotTradable() {
         NewsArticleEntity article = article(
                 "Shareholder Alert: Law Firm Investigates Proposed Merger",
@@ -156,6 +182,26 @@ class DealRelevanceServiceTest {
 
         assertThat(insight.dealRelevance()).isIn(DealRelevance.UNKNOWN, DealRelevance.NOT_TRADABLE);
         assertThat(insight.tradability()).isIn(Tradability.UNKNOWN, Tradability.NOT_TRADABLE);
+    }
+
+    @Test
+    void classifiesRoundupArticleAsNotTradable() {
+        NewsArticleEntity article = article(
+                "13 Press Releases You Need to See This Week",
+                "This weekly roundup includes companies that entered into definitive agreements."
+        );
+
+        DealRelevanceService.RelevanceInsight insight = service.assess(article, null, likelyDeal(), terms(
+                null,
+                null,
+                null,
+                PaymentType.UNKNOWN,
+                DealStatus.UNKNOWN
+        ));
+
+        assertThat(insight.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
+        assertThat(insight.tradability()).isEqualTo(Tradability.NOT_TRADABLE);
+        assertThat(insight.relevanceWarnings()).contains("roundup/aggregator article, not primary source");
     }
 
     private CandidateReviewInsightService.ReviewInsight likelyDeal() {

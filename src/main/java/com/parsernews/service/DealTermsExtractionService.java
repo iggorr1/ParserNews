@@ -273,6 +273,7 @@ public class DealTermsExtractionService {
 
     private String cleanCompany(String value) {
         String cleaned = safe(value)
+                .replaceAll("(?i)^(?:u\\.s\\.|us|united states|canada|canadian|uk|u\\.k\\.)-based\\s+", "")
                 .replaceAll("(?i)\\s+(inc\\.|incorporated|corp\\.|corporation|ltd\\.|limited|plc|llc)\\b.*$", " $1")
                 .replaceAll("(?i)\\s+(announces|announce|enters|entered|raises|raise|has|have)\\b.*$", "")
                 .replaceAll("[,;]+$", "")

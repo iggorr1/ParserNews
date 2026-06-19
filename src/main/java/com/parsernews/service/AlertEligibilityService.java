@@ -39,6 +39,9 @@ public class AlertEligibilityService {
     }
 
     public AlertEligibility evaluate(DetectedEventEntity event) {
+        if (NewsTextPatterns.isRoundupAggregator(event.getArticle().getHeadline(), event.getArticle().getArticleText())) {
+            return new AlertEligibility(false, "Roundup/aggregator article is not eligible for alert queueing.");
+        }
         return evaluate(
                 event.getCandidateStrength(),
                 event.getCandidateScore(),

@@ -82,6 +82,22 @@ class CandidateReviewInsightServiceTest {
         assertThat(insight.reviewRiskFlags()).contains("joint venture", "asset acquisition");
     }
 
+    @Test
+    void flagsPressReleaseRoundupAsLikelyNoise() {
+        NewsArticleEntity article = article(
+                "13 Press Releases You Need to See This Week",
+                "This weekly roundup includes definitive agreement headlines from several companies."
+        );
+        DetectedEventEntity event = event(article, CandidateStrength.HIGH, 90, ReviewStatus.MANUAL_REVIEW,
+                "definitive agreement",
+                "");
+
+        CandidateReviewInsightService.ReviewInsight insight = service.insight(article, event);
+
+        assertThat(insight.reviewVerdict()).isEqualTo(ReviewVerdict.LIKELY_NOISE);
+        assertThat(insight.reviewRiskFlags()).contains("roundup/aggregator article, not primary source");
+    }
+
     private NewsArticleEntity article(String headline, String body) {
         return new NewsArticleEntity(
                 new NewsSourceEntity("Test Source", NewsSourceType.RSS, "https://example.com/feed"),

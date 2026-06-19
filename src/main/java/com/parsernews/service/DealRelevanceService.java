@@ -33,6 +33,16 @@ public class DealRelevanceService {
         boolean lawFirm = reviewInsight != null
                 && reviewInsight.reviewVerdict() == ReviewVerdict.LAW_FIRM_ALERT
                 || containsAny(lower, "shareholder alert", "stockholder alert", "law firm", "class action");
+        if (NewsTextPatterns.isRoundupAggregator(article.getHeadline(), article.getArticleText())) {
+            warnings.add(NewsTextPatterns.ROUNDUP_AGGREGATOR_WARNING);
+            return new RelevanceInsight(
+                    DealRelevance.NOT_TRADABLE,
+                    Tradability.NOT_TRADABLE,
+                    "Roundup/aggregator article is not a primary tradable deal source.",
+                    warnings,
+                    positives
+            );
+        }
         if (lawFirm) {
             warnings.add("law firm/shareholder alert");
             return new RelevanceInsight(
@@ -44,7 +54,8 @@ public class DealRelevanceService {
             );
         }
 
-        boolean publicTarget = hasPublicTargetSignal(article, event, lower);
+        boolean privateTargetSignal = hasPrivateTargetSignal(dealTerms, lower);
+        boolean publicTarget = hasPublicTargetSignal(article, event, lower, privateTargetSignal);
         boolean publicBuyer = hasPublicBuyerSignal(event, lower);
         boolean cash = dealTerms.paymentType() == PaymentType.CASH || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
         boolean stock = dealTerms.paymentType() == PaymentType.STOCK || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
@@ -53,7 +64,10 @@ public class DealRelevanceService {
         boolean reverseTakeover = containsReverseTakeover(lower);
         boolean publicPublicMerger = publicTarget && publicBuyer
                 || containsAny(lower, "public-public", "combined company", "surviving entity", "stock-for-stock");
-        boolean privateCompanySignal = containsAny(lower, "portfolio company", "privately held", "private company", "terms were not disclosed", "terms undisclosed");
+        boolean privateCompanySignal = privateTargetSignal
+                || containsAny(lower, "portfolio company", "privately held", "private company",
+                "subsidiary", "business unit", "terms were not disclosed", "terms undisclosed",
+                "acquired from");
 
         if (!publicTarget) {
             warnings.add("target ticker missing");
@@ -80,6 +94,10 @@ public class DealRelevanceService {
         }
         if (privateCompanySignal) {
             warnings.add("private-company acquisition");
+        }
+        if (privateTargetSignal) {
+            warnings.add("private company target");
+            warnings.add("not directly tradable via target shares");
         }
         if (containsAny(lower, "terms were not disclosed", "terms undisclosed")) {
             warnings.add("terms undisclosed");
@@ -186,15 +204,35 @@ public class DealRelevanceService {
         );
     }
 
-    private boolean hasPublicTargetSignal(NewsArticleEntity article, DetectedEventEntity event, String lower) {
-        if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())) {
-            return true;
+    private boolean hasPublicTargetSignal(
+            NewsArticleEntity article,
+            DetectedEventEntity event,
+            String lower,
+            boolean privateTargetSignal
+    ) {
+        if (privateTargetSignal) {
+            return false;
         }
         if (event != null && event.getTargetTicker() != null && !event.getTargetTicker().isBlank()
                 && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())) {
             return true;
         }
+        if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())) {
+            return true;
+        }
         return PUBLIC_TICKER.matcher(lower).find();
+    }
+
+    private boolean hasPrivateTargetSignal(DealTermsExtractionService.DealTerms dealTerms, String lower) {
+        String target = dealTerms == null || dealTerms.targetCompany() == null
+                ? ""
+                : dealTerms.targetCompany().toLowerCase(Locale.ROOT);
+        return target.contains(" llc")
+                || target.endsWith("llc")
+                || containsAny(target, "subsidiary", "business unit", "portfolio company")
+                || containsAny(lower, "private company", "portfolio company",
+                "terms were not disclosed", "terms undisclosed", "acquired from",
+                "subsidiary", "business unit");
     }
 
     private boolean hasPublicBuyerSignal(DetectedEventEntity event, String lower) {

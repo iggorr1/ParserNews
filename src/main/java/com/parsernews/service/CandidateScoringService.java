@@ -33,6 +33,9 @@ public class CandidateScoringService {
     public CandidateScore score(String headline, String body) {
         String text = ((headline == null ? "" : headline) + " " + (body == null ? "" : body))
                 .toLowerCase(Locale.ROOT);
+        if (NewsTextPatterns.isRoundupAggregator(headline, body)) {
+            return new CandidateScore(0, CandidateStrength.NONE, "Roundup/aggregator article, not primary source.");
+        }
         CandidateScore high = match(text, CandidateStrength.HIGH, 90, HIGH_SIGNALS);
         if (high.strength() != CandidateStrength.NONE) {
             return high;

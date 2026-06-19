@@ -54,6 +54,18 @@ class CandidateScoringServiceTest {
     }
 
     @Test
+    void roundupArticleDoesNotBecomeHighCandidate() {
+        CandidateScoringService.CandidateScore score = scoringService.score(
+                "13 Press Releases You Need to See This Week",
+                "This weekly roundup includes a company that entered into a definitive agreement."
+        );
+
+        assertThat(score.strength()).isEqualTo(CandidateStrength.NONE);
+        assertThat(score.score()).isZero();
+        assertThat(score.reason()).contains("Roundup/aggregator");
+    }
+
+    @Test
     void strongerSignalOverridesWeakerSignal() {
         CandidateScoringService.CandidateScore score = scoringService.score(
                 "Company rumor after merger agreement",

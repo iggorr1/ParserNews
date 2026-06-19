@@ -56,6 +56,21 @@ class DealTermsExtractionServiceTest {
     }
 
     @Test
+    void extractsUsBasedLlcTargetWithoutPrefix() {
+        NewsArticleEntity article = article(
+                "MDA Space announces definitive agreement to acquire US-based Blue Canyon Technologies LLC",
+                "MDA Space will acquire Blue Canyon Technologies LLC."
+        );
+        DetectedEventEntity event = event(article, CandidateStrength.HIGH, ReviewStatus.HIGH_PRIORITY_SIGNAL);
+
+        DealTermsExtractionService.DealTerms terms = service.extract(article, event, likelyDeal());
+
+        assertThat(terms.buyerCompany()).isEqualTo("MDA Space");
+        assertThat(terms.targetCompany()).isEqualTo("Blue Canyon Technologies LLC");
+        assertThat(terms.dealStatus()).isEqualTo(DealStatus.DEFINITIVE_AGREEMENT);
+    }
+
+    @Test
     void extractsAcquiredByAllCashTransaction() {
         NewsArticleEntity article = article(
                 "Company Y to be acquired by Company X in all-cash transaction",

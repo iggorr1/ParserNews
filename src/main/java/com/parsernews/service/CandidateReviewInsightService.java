@@ -59,6 +59,9 @@ public class CandidateReviewInsightService {
         riskFlags.addAll(uniqueMatches(text, LAW_FIRM_RULES));
         riskFlags.addAll(uniqueMatches(text, FINANCING_RULES));
         riskFlags.addAll(uniqueMatches(text, NOISE_RULES));
+        if (NewsTextPatterns.isRoundupAggregator(article.getHeadline(), article.getArticleText())) {
+            addIfMissing(riskFlags, NewsTextPatterns.ROUNDUP_AGGREGATOR_WARNING);
+        }
 
         CandidateStrength strength = event == null ? CandidateStrength.NONE : event.getCandidateStrength();
         int score = event == null ? 0 : event.getCandidateScore();
@@ -82,7 +85,9 @@ public class CandidateReviewInsightService {
         }
 
         ReviewVerdict verdict;
-        if (containsAny(riskFlags, "shareholder alert", "law firm investigation", "class action")) {
+        if (containsAny(riskFlags, NewsTextPatterns.ROUNDUP_AGGREGATOR_WARNING)) {
+            verdict = ReviewVerdict.LIKELY_NOISE;
+        } else if (containsAny(riskFlags, "shareholder alert", "law firm investigation", "class action")) {
             verdict = ReviewVerdict.LAW_FIRM_ALERT;
         } else if (containsAny(riskFlags, "public offering", "registered direct offering", "private placement", "debt tender offer")) {
             verdict = ReviewVerdict.FINANCING_OR_OFFERING;

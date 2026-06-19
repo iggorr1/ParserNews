@@ -28,6 +28,16 @@ public class DealStageDetectionService {
         List<String> warnings = new ArrayList<>();
         List<String> positives = new ArrayList<>();
 
+        if (NewsTextPatterns.isRoundupAggregator(article.getHeadline(), article.getArticleText())) {
+            warnings.add(NewsTextPatterns.ROUNDUP_AGGREGATOR_WARNING);
+            return new StageInsight(
+                    DealStage.UNKNOWN,
+                    DealTiming.UNKNOWN,
+                    "Roundup/aggregator article is not a primary deal timing source.",
+                    warnings,
+                    positives
+            );
+        }
         if (isLawFirm(lower, reviewInsight, relevanceInsight)) {
             warnings.add("law firm/shareholder alert");
             return new StageInsight(
@@ -89,8 +99,7 @@ public class DealStageDetectionService {
                 positives
             );
         }
-        if (containsAny(lower, "regulatory approval", "received regulatory approvals",
-                "approval from regulators", "regulatory approvals received", "received all required regulatory")) {
+        if (isActualRegulatoryApproval(lower)) {
             warnings.add("not initial announcement");
             warnings.add("regulatory approval update");
             return new StageInsight(
@@ -181,11 +190,21 @@ public class DealStageDetectionService {
                 "announces shareholder approval", "announces stockholder approval");
     }
 
+    private boolean isActualRegulatoryApproval(String lower) {
+        return containsAny(lower, "received regulatory approval", "received regulatory approvals",
+                "obtained regulatory approval", "obtained regulatory approvals",
+                "regulatory approval received", "regulatory approvals received",
+                "received all required regulatory", "approval from regulators");
+    }
+
     private boolean containsApprovalRequired(String lower) {
         return containsAny(lower, "subject to shareholder approval", "requires shareholder approval",
                 "subject to stockholder approval", "requires stockholder approval",
                 "approval of the shareholders", "approval of shareholders",
-                "subject to regulatory approval", "requires regulatory approval", "approval required");
+                "subject to regulatory approval", "subject to regulatory approvals",
+                "pending regulatory approval", "pending regulatory approvals",
+                "requires regulatory approval", "requires regulatory approvals",
+                "customary closing conditions, including regulatory approvals", "approval required");
     }
 
     private boolean containsReverseTakeover(String lower) {

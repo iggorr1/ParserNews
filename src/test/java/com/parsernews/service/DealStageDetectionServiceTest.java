@@ -105,6 +105,27 @@ class DealStageDetectionServiceTest {
     }
 
     @Test
+    void subjectToRegulatoryApprovalDoesNotBecomeLateStageApproval() {
+        NewsArticleEntity article = article(
+                "MDA Space announces definitive agreement to acquire US-based Blue Canyon Technologies LLC",
+                "The transaction is subject to regulatory approvals and customary closing conditions."
+        );
+
+        DealStageDetectionService.StageInsight insight = service.detect(
+                article,
+                event(article),
+                terms(DealStatus.DEFINITIVE_AGREEMENT),
+                likelyDeal(),
+                relevance(DealRelevance.PRIVATE_COMPANY_ACQUISITION, Tradability.NOT_TRADABLE)
+        );
+
+        assertThat(insight.dealStage()).isIn(DealStage.INITIAL_ANNOUNCEMENT, DealStage.DEFINITIVE_AGREEMENT);
+        assertThat(insight.dealStage()).isNotEqualTo(DealStage.REGULATORY_APPROVAL);
+        assertThat(insight.dealTiming()).isEqualTo(DealTiming.EARLY);
+        assertThat(insight.dealTiming()).isNotEqualTo(DealTiming.LATE_STAGE);
+    }
+
+    @Test
     void detectsCompletedAcquisitionAsPostClose() {
         NewsArticleEntity article = article(
                 "Company X Completes Acquisition of Company Y",
