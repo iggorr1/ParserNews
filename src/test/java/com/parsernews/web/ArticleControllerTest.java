@@ -16,6 +16,7 @@ import com.parsernews.service.DealRelevanceService;
 import com.parsernews.service.DealStageDetectionService;
 import com.parsernews.service.DealTermsExtractionService;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.lang.reflect.Field;
@@ -143,6 +144,72 @@ class ArticleControllerTest {
         assertThat(response.getFirst().id()).isEqualTo(15L);
         assertThat(response.getFirst().manualReviewStatus()).isEqualTo(ManualReviewStatus.IGNORED);
         assertThat(response.getFirst().manualReviewReason()).isEqualTo(ManualReviewReason.PRIVATE_COMPANY);
+    }
+
+    @Test
+    void candidateCsvExportReturnsCsvWithEscapedValues() {
+        NewsArticleEntity article = article(
+                16L,
+                "Target \"Alpha\", Inc.\nDeal",
+                "Target Alpha enters into definitive agreement. Shareholders will receive $5.00 per share in cash.",
+                "https://example.com/export-candidate"
+        );
+        DetectedEventEntity event = event(article, 90, CandidateStrength.HIGH);
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(eventRepository.findAll()).thenReturn(List.of(event));
+        ArticleController controller = controller(articleRepository, eventRepository);
+
+        ResponseEntity<String> response = controller.exportCandidateArticlesCsv(
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                500
+        );
+
+        assertThat(response.getHeaders().getContentType().toString()).contains("text/csv");
+        assertThat(response.getBody()).startsWith("id,title,url,source,host,publishedAt,candidateStrength,candidateScore");
+        assertThat(response.getBody()).contains("\"Target \"\"Alpha\"\", Inc.\nDeal\"");
+        assertThat(response.getBody()).contains("HIGH");
+        assertThat(response.getBody()).contains("PUBLIC_CASH_ACQUISITION");
+    }
+
+    @Test
+    void reviewedCsvExportReturnsReviewedRowsAndSupportsFilters() {
+        NewsArticleEntity usefulArticle = article(17L, "Useful export candidate", "https://example.com/useful-export");
+        NewsArticleEntity ignoredArticle = article(18L, "Ignored export candidate", "https://example.com/ignored-export");
+        NewsArticleEntity pendingArticle = article(19L, "Pending export candidate", "https://example.com/pending-export");
+        DetectedEventEntity useful = event(usefulArticle, 90, CandidateStrength.HIGH);
+        DetectedEventEntity ignored = event(ignoredArticle, 80, CandidateStrength.HIGH);
+        DetectedEventEntity pending = event(pendingArticle, 70, CandidateStrength.HIGH);
+        useful.updateManualReview(ManualReviewStatus.USEFUL, ManualReviewReason.GOOD_SIGNAL, "Good signal");
+        ignored.updateManualReview(ManualReviewStatus.IGNORED, ManualReviewReason.PRIVATE_COMPANY, "Private company");
+        NewsArticleRepository articleRepository = mock(NewsArticleRepository.class);
+        DetectedEventRepository eventRepository = mock(DetectedEventRepository.class);
+        when(eventRepository.findAll()).thenReturn(List.of(useful, ignored, pending));
+        ArticleController controller = controller(articleRepository, eventRepository);
+
+        ResponseEntity<String> response = controller.exportReviewedArticlesCsv(
+                ManualReviewStatus.IGNORED,
+                ManualReviewReason.PRIVATE_COMPANY,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                500
+        );
+
+        assertThat(response.getHeaders().getContentType().toString()).contains("text/csv");
+        assertThat(response.getBody()).contains("manualReviewStatus,manualReviewReason,manualReviewNote,manualReviewedAt");
+        assertThat(response.getBody()).contains("Ignored export candidate");
+        assertThat(response.getBody()).contains("PRIVATE_COMPANY");
+        assertThat(response.getBody()).doesNotContain("Useful export candidate");
+        assertThat(response.getBody()).doesNotContain("Pending export candidate");
     }
 
     @Test

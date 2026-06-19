@@ -909,7 +909,10 @@
                 <h2>Reviewed Candidates</h2>
                 <div class="muted">Already reviewed candidates and the reason they were marked useful or ignored.</div>
             </div>
-            <span class="badge" id="reviewedCount">0</span>
+            <div class="actions">
+                <a class="button" id="exportReviewedCsv" href="/api/articles/reviewed/export.csv">Export reviewed CSV</a>
+                <span class="badge" id="reviewedCount">0</span>
+            </div>
         </div>
         <div class="filters" style="margin-bottom: 12px;">
             <div class="control">
@@ -960,7 +963,10 @@
         <section class="panel span-12" id="candidateSection">
             <div class="panel-head">
                 <h2>Candidates</h2>
-                <span class="badge" id="candidateCount">0</span>
+                <div class="actions">
+                    <a class="button" id="exportCandidatesCsv" href="/api/articles/candidates/export.csv">Export candidates CSV</a>
+                    <span class="badge" id="candidateCount">0</span>
+                </div>
             </div>
             <div class="card-list" id="candidates"></div>
         </section>
@@ -1100,6 +1106,8 @@
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
     const lastUpdated = document.querySelector("#lastUpdated");
+    const exportCandidatesCsv = document.querySelector("#exportCandidatesCsv");
+    const exportReviewedCsv = document.querySelector("#exportReviewedCsv");
 
     refreshButton.addEventListener("click", loadDashboard);
     scanButton.addEventListener("click", runManualScan);
@@ -1263,6 +1271,7 @@
         renderAlertPreview();
         renderArticles();
         renderScanRuns();
+        updateExportLinks();
     }
 
     function renderSourceQuality() {
@@ -1323,6 +1332,7 @@
             .filter(item => !reason || item.manualReviewReason === reason)
             .sort((left, right) => dateValue(right.manualReviewedAt) - dateValue(left.manualReviewedAt));
         document.querySelector("#reviewedCount").textContent = `${reviewed.length} / ${state.reviewed.length}`;
+        updateExportLinks();
         const target = document.querySelector("#reviewedCandidates");
         if (reviewed.length === 0) {
             target.innerHTML = `<tr><td colspan="9" class="muted">No reviewed candidates match current filters.</td></tr>`;
@@ -1464,6 +1474,7 @@
     function renderCandidates() {
         const candidates = filteredItems(state.candidates, {candidateList: true});
         document.querySelector("#candidateCount").textContent = `${candidates.length} / ${state.candidates.length}`;
+        updateExportLinks();
         const target = document.querySelector("#candidates");
         if (candidates.length === 0) {
             target.innerHTML = `<div class="notice">No candidates match current filters.</div>`;
@@ -1867,6 +1878,34 @@
         return warnings.some(warning =>
             ["target unknown", "buyer unknown", "offer price missing", "payment type unknown"].includes(warning)
         );
+    }
+
+    function updateExportLinks() {
+        const sharedFilters = {
+            source: sourceFilter.value,
+            strength: strengthFilter.value,
+            tradability: tradabilityFilter.value,
+            dealRelevance: relevanceFilter.value,
+            dealStage: dealStageFilter.value,
+            dealTiming: dealTimingFilter.value,
+            limit: "500"
+        };
+        exportCandidatesCsv.href = exportUrl("/api/articles/candidates/export.csv", sharedFilters);
+        exportReviewedCsv.href = exportUrl("/api/articles/reviewed/export.csv", {
+            ...sharedFilters,
+            status: reviewedStatusFilter.value,
+            reason: reviewedReasonFilter.value
+        });
+    }
+
+    function exportUrl(path, params) {
+        const query = new URLSearchParams();
+        Object.entries(params).forEach(([key, value]) => {
+            if (value) {
+                query.set(key, value);
+            }
+        });
+        return `${path}?${query.toString()}`;
     }
 
     function chipList(label, values, kind) {

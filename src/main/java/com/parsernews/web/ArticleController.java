@@ -15,7 +15,10 @@ import com.parsernews.service.DealRelevanceService;
 import com.parsernews.service.DealStageDetectionService;
 import com.parsernews.service.DealTermsExtractionService;
 import com.parsernews.util.ArticleTextCleaner;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -27,7 +30,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 
@@ -86,6 +91,28 @@ public class ArticleController {
         return candidates(limit);
     }
 
+    @GetMapping(value = "/api/articles/candidates/export.csv", produces = "text/csv")
+    @Transactional(readOnly = true)
+    public ResponseEntity<String> exportCandidateArticlesCsv(
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) CandidateStrength strength,
+            @RequestParam(required = false) com.parsernews.model.Tradability tradability,
+            @RequestParam(required = false) com.parsernews.model.DealRelevance dealRelevance,
+            @RequestParam(required = false) com.parsernews.model.DealStage dealStage,
+            @RequestParam(required = false) com.parsernews.model.DealTiming dealTiming,
+            @RequestParam(defaultValue = "500") int limit
+    ) {
+        List<ArticleListResponse> rows = eventRepository.findAll().stream()
+                .filter(event -> event.getCandidateStrength() != CandidateStrength.NONE)
+                .sorted(Comparator.comparingInt(DetectedEventEntity::getCandidateScore).reversed()
+                        .thenComparing(DetectedEventEntity::getDetectedAt, Comparator.reverseOrder()))
+                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService))
+                .filter(row -> matchesExportFilters(row, source, strength, tradability, dealRelevance, dealStage, dealTiming))
+                .limit(normalizedExportLimit(limit))
+                .toList();
+        return csvResponse(toCsv(rows), "parsernews-candidates.csv");
+    }
+
     @GetMapping("/api/articles/reviewed")
     @Transactional(readOnly = true)
     public List<ArticleListResponse> reviewedArticles(
@@ -105,6 +132,35 @@ public class ArticleController {
                 .limit(normalizedLimit(limit))
                 .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService))
                 .toList();
+    }
+
+    @GetMapping(value = "/api/articles/reviewed/export.csv", produces = "text/csv")
+    @Transactional(readOnly = true)
+    public ResponseEntity<String> exportReviewedArticlesCsv(
+            @RequestParam(required = false) ManualReviewStatus status,
+            @RequestParam(required = false) ManualReviewReason reason,
+            @RequestParam(required = false) String source,
+            @RequestParam(required = false) CandidateStrength strength,
+            @RequestParam(required = false) com.parsernews.model.Tradability tradability,
+            @RequestParam(required = false) com.parsernews.model.DealRelevance dealRelevance,
+            @RequestParam(required = false) com.parsernews.model.DealStage dealStage,
+            @RequestParam(required = false) com.parsernews.model.DealTiming dealTiming,
+            @RequestParam(defaultValue = "500") int limit
+    ) {
+        List<ArticleListResponse> rows = eventRepository.findAll().stream()
+                .filter(event -> event.getCandidateStrength() != CandidateStrength.NONE)
+                .filter(event -> event.getManualReviewStatus() != ManualReviewStatus.PENDING)
+                .filter(event -> status == null || event.getManualReviewStatus() == status)
+                .filter(event -> reason == null || event.getManualReviewReason() == reason)
+                .sorted(Comparator.comparing(
+                        DetectedEventEntity::getManualReviewedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())
+                ))
+                .map(event -> ArticleListResponse.from(event.getArticle(), event, reviewInsightService, dealTermsExtractionService, dealRelevanceService, dealStageDetectionService))
+                .filter(row -> matchesExportFilters(row, source, strength, tradability, dealRelevance, dealStage, dealTiming))
+                .limit(normalizedExportLimit(limit))
+                .toList();
+        return csvResponse(toCsv(rows), "parsernews-reviewed-candidates.csv");
     }
 
     @GetMapping("/api/articles/{id}")
@@ -144,6 +200,132 @@ public class ArticleController {
             return 1;
         }
         return Math.min(limit, 200);
+    }
+
+    private int normalizedExportLimit(int limit) {
+        if (limit < 1) {
+            return 1;
+        }
+        return Math.min(limit, 500);
+    }
+
+    private boolean matchesExportFilters(
+            ArticleListResponse row,
+            String source,
+            CandidateStrength strength,
+            com.parsernews.model.Tradability tradability,
+            com.parsernews.model.DealRelevance dealRelevance,
+            com.parsernews.model.DealStage dealStage,
+            com.parsernews.model.DealTiming dealTiming
+    ) {
+        return matchesSource(row, source)
+                && (strength == null || row.candidateStrength() == strength)
+                && (tradability == null || row.tradability() == tradability)
+                && (dealRelevance == null || row.dealRelevance() == dealRelevance)
+                && (dealStage == null || row.dealStage() == dealStage)
+                && (dealTiming == null || row.dealTiming() == dealTiming);
+    }
+
+    private boolean matchesSource(ArticleListResponse row, String source) {
+        if (source == null || source.isBlank()) {
+            return true;
+        }
+        String normalizedSource = source.toLowerCase();
+        return (row.source() != null && row.source().toLowerCase().contains(normalizedSource))
+                || (row.host() != null && row.host().toLowerCase().contains(normalizedSource));
+    }
+
+    private ResponseEntity<String> csvResponse(String csv, String filename) {
+        return ResponseEntity.ok()
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(csv);
+    }
+
+    private String toCsv(List<ArticleListResponse> rows) {
+        StringBuilder builder = new StringBuilder();
+        appendCsvRow(builder, List.of(
+                "id",
+                "title",
+                "url",
+                "source",
+                "host",
+                "publishedAt",
+                "candidateStrength",
+                "candidateScore",
+                "reviewVerdict",
+                "reviewSummary",
+                "dealStatus",
+                "dealConfidence",
+                "targetCompany",
+                "buyerCompany",
+                "offerPrice",
+                "offerCurrency",
+                "paymentType",
+                "dealRelevance",
+                "tradability",
+                "relevanceSummary",
+                "dealStage",
+                "dealTiming",
+                "stageSummary",
+                "manualReviewStatus",
+                "manualReviewReason",
+                "manualReviewNote",
+                "manualReviewedAt"
+        ));
+        rows.forEach(row -> appendCsvRow(builder, Arrays.asList(
+                row.id(),
+                row.title(),
+                row.url(),
+                row.source(),
+                row.host(),
+                row.publishedAt(),
+                row.candidateStrength(),
+                row.candidateScore(),
+                row.reviewVerdict(),
+                row.reviewSummary(),
+                row.dealStatus(),
+                row.dealConfidence(),
+                row.targetCompany(),
+                row.buyerCompany(),
+                row.offerPrice(),
+                row.offerCurrency(),
+                row.paymentType(),
+                row.dealRelevance(),
+                row.tradability(),
+                row.relevanceSummary(),
+                row.dealStage(),
+                row.dealTiming(),
+                row.stageSummary(),
+                row.manualReviewStatus(),
+                row.manualReviewReason(),
+                row.manualReviewNote(),
+                row.manualReviewedAt()
+        )));
+        return builder.toString();
+    }
+
+    private void appendCsvRow(StringBuilder builder, List<?> values) {
+        for (int index = 0; index < values.size(); index++) {
+            if (index > 0) {
+                builder.append(',');
+            }
+            builder.append(csvCell(values.get(index)));
+        }
+        builder.append('\n');
+    }
+
+    private String csvCell(Object value) {
+        if (value == null) {
+            return "";
+        }
+        String text = value.toString();
+        boolean needsQuotes = text.contains(",")
+                || text.contains("\"")
+                || text.contains("\n")
+                || text.contains("\r");
+        String escaped = text.replace("\"", "\"\"");
+        return needsQuotes ? "\"" + escaped + "\"" : escaped;
     }
 
     public record ArticleListResponse(
