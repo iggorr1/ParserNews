@@ -62,6 +62,12 @@ public class DealTermsExtractionService {
         if (paymentType == PaymentType.UNKNOWN) {
             warnings.add("payment type unknown");
         }
+        if (containsAny(lower, "non-binding letter of intent", "non-binding loi", "letter of intent")) {
+            warnings.add("non-binding LOI");
+        }
+        if (definitiveAgreementNotSigned(lower)) {
+            warnings.add("definitive agreement not signed");
+        }
         if (article.getTicker() == null || article.getTicker().isBlank() || "UNKNOWN".equalsIgnoreCase(article.getTicker())) {
             warnings.add("ticker unknown");
         }
@@ -170,6 +176,14 @@ public class DealTermsExtractionService {
     }
 
     private DealStatus dealStatus(String lower) {
+        if (containsAny(lower, "non-binding letter of intent", "non-binding loi")) {
+            return DealStatus.RUMOR_OR_EXPLORATION;
+        }
+        if (definitiveAgreementNotSigned(lower)) {
+            return containsAny(lower, "proposed transaction", "proposed reverse takeover", "proposal")
+                    ? DealStatus.PROPOSAL
+                    : DealStatus.RUMOR_OR_EXPLORATION;
+        }
         if (lower.contains("definitive merger agreement") || lower.contains("merger agreement")) {
             return DealStatus.MERGER_AGREEMENT;
         }
@@ -189,6 +203,21 @@ public class DealTermsExtractionService {
             return DealStatus.RUMOR_OR_EXPLORATION;
         }
         return DealStatus.UNKNOWN;
+    }
+
+    private boolean definitiveAgreementNotSigned(String lower) {
+        return containsAny(lower, "definitive agreement expected", "definitive agreement is expected",
+                "subject to entering into definitive agreement", "will enter into definitive agreement",
+                "expected to enter into a definitive agreement", "execution of the definitive agreement");
+    }
+
+    private boolean containsAny(String lower, String... phrases) {
+        for (String phrase : phrases) {
+            if (lower.contains(phrase)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private DealConfidence confidence(

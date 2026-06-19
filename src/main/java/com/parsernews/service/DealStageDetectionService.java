@@ -48,19 +48,45 @@ public class DealStageDetectionService {
                     DealTiming.POST_CLOSE,
                     "Deal appears completed or closed; this is after the main tradable announcement window.",
                     warnings,
+                positives
+            );
+        }
+        if (containsReverseTakeover(lower)) {
+            warnings.add("reverse takeover / RTO");
+            if (containsAny(lower, "non-binding letter of intent", "non-binding loi", "letter of intent")) {
+                warnings.add("non-binding LOI");
+            }
+            if (containsAny(lower, "subject to entering into definitive agreement", "definitive agreement expected",
+                    "definitive agreement is expected", "will enter into definitive agreement",
+                    "expected to enter into a definitive agreement", "execution of the definitive agreement")) {
+                warnings.add("definitive agreement not signed");
+            }
+            if (containsAny(lower, "trading has been halted", "trading halted", "trading halt", "has been halted", "halted pending")) {
+                warnings.add("trading halted");
+            }
+            if (containsApprovalRequired(lower)) {
+                warnings.add("shareholder/regulatory approvals required");
+            }
+            positives.add("proposed reverse takeover");
+            return new StageInsight(
+                    containsAny(lower, "non-binding letter of intent", "non-binding loi")
+                            ? DealStage.RUMOR_OR_EXPLORATION
+                            : DealStage.INITIAL_ANNOUNCEMENT,
+                    DealTiming.EARLY,
+                    "Proposed reverse takeover/RTO appears early and subject to later agreements or approvals.",
+                    warnings,
                     positives
             );
         }
-        if (containsAny(lower, "shareholder approval", "stockholder approval", "shareholders approved",
-                "stockholders approved", "approved by shareholders", "approved by stockholders")) {
+        if (isActualShareholderApproval(lower)) {
             warnings.add("not initial announcement");
             warnings.add("shareholder approval update");
             return new StageInsight(
                     DealStage.SHAREHOLDER_APPROVAL,
                     DealTiming.LATE_STAGE,
-                    "Shareholder approval suggests this is a late-stage deal update.",
-                    warnings,
-                    positives
+                "Shareholder approval suggests this is a late-stage deal update.",
+                warnings,
+                positives
             );
         }
         if (containsAny(lower, "regulatory approval", "received regulatory approvals",
@@ -93,7 +119,7 @@ public class DealStageDetectionService {
                     lower.contains("revised proposal") || lower.contains("improved proposal") ? DealTiming.MID_STAGE : DealTiming.EARLY,
                     "Offer increase or revised proposal can be useful because terms changed publicly.",
                     warnings,
-                    positives
+                positives
             );
         }
         if (containsAny(lower, "rumor", "exploring sale", "strategic alternatives", "considering sale")) {
@@ -146,6 +172,25 @@ public class DealStageDetectionService {
         return (reviewInsight != null && reviewInsight.reviewVerdict() == ReviewVerdict.LAW_FIRM_ALERT)
                 || (relevanceInsight != null && relevanceInsight.dealRelevance() == DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT)
                 || containsAny(lower, "shareholder alert", "stockholder alert", "law firm", "class action", "investigation");
+    }
+
+    private boolean isActualShareholderApproval(String lower) {
+        return containsAny(lower, "shareholders approved", "stockholders approved",
+                "approved by shareholders", "approved by stockholders",
+                "received shareholder approval", "received stockholder approval",
+                "announces shareholder approval", "announces stockholder approval");
+    }
+
+    private boolean containsApprovalRequired(String lower) {
+        return containsAny(lower, "subject to shareholder approval", "requires shareholder approval",
+                "subject to stockholder approval", "requires stockholder approval",
+                "approval of the shareholders", "approval of shareholders",
+                "subject to regulatory approval", "requires regulatory approval", "approval required");
+    }
+
+    private boolean containsReverseTakeover(String lower) {
+        return containsAny(lower, "reverse takeover", "resulting issuer", "policy 5.2")
+                || lower.matches(".*\\brto\\b.*");
     }
 
     private String combinedText(

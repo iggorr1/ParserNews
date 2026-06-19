@@ -50,6 +50,7 @@ public class DealRelevanceService {
         boolean stock = dealTerms.paymentType() == PaymentType.STOCK || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
         boolean perShare = lower.contains("per share") || lower.contains("a share");
         boolean takePrivate = containsAny(lower, "take private", "going private", "privately held", "private equity");
+        boolean reverseTakeover = containsReverseTakeover(lower);
         boolean publicPublicMerger = publicTarget && publicBuyer
                 || containsAny(lower, "public-public", "combined company", "surviving entity", "stock-for-stock");
         boolean privateCompanySignal = containsAny(lower, "portfolio company", "privately held", "private company", "terms were not disclosed", "terms undisclosed");
@@ -74,13 +75,46 @@ public class DealRelevanceService {
         if (stock && !cash) {
             warnings.add("all-stock deal");
         }
+        if (!cash) {
+            warnings.add("no cash offer");
+        }
         if (privateCompanySignal) {
             warnings.add("private-company acquisition");
         }
         if (containsAny(lower, "terms were not disclosed", "terms undisclosed")) {
             warnings.add("terms undisclosed");
         }
+        if (reverseTakeover) {
+            warnings.add("reverse takeover / RTO");
+            warnings.add("not take-private");
+        }
+        if (containsAny(lower, "non-binding letter of intent", "non-binding loi", "letter of intent")) {
+            warnings.add("non-binding LOI");
+        }
+        if (containsAny(lower, "definitive agreement expected", "subject to entering into definitive agreement",
+                "will enter into definitive agreement", "definitive agreement is expected",
+                "expected to enter into a definitive agreement", "execution of the definitive agreement")) {
+            warnings.add("definitive agreement not signed");
+        }
+        if (containsAny(lower, "trading has been halted", "trading halted", "trading halt", "has been halted", "halted pending")) {
+            warnings.add("trading halted");
+        }
+        if (containsAny(lower, "subject to shareholder approval", "requires shareholder approval",
+                "approval of the shareholders", "approval of shareholders", "subject to regulatory approval",
+                "regulatory approvals required", "approval required")) {
+            warnings.add("shareholder/regulatory approvals required");
+        }
 
+        if (reverseTakeover) {
+            positives.add("reverse takeover signal");
+            return new RelevanceInsight(
+                    DealRelevance.REVERSE_TAKEOVER,
+                    cash ? Tradability.LOW : Tradability.NOT_TRADABLE,
+                    "Reverse takeover/RTO structure detected; do not treat this as a cash take-private or public stock merger.",
+                    warnings,
+                    positives
+            );
+        }
         if (takePrivate && publicTarget && cash && perShare) {
             positives.add("take-private cash/per-share signal");
             return new RelevanceInsight(
@@ -225,6 +259,11 @@ public class DealRelevanceService {
             }
         }
         return false;
+    }
+
+    private boolean containsReverseTakeover(String lower) {
+        return containsAny(lower, "reverse takeover", "resulting issuer", "policy 5.2")
+                || lower.matches(".*\\brto\\b.*");
     }
 
     public record RelevanceInsight(

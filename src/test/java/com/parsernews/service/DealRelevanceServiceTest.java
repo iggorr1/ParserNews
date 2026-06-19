@@ -108,6 +108,38 @@ class DealRelevanceServiceTest {
     }
 
     @Test
+    void classifiesReverseTakeoverBeforePublicStockMerger() {
+        NewsArticleEntity article = article(
+                "Goldflare Announces Proposed Reverse Takeover with Quitovac Gold Holdings, LLC",
+                "Goldflare entered into a non-binding letter of intent for a reverse takeover. "
+                        + "The proposed transaction is subject to shareholder approval and regulatory approval. "
+                        + "Trading has been halted and a definitive agreement is expected later."
+        );
+        DetectedEventEntity event = event(article, "GOFL", CandidateStrength.HIGH, ReviewStatus.MANUAL_REVIEW);
+
+        DealRelevanceService.RelevanceInsight insight = service.assess(article, event, likelyDeal(), terms(
+                "Quitovac Gold Holdings, LLC",
+                "Goldflare",
+                null,
+                PaymentType.STOCK,
+                DealStatus.PROPOSAL
+        ));
+
+        assertThat(insight.dealRelevance()).isEqualTo(DealRelevance.REVERSE_TAKEOVER);
+        assertThat(insight.dealRelevance()).isNotEqualTo(DealRelevance.PUBLIC_STOCK_MERGER);
+        assertThat(insight.tradability()).isIn(Tradability.LOW, Tradability.NOT_TRADABLE);
+        assertThat(insight.relevanceWarnings()).contains(
+                "reverse takeover / RTO",
+                "non-binding LOI",
+                "definitive agreement not signed",
+                "trading halted",
+                "shareholder/regulatory approvals required",
+                "not take-private",
+                "no cash offer"
+        );
+    }
+
+    @Test
     void classifiesWeakUnknownArticleAsNotTradable() {
         NewsArticleEntity article = article(
                 "Company Announces Corporate Update",

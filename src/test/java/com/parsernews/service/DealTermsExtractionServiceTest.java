@@ -98,6 +98,23 @@ class DealTermsExtractionServiceTest {
         assertThat(terms.dealWarnings()).contains("offer price missing");
     }
 
+    @Test
+    void nonBindingReverseTakeoverDoesNotBecomeDefinitiveAgreement() {
+        NewsArticleEntity article = article(
+                "Goldflare Announces Proposed Reverse Takeover with Quitovac Gold Holdings, LLC",
+                "The parties entered into a non-binding letter of intent for a proposed reverse takeover. "
+                        + "A definitive agreement is expected later and the transaction is subject to shareholder approval. "
+                        + "Trading has been halted."
+        );
+        DetectedEventEntity event = event(article, CandidateStrength.HIGH, ReviewStatus.MANUAL_REVIEW);
+
+        DealTermsExtractionService.DealTerms terms = service.extract(article, event, likelyDeal());
+
+        assertThat(terms.dealStatus()).isNotEqualTo(DealStatus.DEFINITIVE_AGREEMENT);
+        assertThat(terms.dealStatus()).isIn(DealStatus.PROPOSAL, DealStatus.RUMOR_OR_EXPLORATION);
+        assertThat(terms.dealWarnings()).contains("non-binding LOI", "definitive agreement not signed");
+    }
+
     private CandidateReviewInsightService.ReviewInsight likelyDeal() {
         return new CandidateReviewInsightService.ReviewInsight(
                 ReviewVerdict.LIKELY_DEAL,

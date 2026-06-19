@@ -142,6 +142,36 @@ class DealStageDetectionServiceTest {
         assertThat(insight.dealTiming()).isEqualTo(DealTiming.NOISE);
     }
 
+    @Test
+    void proposedReverseTakeoverSubjectToApprovalIsNotLateStageShareholderApproval() {
+        NewsArticleEntity article = article(
+                "Goldflare Announces Proposed Reverse Takeover with Quitovac Gold Holdings, LLC",
+                "Goldflare entered into a non-binding letter of intent for a reverse takeover. "
+                        + "Trading has been halted. The transaction is subject to shareholder approval "
+                        + "and a definitive agreement is expected later."
+        );
+
+        DealStageDetectionService.StageInsight insight = service.detect(
+                article,
+                event(article),
+                terms(DealStatus.PROPOSAL),
+                likelyDeal(),
+                relevance(DealRelevance.REVERSE_TAKEOVER, Tradability.NOT_TRADABLE)
+        );
+
+        assertThat(insight.dealStage()).isIn(DealStage.INITIAL_ANNOUNCEMENT, DealStage.RUMOR_OR_EXPLORATION);
+        assertThat(insight.dealStage()).isNotEqualTo(DealStage.SHAREHOLDER_APPROVAL);
+        assertThat(insight.dealTiming()).isIn(DealTiming.EARLY, DealTiming.MID_STAGE);
+        assertThat(insight.dealTiming()).isNotEqualTo(DealTiming.LATE_STAGE);
+        assertThat(insight.stageWarnings()).contains(
+                "reverse takeover / RTO",
+                "non-binding LOI",
+                "definitive agreement not signed",
+                "trading halted",
+                "shareholder/regulatory approvals required"
+        );
+    }
+
     private NewsArticleEntity article(String headline, String body) {
         return new NewsArticleEntity(
                 new NewsSourceEntity("Test Source", NewsSourceType.RSS, "https://example.com/feed"),
