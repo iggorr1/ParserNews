@@ -53,9 +53,12 @@ Live RSS mode:
 PostgreSQL mode:
 
 ```powershell
-docker compose up -d
-.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=db"
+docker compose up --build
 ```
+
+Docker Compose runs the app with `live,postgres`, starts PostgreSQL, and applies
+Flyway migrations. Quick local live mode still uses H2 unless the PostgreSQL
+profile is explicitly enabled.
 
 Historical JSON mode:
 

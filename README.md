@@ -176,10 +176,11 @@ or run the PowerShell launcher directly:
 powershell -ExecutionPolicy Bypass -File .\scripts\start-live.ps1 -Port 8081 -OpenBrowser
 ```
 
-## Docker Local Launch
+## Docker PostgreSQL Launch
 
-Docker v1 runs the Spring Boot app only, using the live profile and the local H2
-file database. It does not start PostgreSQL yet.
+Docker Compose runs the Spring Boot app plus PostgreSQL. The app starts with
+the `live,postgres` profiles, Flyway applies database migrations, and Hibernate
+validates the schema instead of creating it dynamically.
 
 Build and run:
 
@@ -217,13 +218,13 @@ On Windows, you can also run:
 .\run-docker.bat
 ```
 
-Docker keeps H2 database files in the mounted local `./data` directory and scan
-reports in `./output`. Telegram and alert dispatch remain disabled by default in
+Docker stores PostgreSQL data in the named Docker volume
+`parsernews-postgres-data` and scan reports in the mounted local `./output`
+directory. Telegram and alert dispatch remain disabled by default in
 `docker-compose.yml`.
 
 This is a simple local/server-deployment foundation, not production hardening.
-PostgreSQL can be added later as a separate compose profile or deployment
-variant.
+Do not commit real credentials; the compose file uses safe local defaults only.
 
 ## Live RSS Smoke Check
 
@@ -262,11 +263,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\live-smoke.ps1
 
 ## PostgreSQL Mode
 
-PostgreSQL is not part of the default Docker v1 launcher. The current Docker
-setup intentionally uses H2 so `docker compose up --build` starts one simple app
-container.
-
-Default future local PostgreSQL values:
+Default local PostgreSQL values used by Docker Compose:
 
 ```text
 database: parsernews
@@ -274,8 +271,28 @@ user: parsernews
 password: parsernews
 ```
 
-PostgreSQL can be added later as a separate compose profile or server deployment
-variant.
+The PostgreSQL profile reads these environment variables:
+
+```text
+SPRING_DATASOURCE_URL
+SPRING_DATASOURCE_USERNAME
+SPRING_DATASOURCE_PASSWORD
+```
+
+Manual local run against an existing PostgreSQL instance:
+
+```powershell
+$env:SPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/parsernews"
+$env:SPRING_DATASOURCE_USERNAME="parsernews"
+$env:SPRING_DATASOURCE_PASSWORD="parsernews"
+.\mvnw.cmd spring-boot:run "-Dspring-boot.run.profiles=live,postgres"
+```
+
+Quick local development can still use H2 with the normal live launcher:
+
+```powershell
+.\run-live.bat
+```
 
 ## Main Manual Flow
 

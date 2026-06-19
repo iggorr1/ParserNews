@@ -1,15 +1,39 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: parsernews-postgres
+    environment:
+      POSTGRES_DB: parsernews
+      POSTGRES_USER: parsernews
+      POSTGRES_PASSWORD: parsernews
+    ports:
+      - "5432:5432"
+    volumes:
+      - parsernews-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U parsernews -d parsernews"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   parsernews:
     build:
       context: .
     container_name: parsernews
+    depends_on:
+      postgres:
+        condition: service_healthy
     ports:
       - "8080:8080"
     environment:
-      - SPRING_PROFILES_ACTIVE=live
-      - SPRING_DATASOURCE_URL=jdbc:h2:file:/app/data/parsernews-dev;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE
-      - alerts.telegram.enabled=false
-      - alerts.dispatch.enabled=false
+      SPRING_PROFILES_ACTIVE: live,postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/parsernews
+      SPRING_DATASOURCE_USERNAME: parsernews
+      SPRING_DATASOURCE_PASSWORD: parsernews
+      ALERTS_TELEGRAM_ENABLED: "false"
+      ALERTS_DISPATCH_ENABLED: "false"
     volumes:
-      - ./data:/app/data
       - ./output:/app/output
+
+volumes:
+  parsernews-postgres-data:
