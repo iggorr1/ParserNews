@@ -17,10 +17,17 @@ import com.parsernews.service.CandidateReviewInsightService;
 import com.parsernews.service.DealRelevanceService;
 import com.parsernews.service.DealStageDetectionService;
 import com.parsernews.service.DealTermsExtractionService;
+import com.parsernews.service.AlertNotifier;
+import com.parsernews.service.SignalTelegramMessageFormatter;
+import com.parsernews.config.TelegramAlertSettings;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
@@ -36,6 +43,9 @@ public class SignalInboxController {
     private final DealTermsExtractionService dealTermsExtractionService;
     private final DealRelevanceService dealRelevanceService;
     private final DealStageDetectionService dealStageDetectionService;
+    private final SignalTelegramMessageFormatter signalTelegramMessageFormatter;
+    private final AlertNotifier alertNotifier;
+    private final TelegramAlertSettings telegramAlertSettings;
 
     public SignalInboxController(
             DetectedEventRepository eventRepository,
@@ -43,7 +53,10 @@ public class SignalInboxController {
             CandidateReviewInsightService reviewInsightService,
             DealTermsExtractionService dealTermsExtractionService,
             DealRelevanceService dealRelevanceService,
-            DealStageDetectionService dealStageDetectionService
+            DealStageDetectionService dealStageDetectionService,
+            SignalTelegramMessageFormatter signalTelegramMessageFormatter,
+            AlertNotifier alertNotifier,
+            TelegramAlertSettings telegramAlertSettings
     ) {
         this.eventRepository = eventRepository;
         this.secFilingRepository = secFilingRepository;
@@ -51,6 +64,9 @@ public class SignalInboxController {
         this.dealTermsExtractionService = dealTermsExtractionService;
         this.dealRelevanceService = dealRelevanceService;
         this.dealStageDetectionService = dealStageDetectionService;
+        this.signalTelegramMessageFormatter = signalTelegramMessageFormatter;
+        this.alertNotifier = alertNotifier;
+        this.telegramAlertSettings = telegramAlertSettings;
     }
 
     @GetMapping("/api/signals")
@@ -82,6 +98,44 @@ public class SignalInboxController {
                 .sorted(signalComparator())
                 .limit(normalizedLimit(limit))
                 .toList();
+    }
+
+    @GetMapping("/api/signals/{sourceType}/{id}/telegram-preview")
+    @Transactional(readOnly = true)
+    public TelegramPreviewResponse telegramPreview(
+            @PathVariable SourceType sourceType,
+            @PathVariable Long id
+    ) {
+        TelegramSignal signal = telegramSignal(sourceType, id);
+        TelegramReadiness readiness = telegramReadiness();
+        return TelegramPreviewResponse.from(signal, readiness);
+    }
+
+    @PostMapping("/api/signals/{sourceType}/{id}/send-telegram")
+    @Transactional(readOnly = true)
+    public TelegramSendResponse sendTelegram(
+            @PathVariable SourceType sourceType,
+            @PathVariable Long id
+    ) {
+        TelegramSignal signal = telegramSignal(sourceType, id);
+        TelegramReadiness readiness = telegramReadiness();
+        if (!readiness.sendAllowed()) {
+            return new TelegramSendResponse(
+                    false,
+                    readiness.telegramEnabled(),
+                    readiness.telegramConfigured(),
+                    readiness.reason(),
+                    null
+            );
+        }
+        AlertNotifier.AlertNotificationResult notification = alertNotifier.send(signal.messageText());
+        return new TelegramSendResponse(
+                notification.sent(),
+                readiness.telegramEnabled(),
+                readiness.telegramConfigured(),
+                notification.reason(),
+                notification.sent() ? null : notification.status()
+        );
     }
 
     private UnifiedSignalResponse fromRssEvent(DetectedEventEntity event) {
@@ -121,6 +175,49 @@ public class SignalInboxController {
                 null,
                 article.id()
         );
+    }
+
+    private TelegramSignal telegramSignal(SourceType sourceType, Long id) {
+        if (sourceType == SourceType.RSS_NEWS) {
+            DetectedEventEntity event = eventRepository.findById(id)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSS signal not found"));
+            ArticleController.ArticleListResponse article = ArticleController.ArticleListResponse.from(
+                    event.getArticle(),
+                    event,
+                    reviewInsightService,
+                    dealTermsExtractionService,
+                    dealRelevanceService,
+                    dealStageDetectionService
+            );
+            return new TelegramSignal(
+                    SourceType.RSS_NEWS,
+                    event.getId(),
+                    article.title(),
+                    article.url(),
+                    signalTelegramMessageFormatter.formatRss(article)
+            );
+        }
+        SecFilingEntity filing = secFilingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SEC signal not found"));
+        return new TelegramSignal(
+                SourceType.SEC_FILING,
+                filing.getId(),
+                filing.getCompanyName() + " " + filing.getForm(),
+                firstNonBlank(filing.getDocumentUrl(), filing.getFilingUrl()),
+                signalTelegramMessageFormatter.formatSec(filing)
+        );
+    }
+
+    private TelegramReadiness telegramReadiness() {
+        boolean enabled = telegramAlertSettings.enabled();
+        boolean configured = !isBlank(telegramAlertSettings.botToken()) && !isBlank(telegramAlertSettings.chatId());
+        if (!enabled) {
+            return new TelegramReadiness(false, configured, false, "Telegram is disabled; no external message will be sent.");
+        }
+        if (!configured) {
+            return new TelegramReadiness(true, false, false, "Telegram is enabled but bot token or chat id is missing.");
+        }
+        return new TelegramReadiness(true, true, true, null);
     }
 
     private UnifiedSignalResponse fromSecFiling(SecFilingEntity filing) {
@@ -191,18 +288,29 @@ public class SignalInboxController {
         };
     }
 
-    private String joinWarnings(List<String>... warningLists) {
+    private String joinWarnings(List<String> first, List<String> second, List<String> third, List<String> fourth) {
         List<String> warnings = new ArrayList<>();
-        for (List<String> warningList : warningLists) {
-            if (warningList != null) {
-                warnings.addAll(warningList);
-            }
+        if (first != null) {
+            warnings.addAll(first);
+        }
+        if (second != null) {
+            warnings.addAll(second);
+        }
+        if (third != null) {
+            warnings.addAll(third);
+        }
+        if (fourth != null) {
+            warnings.addAll(fourth);
         }
         return warnings.isEmpty() ? null : String.join("; ", warnings);
     }
 
     private String firstNonBlank(String first, String fallback) {
         return first == null || first.isBlank() ? fallback : first;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private int normalizedLimit(int limit) {
@@ -255,5 +363,57 @@ public class SignalInboxController {
         Instant sortInstant() {
             return publishedAt != null ? publishedAt : discoveredAt;
         }
+    }
+
+    public record TelegramPreviewResponse(
+            SourceType sourceType,
+            Long id,
+            String title,
+            String url,
+            String messageText,
+            boolean telegramEnabled,
+            boolean telegramConfigured,
+            boolean sendAllowed,
+            String reason
+    ) {
+        static TelegramPreviewResponse from(TelegramSignal signal, TelegramReadiness readiness) {
+            return new TelegramPreviewResponse(
+                    signal.sourceType(),
+                    signal.id(),
+                    signal.title(),
+                    signal.url(),
+                    signal.messageText(),
+                    readiness.telegramEnabled(),
+                    readiness.telegramConfigured(),
+                    readiness.sendAllowed(),
+                    readiness.reason()
+            );
+        }
+    }
+
+    public record TelegramSendResponse(
+            boolean sent,
+            boolean telegramEnabled,
+            boolean telegramConfigured,
+            String message,
+            String error
+    ) {
+    }
+
+    private record TelegramSignal(
+            SourceType sourceType,
+            Long id,
+            String title,
+            String url,
+            String messageText
+    ) {
+    }
+
+    private record TelegramReadiness(
+            boolean telegramEnabled,
+            boolean telegramConfigured,
+            boolean sendAllowed,
+            String reason
+    ) {
     }
 }

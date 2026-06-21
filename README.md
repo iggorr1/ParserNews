@@ -531,6 +531,22 @@ POST /api/alerts/dispatch
 Runs one alert dispatch cycle manually. With dispatch disabled, this returns a
 disabled/no-op response and sends nothing.
 
+### Unified Signal Inbox
+
+```text
+GET /api/signals
+GET /api/signals/{sourceType}/{id}/telegram-preview
+POST /api/signals/{sourceType}/{id}/send-telegram
+```
+
+`/api/signals` combines RSS candidates and SEC filing signals into one review
+queue. `sourceType` is `RSS_NEWS` or `SEC_FILING`.
+
+Telegram preview/send from this inbox is manual-only. The app sends nothing
+unless the user explicitly clicks a send action and Telegram is enabled and
+configured. Automatic alert dispatch remains controlled separately by
+`alerts.dispatch.enabled` and is disabled by default.
+
 ### Admin / Maintenance
 
 ```text
@@ -579,13 +595,19 @@ Enables scheduled scanner polling when set to `true`.
 ### Telegram
 
 ```properties
-alerts.telegram.enabled=false
-alerts.telegram.bot-token=
-alerts.telegram.chat-id=
+parsernews.telegram.enabled=false
+parsernews.telegram.bot-token=
+parsernews.telegram.chat-id=
+
+PARSERNEWS_TELEGRAM_ENABLED=false
+PARSERNEWS_TELEGRAM_BOT_TOKEN=
+PARSERNEWS_TELEGRAM_CHAT_ID=
 ```
 
 Telegram is disabled by default. Do not commit real tokens or chat ids. Use
-environment-specific local configuration if real alert sending is tested later.
+environment-specific local configuration if real manual sending is tested later.
+The older internal `alerts.telegram.*` properties are still wired through these
+safe parsernews settings for compatibility.
 
 ### Alert Dispatch
 

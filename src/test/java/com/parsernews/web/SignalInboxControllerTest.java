@@ -1,6 +1,7 @@
 package com.parsernews.web;
 
 import com.parsernews.config.SecurityConfig;
+import com.parsernews.config.TelegramAlertSettings;
 import com.parsernews.model.DealConfidence;
 import com.parsernews.model.DealRelevance;
 import com.parsernews.model.DealStage;
@@ -29,6 +30,8 @@ import com.parsernews.service.DealStageDetectionService;
 import com.parsernews.service.DealTermsExtractionService;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
+import com.parsernews.service.AlertNotifier;
+import com.parsernews.service.SignalTelegramMessageFormatter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -44,8 +47,11 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -77,6 +83,15 @@ class SignalInboxControllerTest {
 
     @MockitoBean
     private DealStageDetectionService dealStageDetectionService;
+
+    @MockitoBean
+    private SignalTelegramMessageFormatter signalTelegramMessageFormatter;
+
+    @MockitoBean
+    private AlertNotifier alertNotifier;
+
+    @MockitoBean
+    private TelegramAlertSettings telegramAlertSettings;
 
     @MockitoBean
     private NewsScannerService newsScannerService;
@@ -118,6 +133,11 @@ class SignalInboxControllerTest {
                 List.of(),
                 List.of("definitive agreement")
         ));
+        when(signalTelegramMessageFormatter.formatRss(any())).thenReturn("RSS telegram message");
+        when(signalTelegramMessageFormatter.formatSec(any())).thenReturn("SEC telegram message");
+        when(telegramAlertSettings.enabled()).thenReturn(false);
+        when(telegramAlertSettings.botToken()).thenReturn("");
+        when(telegramAlertSettings.chatId()).thenReturn("");
     }
 
     @Test
@@ -172,6 +192,94 @@ class SignalInboxControllerTest {
         mockMvc.perform(get("/api/signals?reviewStatus=IGNORED").with(httpBasic("tester", "secret")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].reviewStatus").value("IGNORED"));
+    }
+
+    @Test
+    void rssTelegramPreviewReturnsMessageText() throws Exception {
+        DetectedEventEntity rss = rssEvent(CandidateStrength.HIGH, true);
+        when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rss));
+
+        mockMvc.perform(get("/api/signals/RSS_NEWS/1/telegram-preview")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceType").value("RSS_NEWS"))
+                .andExpect(jsonPath("$.messageText").value("RSS telegram message"))
+                .andExpect(jsonPath("$.telegramEnabled").value(false))
+                .andExpect(jsonPath("$.sendAllowed").value(false));
+    }
+
+    @Test
+    void secTelegramPreviewReturnsMessageText() throws Exception {
+        SecFilingEntity sec = secFiling(SecSignalPriority.HIGH, SecSignalType.TENDER_OFFER);
+        when(secFilingRepository.findById(7L)).thenReturn(java.util.Optional.of(sec));
+
+        mockMvc.perform(get("/api/signals/SEC_FILING/7/telegram-preview")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceType").value("SEC_FILING"))
+                .andExpect(jsonPath("$.messageText").value("SEC telegram message"))
+                .andExpect(jsonPath("$.telegramEnabled").value(false))
+                .andExpect(jsonPath("$.sendAllowed").value(false));
+    }
+
+    @Test
+    void sendTelegramWhenDisabledDoesNotSend() throws Exception {
+        when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
+
+        mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sent").value(false))
+                .andExpect(jsonPath("$.telegramEnabled").value(false))
+                .andExpect(jsonPath("$.telegramConfigured").value(false))
+                .andExpect(jsonPath("$.message").value("Telegram is disabled; no external message will be sent."));
+
+        verify(alertNotifier, never()).send(any());
+    }
+
+    @Test
+    void sendTelegramWhenConfigMissingDoesNotSend() throws Exception {
+        when(telegramAlertSettings.enabled()).thenReturn(true);
+        when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
+
+        mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sent").value(false))
+                .andExpect(jsonPath("$.telegramEnabled").value(true))
+                .andExpect(jsonPath("$.telegramConfigured").value(false))
+                .andExpect(jsonPath("$.message").value("Telegram is enabled but bot token or chat id is missing."));
+
+        verify(alertNotifier, never()).send(any());
+    }
+
+    @Test
+    void sendTelegramWithMockedNotifierCanSucceed() throws Exception {
+        when(telegramAlertSettings.enabled()).thenReturn(true);
+        when(telegramAlertSettings.botToken()).thenReturn("token");
+        when(telegramAlertSettings.chatId()).thenReturn("chat");
+        when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
+        when(alertNotifier.send("RSS telegram message"))
+                .thenReturn(AlertNotifier.AlertNotificationResult.sent("SENT", "Telegram alert message was sent."));
+
+        mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sent").value(true))
+                .andExpect(jsonPath("$.telegramEnabled").value(true))
+                .andExpect(jsonPath("$.telegramConfigured").value(true))
+                .andExpect(jsonPath("$.message").value("Telegram alert message was sent."));
+
+        verify(alertNotifier).send("RSS telegram message");
+    }
+
+    @Test
+    void telegramEndpointsRequireAuth() throws Exception {
+        mockMvc.perform(get("/api/signals/RSS_NEWS/1/telegram-preview"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram"))
+                .andExpect(status().isUnauthorized());
     }
 
     private DetectedEventEntity rssEvent(CandidateStrength strength, boolean alertEligible) {
