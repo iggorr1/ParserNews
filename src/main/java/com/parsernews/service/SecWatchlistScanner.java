@@ -29,17 +29,20 @@ public class SecWatchlistScanner {
     );
 
     private final SecScannerSettings settings;
+    private final SecWatchlistManagerService watchlistManagerService;
     private final SecSubmissionsClient submissionsClient;
     private final SecFilingRepository filingRepository;
     private final ObjectMapper objectMapper;
 
     public SecWatchlistScanner(
             SecScannerSettings settings,
+            SecWatchlistManagerService watchlistManagerService,
             SecSubmissionsClient submissionsClient,
             SecFilingRepository filingRepository,
             ObjectMapper objectMapper
     ) {
         this.settings = settings;
+        this.watchlistManagerService = watchlistManagerService;
         this.submissionsClient = submissionsClient;
         this.filingRepository = filingRepository;
         this.objectMapper = objectMapper;
@@ -47,12 +50,14 @@ public class SecWatchlistScanner {
 
     @Transactional
     public SecScanSummary scan() {
-        List<String> ciks = settings.watchlistCiks();
-        if (!settings.enabled()) {
-            return new SecScanSummary(false, false, ciks.size(), ciks.size(), settings.maxFilingsPerCik(), 0, 0, 0, 0, "SEC scanner is disabled.");
+        SecWatchlistManagerService.ResolvedWatchlist watchlist = watchlistManagerService.resolveActiveWatchlist();
+        List<String> ciks = watchlist.ciks();
+        boolean enabled = effectiveEnabled(watchlist);
+        if (!enabled) {
+            return new SecScanSummary(false, false, watchlist.source(), watchlist.activeWatchlistSize(), ciks.size(), ciks.size(), watchlist.dbWatchlistSize(), watchlist.envWatchlistSize(), settings.maxFilingsPerCik(), 0, 0, 0, 0, "SEC scanner is disabled.");
         }
         if (ciks.isEmpty()) {
-            return new SecScanSummary(true, false, 0, 0, settings.maxFilingsPerCik(), 0, 0, 0, 0, "SEC scanner watchlist is empty.");
+            return new SecScanSummary(true, false, watchlist.source(), watchlist.activeWatchlistSize(), 0, 0, watchlist.dbWatchlistSize(), watchlist.envWatchlistSize(), settings.maxFilingsPerCik(), 0, 0, 0, 0, "SEC scanner watchlist is empty.");
         }
         int fetchedFilings = 0;
         int matchedFilings = 0;
@@ -91,21 +96,30 @@ public class SecWatchlistScanner {
         }
 
         String message = errors.isEmpty() ? "SEC scan completed." : String.join("; ", errors);
-        return new SecScanSummary(true, true, ciks.size(), ciks.size(), settings.maxFilingsPerCik(), fetchedFilings, matchedFilings, savedFilings, duplicatesSkipped, message);
+        return new SecScanSummary(true, true, watchlist.source(), watchlist.activeWatchlistSize(), ciks.size(), ciks.size(), watchlist.dbWatchlistSize(), watchlist.envWatchlistSize(), settings.maxFilingsPerCik(), fetchedFilings, matchedFilings, savedFilings, duplicatesSkipped, message);
     }
 
     public SecStatus status() {
-        List<String> ciks = settings.watchlistCiks();
-        boolean configured = settings.enabled() && !ciks.isEmpty();
+        SecWatchlistManagerService.ResolvedWatchlist watchlist = watchlistManagerService.resolveActiveWatchlist();
+        boolean enabled = effectiveEnabled(watchlist);
+        boolean configured = enabled && watchlist.activeWatchlistSize() > 0;
         return new SecStatus(
-                settings.enabled(),
+                enabled,
                 configured,
-                ciks.size(),
-                ciks.size(),
+                watchlist.source(),
+                watchlist.activeWatchlistSize(),
+                watchlist.activeWatchlistSize(),
+                watchlist.activeWatchlistSize(),
+                watchlist.dbWatchlistSize(),
+                watchlist.envWatchlistSize(),
                 settings.maxFilingsPerCik(),
                 filingRepository.count(),
-                secWarning(settings.enabled(), ciks.size())
+                secWarning(enabled, watchlist.activeWatchlistSize())
         );
+    }
+
+    private boolean effectiveEnabled(SecWatchlistManagerService.ResolvedWatchlist watchlist) {
+        return settings.enabled() || watchlist.dbWatchlistSize() > 0;
     }
 
     private String secWarning(boolean enabled, int watchlistSize) {
@@ -244,8 +258,12 @@ public class SecWatchlistScanner {
     public record SecScanSummary(
             boolean enabled,
             boolean configured,
+            SecWatchlistManagerService.WatchlistSource activeWatchlistSource,
+            int activeWatchlistSize,
             int watchlistSize,
             int watchlistCount,
+            int dbWatchlistSize,
+            int envWatchlistSize,
             int maxFilingsPerCik,
             int fetchedFilings,
             int matchedFilings,
@@ -262,15 +280,34 @@ public class SecWatchlistScanner {
                 int duplicatesSkipped,
                 String message
         ) {
-            this(enabled, enabled && watchlistCount > 0, watchlistCount, watchlistCount, 20, fetchedFilings, matchedFilings, savedFilings, duplicatesSkipped, message);
+            this(
+                    enabled,
+                    enabled && watchlistCount > 0,
+                    watchlistCount > 0 ? SecWatchlistManagerService.WatchlistSource.ENV : SecWatchlistManagerService.WatchlistSource.NONE,
+                    watchlistCount,
+                    watchlistCount,
+                    watchlistCount,
+                    0,
+                    watchlistCount,
+                    20,
+                    fetchedFilings,
+                    matchedFilings,
+                    savedFilings,
+                    duplicatesSkipped,
+                    message
+            );
         }
     }
 
     public record SecStatus(
             boolean enabled,
             boolean configured,
+            SecWatchlistManagerService.WatchlistSource activeWatchlistSource,
+            int activeWatchlistSize,
             int watchlistSize,
             int watchlistCount,
+            int dbWatchlistSize,
+            int envWatchlistSize,
             int maxFilingsPerCik,
             long savedFilings,
             String warning

@@ -6,12 +6,15 @@ import com.parsernews.persistence.SecFilingEntity;
 import com.parsernews.persistence.SecFilingRepository;
 import com.parsernews.persistence.SecSignalPriority;
 import com.parsernews.persistence.SecSignalType;
+import com.parsernews.persistence.SecWatchlistCompanyEntity;
 import com.parsernews.service.SecFilingDocumentFetcher;
+import com.parsernews.service.SecWatchlistManagerService;
 import com.parsernews.service.SecWatchlistScanner;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -32,15 +35,18 @@ public class SecController {
     private final SecWatchlistScanner secWatchlistScanner;
     private final SecFilingRepository filingRepository;
     private final SecFilingDocumentFetcher documentFetcher;
+    private final SecWatchlistManagerService watchlistManagerService;
 
     public SecController(
             SecWatchlistScanner secWatchlistScanner,
             SecFilingRepository filingRepository,
-            SecFilingDocumentFetcher documentFetcher
+            SecFilingDocumentFetcher documentFetcher,
+            SecWatchlistManagerService watchlistManagerService
     ) {
         this.secWatchlistScanner = secWatchlistScanner;
         this.filingRepository = filingRepository;
         this.documentFetcher = documentFetcher;
+        this.watchlistManagerService = watchlistManagerService;
     }
 
     @PostMapping("/api/sec/scan")
@@ -51,6 +57,50 @@ public class SecController {
     @GetMapping("/api/sec/status")
     public SecWatchlistScanner.SecStatus status() {
         return secWatchlistScanner.status();
+    }
+
+    @GetMapping("/api/sec/watchlist")
+    @Transactional(readOnly = true)
+    public List<SecWatchlistCompanyResponse> watchlist() {
+        return watchlistManagerService.listEntries().stream()
+                .map(SecWatchlistCompanyResponse::from)
+                .toList();
+    }
+
+    @PostMapping("/api/sec/watchlist")
+    @Transactional
+    public SecWatchlistCompanyResponse addWatchlistEntry(@RequestBody SecWatchlistManagerService.WatchlistRequest request) {
+        try {
+            return SecWatchlistCompanyResponse.from(watchlistManagerService.addEntry(request));
+        } catch (IllegalArgumentException | SecWatchlistManagerService.DuplicateSecWatchlistCompanyException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @PatchMapping("/api/sec/watchlist/{id}")
+    @Transactional
+    public SecWatchlistCompanyResponse updateWatchlistEntry(
+            @PathVariable Long id,
+            @RequestBody SecWatchlistManagerService.WatchlistRequest request
+    ) {
+        try {
+            return SecWatchlistCompanyResponse.from(watchlistManagerService.updateEntry(id, request));
+        } catch (EntityNotFoundException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SEC watchlist entry not found", exception);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @DeleteMapping("/api/sec/watchlist/{id}")
+    @Transactional
+    public ResponseEntity<Void> deleteWatchlistEntry(@PathVariable Long id) {
+        try {
+            watchlistManagerService.deleteEntry(id);
+            return ResponseEntity.noContent().build();
+        } catch (EntityNotFoundException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "SEC watchlist entry not found", exception);
+        }
     }
 
     @GetMapping("/api/sec/filings")
@@ -196,6 +246,30 @@ public class SecController {
             ManualReviewReason reason,
             String note
     ) {
+    }
+
+    public record SecWatchlistCompanyResponse(
+            Long id,
+            String cik,
+            String companyName,
+            String ticker,
+            String notes,
+            boolean enabled,
+            Instant createdAt,
+            Instant updatedAt
+    ) {
+        static SecWatchlistCompanyResponse from(SecWatchlistCompanyEntity entry) {
+            return new SecWatchlistCompanyResponse(
+                    entry.getId(),
+                    entry.getCik(),
+                    entry.getCompanyName(),
+                    entry.getTicker(),
+                    entry.getNotes(),
+                    entry.isEnabled(),
+                    entry.getCreatedAt(),
+                    entry.getUpdatedAt()
+            );
+        }
     }
 
     private int normalizedLimit(int limit) {

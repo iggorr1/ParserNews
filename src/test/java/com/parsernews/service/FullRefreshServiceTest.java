@@ -48,7 +48,22 @@ class FullRefreshServiceTest {
     @Test
     void secDisabledReturnsWarningAndContinues() {
         when(newsScannerService.scan()).thenReturn(new ScanSummary(1, 1, 0, 0, 0, 0));
-        when(secWatchlistScanner.scan()).thenReturn(new SecWatchlistScanner.SecScanSummary(false, false, 0, 0, 20, 0, 0, 0, 0, "SEC scanner is disabled."));
+        when(secWatchlistScanner.scan()).thenReturn(new SecWatchlistScanner.SecScanSummary(
+                false,
+                false,
+                SecWatchlistManagerService.WatchlistSource.NONE,
+                0,
+                0,
+                0,
+                0,
+                0,
+                20,
+                0,
+                0,
+                0,
+                0,
+                "SEC scanner is disabled."
+        ));
         when(documentFetcher.fetchPendingDocuments()).thenReturn(new SecFilingDocumentFetcher.SecDocumentFetchSummary(0, 0, 0, 0));
         when(recomputeService.recomputeCandidates()).thenReturn(new CandidateRecomputeService.RecomputeSummary(1, 1, 1, 0, 0, 0, 1, 0));
 
@@ -64,7 +79,22 @@ class FullRefreshServiceTest {
     @Test
     void secEmptyWatchlistReturnsWarningAndContinues() {
         when(newsScannerService.scan()).thenReturn(new ScanSummary(1, 1, 0, 0, 0, 0));
-        when(secWatchlistScanner.scan()).thenReturn(new SecWatchlistScanner.SecScanSummary(true, false, 0, 0, 20, 0, 0, 0, 0, "SEC scanner watchlist is empty."));
+        when(secWatchlistScanner.scan()).thenReturn(new SecWatchlistScanner.SecScanSummary(
+                true,
+                false,
+                SecWatchlistManagerService.WatchlistSource.NONE,
+                0,
+                0,
+                0,
+                0,
+                0,
+                20,
+                0,
+                0,
+                0,
+                0,
+                "SEC scanner watchlist is empty."
+        ));
         when(documentFetcher.fetchPendingDocuments()).thenReturn(new SecFilingDocumentFetcher.SecDocumentFetchSummary(0, 0, 0, 0));
         when(recomputeService.recomputeCandidates()).thenReturn(new CandidateRecomputeService.RecomputeSummary(1, 1, 1, 0, 0, 0, 1, 0));
 

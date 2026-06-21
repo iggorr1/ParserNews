@@ -1004,6 +1004,54 @@
             </div>
         </div>
         <div class="kv" id="secStatus"></div>
+        <div class="panel" style="margin-top: 12px;">
+            <div class="panel-head">
+                <div>
+                    <h3>SEC Watchlist Manager</h3>
+                    <div class="muted">DB watchlist is used when entries exist; otherwise env watchlist is used as fallback.</div>
+                </div>
+                <span class="badge" id="secWatchlistCount">0</span>
+            </div>
+            <div class="filters" style="margin-bottom: 12px;">
+                <div class="control">
+                    <label for="secWatchlistCikInput">CIK</label>
+                    <input id="secWatchlistCikInput" placeholder="320193">
+                </div>
+                <div class="control">
+                    <label for="secWatchlistCompanyInput">Company</label>
+                    <input id="secWatchlistCompanyInput" placeholder="Apple Inc.">
+                </div>
+                <div class="control">
+                    <label for="secWatchlistTickerInput">Ticker</label>
+                    <input id="secWatchlistTickerInput" placeholder="AAPL">
+                </div>
+                <div class="control">
+                    <label for="secWatchlistNotesInput">Notes</label>
+                    <input id="secWatchlistNotesInput" placeholder="Smoke test">
+                </div>
+                <label class="toggle">
+                    <input id="secWatchlistEnabledInput" type="checkbox" checked>
+                    Enabled
+                </label>
+                <button id="secWatchlistAddButton" class="primary" type="button">Add CIK</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>CIK</th>
+                        <th>Company</th>
+                        <th>Ticker</th>
+                        <th>Enabled</th>
+                        <th>Notes</th>
+                        <th>Updated</th>
+                        <th>Actions</th>
+                    </tr>
+                    </thead>
+                    <tbody id="secWatchlistEntries"></tbody>
+                </table>
+            </div>
+        </div>
         <div class="filters" style="margin-top: 12px;">
             <div class="control">
                 <label for="secPriorityFilter">SEC priority</label>
@@ -1238,6 +1286,7 @@
         reviewed: [],
         secStatus: null,
         secFilings: [],
+        secWatchlist: [],
         signals: [],
         telegramPreview: null,
         signalDetails: null,
@@ -1255,6 +1304,12 @@
     const reviewHighButton = document.querySelector("#reviewHighButton");
     const secScanButton = document.querySelector("#secScanButton");
     const secFetchDocumentsButton = document.querySelector("#secFetchDocumentsButton");
+    const secWatchlistAddButton = document.querySelector("#secWatchlistAddButton");
+    const secWatchlistCikInput = document.querySelector("#secWatchlistCikInput");
+    const secWatchlistCompanyInput = document.querySelector("#secWatchlistCompanyInput");
+    const secWatchlistTickerInput = document.querySelector("#secWatchlistTickerInput");
+    const secWatchlistNotesInput = document.querySelector("#secWatchlistNotesInput");
+    const secWatchlistEnabledInput = document.querySelector("#secWatchlistEnabledInput");
     const errors = document.querySelector("#errors");
     const searchInput = document.querySelector("#searchInput");
     const strengthFilter = document.querySelector("#strengthFilter");
@@ -1292,6 +1347,7 @@
     reviewHighButton.addEventListener("click", reviewHighCandidates);
     secScanButton.addEventListener("click", runSecScan);
     secFetchDocumentsButton.addEventListener("click", runSecFetchDocuments);
+    secWatchlistAddButton.addEventListener("click", addSecWatchlistEntry);
     searchInput.addEventListener("input", render);
     strengthFilter.addEventListener("change", render);
     sourceFilter.addEventListener("change", render);
@@ -1329,6 +1385,7 @@
             fetchJson("/api/articles/reviewed?limit=100"),
             fetchJson("/api/sec/status"),
             fetchJson("/api/sec/filings"),
+            fetchJson("/api/sec/watchlist"),
             fetchJson("/api/signals?limit=100")
         ]);
         assignResult(results[0], "status", null, "System status");
@@ -1341,7 +1398,8 @@
         assignResult(results[7], "reviewed", [], "Reviewed candidates");
         assignResult(results[8], "secStatus", null, "SEC status");
         assignResult(results[9], "secFilings", [], "SEC filings");
-        assignResult(results[10], "signals", [], "Signal inbox");
+        assignResult(results[10], "secWatchlist", [], "SEC watchlist");
+        assignResult(results[11], "signals", [], "Signal inbox");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -1442,6 +1500,64 @@
         }
     }
 
+    async function addSecWatchlistEntry() {
+        setBusy(secWatchlistAddButton, true, "Adding");
+        try {
+            await postJson("/api/sec/watchlist", {
+                cik: secWatchlistCikInput.value.trim(),
+                companyName: secWatchlistCompanyInput.value.trim(),
+                ticker: secWatchlistTickerInput.value.trim(),
+                notes: secWatchlistNotesInput.value.trim(),
+                enabled: secWatchlistEnabledInput.checked
+            });
+            secWatchlistCikInput.value = "";
+            secWatchlistCompanyInput.value = "";
+            secWatchlistTickerInput.value = "";
+            secWatchlistNotesInput.value = "";
+            secWatchlistEnabledInput.checked = true;
+            await reloadSecWatchlistState();
+        } catch (error) {
+            showError("SEC watchlist", error.message);
+        } finally {
+            setBusy(secWatchlistAddButton, false, "Add CIK");
+        }
+    }
+
+    async function updateSecWatchlistEntry(id, enabled) {
+        const entry = state.secWatchlist.find(item => item.id === id);
+        if (!entry) {
+            showError("SEC watchlist", "Entry not found in current dashboard state.");
+            return;
+        }
+        try {
+            await patchJson(`/api/sec/watchlist/${encodeURIComponent(id)}`, {
+                companyName: entry.companyName,
+                ticker: entry.ticker,
+                notes: entry.notes,
+                enabled
+            });
+            await reloadSecWatchlistState();
+        } catch (error) {
+            showError("SEC watchlist", error.message);
+        }
+    }
+
+    async function deleteSecWatchlistEntry(id) {
+        try {
+            await deleteRequest(`/api/sec/watchlist/${encodeURIComponent(id)}`);
+            await reloadSecWatchlistState();
+        } catch (error) {
+            showError("SEC watchlist", error.message);
+        }
+    }
+
+    async function reloadSecWatchlistState() {
+        state.secStatus = await fetchJson("/api/sec/status");
+        state.secWatchlist = await fetchJson("/api/sec/watchlist");
+        lastUpdated.textContent = new Date().toLocaleString();
+        renderSecWatchlist();
+    }
+
     async function previewCandidate(articleId) {
         const alert = state.alerts.find(candidate => candidate.articleId === articleId);
         if (!alert) {
@@ -1538,8 +1654,13 @@
         return readJsonResponse(response, url);
     }
 
-    async function postJson(url) {
-        const response = await fetch(url, {method: "POST", cache: "no-store"});
+    async function postJson(url, body) {
+        const response = await fetch(url, body === undefined ? {method: "POST", cache: "no-store"} : {
+            method: "POST",
+            cache: "no-store",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+        });
         return readJsonResponse(response, url);
     }
 
@@ -1551,6 +1672,14 @@
             body: JSON.stringify(body)
         });
         return readJsonResponse(response, url);
+    }
+
+    async function deleteRequest(url) {
+        const response = await fetch(url, {method: "DELETE", cache: "no-store"});
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`${response.status} ${response.statusText}${text ? ": " + text : ""}`);
+        }
     }
 
     async function readJsonResponse(response, label) {
@@ -1649,11 +1778,16 @@
         document.querySelector("#secStatus").innerHTML = kvRows([
             ["Enabled", enabled ? "Yes" : "No"],
             ["Configured", configured ? "Yes" : "No"],
+            ["Active source", status.activeWatchlistSource || "NONE"],
+            ["Active CIKs", status.activeWatchlistSize ?? status.watchlistSize ?? 0],
+            ["DB watchlist", status.dbWatchlistSize ?? 0],
+            ["ENV watchlist", status.envWatchlistSize ?? 0],
             ["Watchlist CIKs", status.watchlistSize ?? status.watchlistCount ?? 0],
             ["Max filings / CIK", status.maxFilingsPerCik ?? 20],
             ["Saved filings", status.savedFilings ?? 0],
             ["Warning", warning || "-"]
         ]) + (warning ? `<div class="warning">${escapeText(warning)}</div>` : "");
+        renderSecWatchlistEntries();
 
         const target = document.querySelector("#secFilings");
         const priority = secPriorityFilter.value;
@@ -1712,6 +1846,31 @@
                     </div>
                 </td>
                 <td><a href="${escapeAttr(filing.filingUrl)}" target="_blank" rel="noreferrer">SEC filing</a></td>
+            </tr>
+        `).join("");
+    }
+
+    function renderSecWatchlistEntries() {
+        const target = document.querySelector("#secWatchlistEntries");
+        document.querySelector("#secWatchlistCount").textContent = `${state.secWatchlist.length} DB entries`;
+        if (!state.secWatchlist.length) {
+            target.innerHTML = `<tr><td colspan="7" class="muted">No DB watchlist entries. SEC scanner will use ENV watchlist if configured.</td></tr>`;
+            return;
+        }
+        target.innerHTML = state.secWatchlist.map(entry => `
+            <tr>
+                <td>${escapeText(entry.cik)}</td>
+                <td class="title-cell">${escapeText(entry.companyName)}</td>
+                <td>${escapeText(entry.ticker || "-")}</td>
+                <td>${badge(entry.enabled ? "enabled" : "disabled", entry.enabled ? "ok" : "disabled")}</td>
+                <td class="small-cell">${escapeText(entry.notes || "")}</td>
+                <td>${escapeText(formatDate(entry.updatedAt || entry.createdAt))}</td>
+                <td>
+                    <div class="actions compact-actions">
+                        <button type="button" onclick="updateSecWatchlistEntry(${Number(entry.id)}, ${entry.enabled ? "false" : "true"})">${entry.enabled ? "Disable" : "Enable"}</button>
+                        <button type="button" onclick="deleteSecWatchlistEntry(${Number(entry.id)})">Delete</button>
+                    </div>
+                </td>
             </tr>
         `).join("");
     }
@@ -1842,7 +2001,9 @@
                     ["RSS candidates", recompute.highCount != null ? `${recompute.highCount} HIGH / ${recompute.mediumCount} MEDIUM` : "-"],
                     ["RSS duplicates", rss.duplicatesSkipped ?? "-"],
                     ["SEC configured", sec.configured ? "Yes" : "No"],
+                    ["SEC active source", sec.activeWatchlistSource || "NONE"],
                     ["SEC watchlist size", secWatchlistSize ?? "-"],
+                    ["SEC DB / ENV", `${sec.dbWatchlistSize ?? 0} / ${sec.envWatchlistSize ?? 0}`],
                     ["SEC max / CIK", sec.maxFilingsPerCik ?? "-"],
                     ["SEC fetched", sec.fetchedFilings ?? "-"],
                     ["SEC matched", sec.matchedFilings ?? "-"],

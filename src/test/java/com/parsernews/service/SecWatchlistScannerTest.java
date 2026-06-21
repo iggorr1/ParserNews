@@ -65,11 +65,20 @@ class SecWatchlistScannerTest {
     @Test
     void disabledScannerDoesNotFetchOrSave() {
         SecFilingRepository repository = mock(SecFilingRepository.class);
+        SecWatchlistManagerService manager = mock(SecWatchlistManagerService.class);
+        when(manager.resolveActiveWatchlist()).thenReturn(new SecWatchlistManagerService.ResolvedWatchlist(
+                SecWatchlistManagerService.WatchlistSource.ENV,
+                List.of("320193"),
+                0,
+                0,
+                1
+        ));
         SecSubmissionsClient client = paddedCik -> {
             throw new AssertionError("Should not fetch when disabled");
         };
         SecWatchlistScanner scanner = new SecWatchlistScanner(
                 new SecScannerSettings(false, "320193", 20),
+                manager,
                 client,
                 repository,
                 new ObjectMapper()
@@ -111,11 +120,20 @@ class SecWatchlistScannerTest {
     @Test
     void enabledScannerWithEmptyWatchlistReturnsWarningWithoutFetch() {
         SecFilingRepository repository = mock(SecFilingRepository.class);
+        SecWatchlistManagerService manager = mock(SecWatchlistManagerService.class);
+        when(manager.resolveActiveWatchlist()).thenReturn(new SecWatchlistManagerService.ResolvedWatchlist(
+                SecWatchlistManagerService.WatchlistSource.NONE,
+                List.of(),
+                0,
+                0,
+                0
+        ));
         SecSubmissionsClient client = paddedCik -> {
             throw new AssertionError("Should not fetch when watchlist is empty");
         };
         SecWatchlistScanner scanner = new SecWatchlistScanner(
                 new SecScannerSettings(true, "", 20),
+                manager,
                 client,
                 repository,
                 new ObjectMapper()
@@ -153,14 +171,78 @@ class SecWatchlistScannerTest {
         assertThat(scanner.isInterestingForm("10-Q")).isFalse();
     }
 
+    @Test
+    void scannerUsesDbWatchlistWhenDbEntriesExist() throws Exception {
+        SecFilingRepository repository = mock(SecFilingRepository.class);
+        SecWatchlistManagerService manager = mock(SecWatchlistManagerService.class);
+        when(manager.resolveActiveWatchlist()).thenReturn(new SecWatchlistManagerService.ResolvedWatchlist(
+                SecWatchlistManagerService.WatchlistSource.DB,
+                List.of("320193"),
+                2,
+                1,
+                1
+        ));
+        SecWatchlistScanner scanner = new SecWatchlistScanner(
+                new SecScannerSettings(true, "789019", 20),
+                manager,
+                new FakeSecSubmissionsClient(json()),
+                repository,
+                new ObjectMapper()
+        );
+
+        SecWatchlistScanner.SecScanSummary summary = scanner.scan();
+
+        assertThat(summary.activeWatchlistSource()).isEqualTo(SecWatchlistManagerService.WatchlistSource.DB);
+        assertThat(summary.activeWatchlistSize()).isEqualTo(1);
+        assertThat(summary.dbWatchlistSize()).isEqualTo(2);
+        assertThat(summary.envWatchlistSize()).isEqualTo(1);
+    }
+
+    @Test
+    void dbWatchlistEnablesManualSecScanWhenEnvFlagIsFalse() throws Exception {
+        SecFilingRepository repository = mock(SecFilingRepository.class);
+        SecWatchlistManagerService manager = mock(SecWatchlistManagerService.class);
+        when(manager.resolveActiveWatchlist()).thenReturn(new SecWatchlistManagerService.ResolvedWatchlist(
+                SecWatchlistManagerService.WatchlistSource.DB,
+                List.of("320193"),
+                1,
+                1,
+                0
+        ));
+        SecWatchlistScanner scanner = new SecWatchlistScanner(
+                new SecScannerSettings(false, "", 20),
+                manager,
+                new FakeSecSubmissionsClient(json()),
+                repository,
+                new ObjectMapper()
+        );
+
+        SecWatchlistScanner.SecScanSummary summary = scanner.scan();
+
+        assertThat(summary.enabled()).isTrue();
+        assertThat(summary.configured()).isTrue();
+        assertThat(summary.activeWatchlistSource()).isEqualTo(SecWatchlistManagerService.WatchlistSource.DB);
+        assertThat(summary.fetchedFilings()).isEqualTo(4);
+    }
+
     private SecWatchlistScanner scanner(
             boolean enabled,
             String watchlist,
             SecFilingRepository repository,
             String json
     ) {
+        SecWatchlistManagerService manager = mock(SecWatchlistManagerService.class);
+        List<String> ciks = new SecScannerSettings(enabled, watchlist, 20).watchlistCiks();
+        when(manager.resolveActiveWatchlist()).thenReturn(new SecWatchlistManagerService.ResolvedWatchlist(
+                ciks.isEmpty() ? SecWatchlistManagerService.WatchlistSource.NONE : SecWatchlistManagerService.WatchlistSource.ENV,
+                ciks,
+                0,
+                0,
+                ciks.size()
+        ));
         return new SecWatchlistScanner(
                 new SecScannerSettings(enabled, watchlist, 20),
+                manager,
                 new FakeSecSubmissionsClient(json),
                 repository,
                 new ObjectMapper()

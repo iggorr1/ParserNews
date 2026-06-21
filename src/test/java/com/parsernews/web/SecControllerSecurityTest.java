@@ -7,9 +7,11 @@ import com.parsernews.config.SecurityConfig;
 import com.parsernews.persistence.SecFilingRepository;
 import com.parsernews.persistence.SecSignalPriority;
 import com.parsernews.persistence.SecSignalType;
+import com.parsernews.persistence.SecWatchlistCompanyEntity;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
 import com.parsernews.service.SecFilingDocumentFetcher;
+import com.parsernews.service.SecWatchlistManagerService;
 import com.parsernews.service.SecWatchlistScanner;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -27,6 +29,8 @@ import java.util.Optional;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -52,6 +56,9 @@ class SecControllerSecurityTest {
     private SecFilingDocumentFetcher documentFetcher;
 
     @MockitoBean
+    private SecWatchlistManagerService watchlistManagerService;
+
+    @MockitoBean
     private NewsScannerService newsScannerService;
 
     @MockitoBean
@@ -64,13 +71,33 @@ class SecControllerSecurityTest {
     }
 
     @Test
+    void watchlistEndpointsRequireAuth() throws Exception {
+        mockMvc.perform(get("/api/sec/watchlist"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void authenticatedSecStatusReturnsOk() throws Exception {
-        when(secWatchlistScanner.status()).thenReturn(new SecWatchlistScanner.SecStatus(false, false, 0, 0, 20, 0, "SEC scanner disabled or watchlist empty"));
+        when(secWatchlistScanner.status()).thenReturn(new SecWatchlistScanner.SecStatus(
+                false,
+                false,
+                SecWatchlistManagerService.WatchlistSource.NONE,
+                0,
+                0,
+                0,
+                0,
+                0,
+                20,
+                0,
+                "SEC scanner disabled or watchlist empty"
+        ));
 
         mockMvc.perform(get("/api/sec/status").with(httpBasic("tester", "secret")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false))
                 .andExpect(jsonPath("$.configured").value(false))
+                .andExpect(jsonPath("$.activeWatchlistSource").value("NONE"))
+                .andExpect(jsonPath("$.activeWatchlistSize").value(0))
                 .andExpect(jsonPath("$.watchlistSize").value(0))
                 .andExpect(jsonPath("$.warning").value("SEC scanner disabled or watchlist empty"))
                 .andExpect(jsonPath("$.maxFilingsPerCik").value(20));
@@ -92,6 +119,68 @@ class SecControllerSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.savedFilings").value(2))
                 .andExpect(jsonPath("$.duplicatesSkipped").value(1));
+    }
+
+    @Test
+    void authenticatedWatchlistListReturnsEntries() throws Exception {
+        when(watchlistManagerService.listEntries()).thenReturn(List.of(
+                new SecWatchlistCompanyEntity("320193", "Apple Inc.", "AAPL", "Smoke test", true)
+        ));
+
+        mockMvc.perform(get("/api/sec/watchlist").with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].cik").value("320193"))
+                .andExpect(jsonPath("$[0].companyName").value("Apple Inc."))
+                .andExpect(jsonPath("$[0].ticker").value("AAPL"))
+                .andExpect(jsonPath("$[0].enabled").value(true));
+    }
+
+    @Test
+    void authenticatedWatchlistAddReturnsEntry() throws Exception {
+        when(watchlistManagerService.addEntry(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new SecWatchlistCompanyEntity("789019", "Microsoft Corp.", "MSFT", null, true));
+
+        mockMvc.perform(post("/api/sec/watchlist")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"cik":"789019","companyName":"Microsoft Corp.","ticker":"MSFT","enabled":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cik").value("789019"))
+                .andExpect(jsonPath("$.companyName").value("Microsoft Corp."));
+    }
+
+    @Test
+    void duplicateWatchlistCikReturnsBadRequest() throws Exception {
+        when(watchlistManagerService.addEntry(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new SecWatchlistManagerService.DuplicateSecWatchlistCompanyException("SEC watchlist CIK already exists: 320193"));
+
+        mockMvc.perform(post("/api/sec/watchlist")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"cik":"320193","companyName":"Apple Inc.","enabled":true}
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void authenticatedWatchlistUpdateAndDeleteWork() throws Exception {
+        when(watchlistManagerService.updateEntry(org.mockito.ArgumentMatchers.eq(1L), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new SecWatchlistCompanyEntity("320193", "Apple Inc.", "AAPL", null, false));
+
+        mockMvc.perform(patch("/api/sec/watchlist/1")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"companyName":"Apple Inc.","ticker":"AAPL","enabled":false}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false));
+
+        mockMvc.perform(delete("/api/sec/watchlist/1").with(httpBasic("tester", "secret")))
+                .andExpect(status().isNoContent());
     }
 
     @Test

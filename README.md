@@ -374,6 +374,13 @@ sec.scanner.watchlist / SEC_SCANNER_WATCHLIST
 sec.scanner.max-filings-per-cik / SEC_SCANNER_MAX_FILINGS_PER_CIK
 ```
 
+The dashboard also includes a DB-backed SEC Watchlist Manager. If database
+watchlist entries exist, enabled DB entries are used for SEC scans and this is
+treated as an explicit manual watchlist configuration. If the DB watchlist is
+empty, the scanner falls back to `SEC_SCANNER_WATCHLIST`. This lets local Docker
+deployments start safely with no SEC scanning, then add or remove CIKs from the
+dashboard without editing `.env` or restarting containers.
+
 Manual local run against an existing PostgreSQL instance:
 
 ```powershell
