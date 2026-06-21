@@ -872,9 +872,11 @@
         </div>
         <div class="actions" style="margin-top: 12px;">
             <button id="reviewHighButton" type="button">Review HIGH candidates</button>
+            <button id="fullRefreshButton" class="primary" type="button">Full Refresh</button>
             <button id="scanButtonTop" class="primary" type="button">Run manual scan</button>
             <button id="dryRunButtonTop" type="button">Run dry-run</button>
         </div>
+        <div id="fullRefreshResult" class="notice" style="margin-top: 12px;">Full refresh has not run yet.</div>
     </section>
 
     <section class="panel review-quality">
@@ -1239,6 +1241,7 @@
         signals: [],
         telegramPreview: null,
         signalDetails: null,
+        fullRefreshResult: null,
         selectedPreviewId: null,
         autoRefreshTimer: null
     };
@@ -1248,6 +1251,7 @@
     const scanButtonTop = document.querySelector("#scanButtonTop");
     const dryRunButton = document.querySelector("#dryRunButton");
     const dryRunButtonTop = document.querySelector("#dryRunButtonTop");
+    const fullRefreshButton = document.querySelector("#fullRefreshButton");
     const reviewHighButton = document.querySelector("#reviewHighButton");
     const secScanButton = document.querySelector("#secScanButton");
     const secFetchDocumentsButton = document.querySelector("#secFetchDocumentsButton");
@@ -1284,6 +1288,7 @@
     scanButtonTop.addEventListener("click", runManualScan);
     dryRunButton.addEventListener("click", runDryRun);
     dryRunButtonTop.addEventListener("click", runDryRun);
+    fullRefreshButton.addEventListener("click", runFullRefresh);
     reviewHighButton.addEventListener("click", reviewHighCandidates);
     secScanButton.addEventListener("click", runSecScan);
     secFetchDocumentsButton.addEventListener("click", runSecFetchDocuments);
@@ -1375,6 +1380,20 @@
         } finally {
             setBusy(scanButton, false, "Run manual scan");
             setBusy(scanButtonTop, false, "Run manual scan");
+        }
+    }
+
+    async function runFullRefresh() {
+        setBusy(fullRefreshButton, true, "Refreshing");
+        clearErrors();
+        try {
+            state.fullRefreshResult = await postJson("/api/admin/full-refresh");
+            await loadDashboard();
+            renderFullRefreshResult();
+        } catch (error) {
+            showError("Full refresh", error.message);
+        } finally {
+            setBusy(fullRefreshButton, false, "Full Refresh");
         }
     }
 
@@ -1553,6 +1572,7 @@
 
     function render() {
         renderActionCenter();
+        renderFullRefreshResult();
         renderSignalInbox();
         renderTelegramPreview();
         renderSignalDetails();
@@ -1788,6 +1808,48 @@
         document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
         document.querySelector("#actionNeedsReviewCount").textContent = String(needsReview);
         document.querySelector("#actionScanStatus").textContent = latestScanStatus;
+    }
+
+    function renderFullRefreshResult() {
+        const target = document.querySelector("#fullRefreshResult");
+        const result = state.fullRefreshResult;
+        if (!result) {
+            target.innerHTML = "Full refresh has not run yet.";
+            return;
+        }
+        const rss = result.rssScanSummary || {};
+        const sec = result.secScanSummary || {};
+        const docs = result.secDocumentFetchSummary || {};
+        const recompute = result.recomputeSummary || {};
+        target.innerHTML = `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(result.success ? "success" : "completed with errors", result.success ? "ok" : "warn")}
+                ${badge(`started ${formatDate(result.startedAt)}`, "disabled")}
+                ${badge(`finished ${formatDate(result.finishedAt)}`, "disabled")}
+            </div>
+            <div class="kv">
+                ${kvRows([
+                    ["RSS fetched", rss.totalRead ?? "-"],
+                    ["RSS saved/analyzed", rss.analyzed ?? "-"],
+                    ["RSS candidates", recompute.highCount != null ? `${recompute.highCount} HIGH / ${recompute.mediumCount} MEDIUM` : "-"],
+                    ["RSS duplicates", rss.duplicatesSkipped ?? "-"],
+                    ["SEC fetched", sec.fetchedFilings ?? "-"],
+                    ["SEC matched", sec.matchedFilings ?? "-"],
+                    ["SEC saved", sec.savedFilings ?? "-"],
+                    ["SEC duplicates", sec.duplicatesSkipped ?? "-"],
+                    ["SEC docs fetched", docs.fetchedCount ?? "-"],
+                    ["SEC docs failed", docs.failedCount ?? "-"],
+                    ["Recompute updated", recompute.updatedEvents ?? "-"],
+                    ["Alert eligible", recompute.alertEligibleCount ?? "-"]
+                ])}
+            </div>
+            ${Array.isArray(result.warnings) && result.warnings.length > 0
+                ? `<div class="small-cell warn-text" style="margin-top: 8px;">Warnings: ${escapeText(result.warnings.join("; "))}</div>`
+                : ""}
+            ${Array.isArray(result.errors) && result.errors.length > 0
+                ? `<div class="small-cell danger-text" style="margin-top: 8px;">Errors: ${escapeText(result.errors.join("; "))}</div>`
+                : ""}
+        `;
     }
 
     function renderSignalInbox() {
