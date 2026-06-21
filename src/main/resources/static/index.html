@@ -938,6 +938,13 @@
             </summary>
             <div id="telegramPreview" class="notice">Select Preview Telegram on a signal to inspect the exact manual message.</div>
         </details>
+        <details class="preview-details" id="signalDetailsPanel">
+            <summary class="preview-header">
+                <span>Signal Details / Evidence</span>
+                <span class="badge disabled" id="signalDetailsStatus">not loaded</span>
+            </summary>
+            <div id="signalDetails" class="notice">Select Details on a signal to inspect evidence, warnings, review state, and Telegram preview actions.</div>
+        </details>
     </section>
 
     <section class="panel source-quality">
@@ -1231,6 +1238,7 @@
         secFilings: [],
         signals: [],
         telegramPreview: null,
+        signalDetails: null,
         selectedPreviewId: null,
         autoRefreshTimer: null
     };
@@ -1495,6 +1503,17 @@
         }
     }
 
+    async function loadSignalDetails(sourceType, id) {
+        try {
+            state.signalDetails = await fetchJson(`/api/signals/${encodeURIComponent(sourceType)}/${encodeURIComponent(id)}`);
+            renderSignalDetails();
+            document.querySelector("#signalDetailsPanel").open = true;
+            document.querySelector("#signalDetailsPanel").scrollIntoView({behavior: "smooth", block: "start"});
+        } catch (error) {
+            showError("Signal details", error.message);
+        }
+    }
+
     async function fetchJson(url) {
         const response = await fetch(url, {cache: "no-store"});
         return readJsonResponse(response, url);
@@ -1536,6 +1555,7 @@
         renderActionCenter();
         renderSignalInbox();
         renderTelegramPreview();
+        renderSignalDetails();
         renderSourceQuality();
         renderReviewQuality();
         renderSecWatchlist();
@@ -1828,6 +1848,7 @@
                             <button type="button" ${actionAttr}="USEFUL" ${idAttr}="${escapeAttr(itemId)}">Mark useful</button>
                             <button type="button" ${actionAttr}="IGNORED" ${idAttr}="${escapeAttr(itemId)}">Ignore</button>
                             <button type="button" ${actionAttr}="PENDING" ${idAttr}="${escapeAttr(itemId)}">Reset</button>
+                            <button type="button" data-signal-details-source="${escapeAttr(signal.sourceType)}" data-signal-details-id="${escapeAttr(signal.id)}">Details</button>
                             <button type="button" data-telegram-preview-source="${escapeAttr(signal.sourceType)}" data-telegram-preview-id="${escapeAttr(signal.id)}">Preview Telegram</button>
                             <button type="button" data-telegram-send-source="${escapeAttr(signal.sourceType)}" data-telegram-send-id="${escapeAttr(signal.id)}">Send Telegram</button>
                         </div>
@@ -1860,6 +1881,132 @@
             ${preview.reason || preview.message ? `<div class="small-cell">${escapeText(preview.reason || preview.message)}</div>` : ""}
             ${preview.error ? `<div class="small-cell danger-text">${escapeText(preview.error)}</div>` : ""}
             <pre>${escapeText(preview.messageText || preview.message || "No Telegram preview message.")}</pre>
+        `;
+    }
+
+    function renderSignalDetails() {
+        const status = document.querySelector("#signalDetailsStatus");
+        const target = document.querySelector("#signalDetails");
+        const detail = state.signalDetails;
+        if (!detail) {
+            status.className = "badge disabled";
+            status.textContent = "not loaded";
+            target.innerHTML = "Select Details on a signal to inspect evidence, warnings, review state, and Telegram preview actions.";
+            return;
+        }
+        status.className = `badge ${detail.sourceType || "disabled"}`;
+        status.textContent = detail.sourceType || "UNKNOWN";
+        target.innerHTML = detail.sourceType === "SEC_FILING"
+            ? renderSecSignalDetails(detail)
+            : renderRssSignalDetails(detail);
+    }
+
+    function renderRssSignalDetails(detail) {
+        return `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(detail.candidateStrength || "NONE", detail.candidateStrength || "disabled")}
+                ${badge(`score ${detail.candidateScore ?? 0}`, detail.candidateStrength || "disabled")}
+                ${badge(detail.reviewVerdict || "UNKNOWN", detail.reviewVerdict || "disabled")}
+                ${badge(detail.tradability || "UNKNOWN", detail.tradability || "disabled")}
+                ${detail.alertEligible ? badge("alert eligible", "eligible") : badge("not alert eligible", "disabled")}
+            </div>
+            <strong>${escapeText(detail.title || "-")}</strong>
+            <div class="small-cell">${escapeText(detail.sourceName || detail.sourceHost || "-")} / ${escapeText(formatDate(detail.publishedAt))}</div>
+            <div class="grid" style="margin-top: 12px;">
+                <section class="panel span-3">
+                    <h3>Summary</h3>
+                    <p class="snippet">${escapeText(detail.reviewSummary || detail.candidateReason || "No summary available.")}</p>
+                    <div class="kv">${kvRows([
+                        ["Target", detail.targetCompany],
+                        ["Buyer", detail.buyerCompany],
+                        ["Offer", formatOffer(detail)],
+                        ["Payment", detail.paymentType],
+                        ["Status", detail.dealStatus],
+                        ["Confidence", detail.dealConfidence]
+                    ])}</div>
+                </section>
+                <section class="panel span-3">
+                    <h3>Evidence</h3>
+                    ${chipList("Positive signals", detail.reviewPositiveSignals, "")}
+                    ${chipList("Positive keywords", splitKeywords(detail.matchedPositiveKeywords), "")}
+                    <p class="snippet">${escapeText(detail.dealSummary || detail.relevanceSummary || detail.stageSummary || "")}</p>
+                </section>
+                <section class="panel span-3">
+                    <h3>Warnings</h3>
+                    ${chipList("Review risk flags", detail.reviewRiskFlags, "risk")}
+                    ${chipList("Deal warnings", detail.dealWarnings, "risk")}
+                    ${chipList("Relevance warnings", detail.relevanceWarnings, "risk")}
+                    ${chipList("Stage warnings", detail.stageWarnings, "risk")}
+                    ${detail.alertEligibilityReason ? `<p class="snippet">${escapeText(detail.alertEligibilityReason)}</p>` : ""}
+                </section>
+                <section class="panel span-3">
+                    <h3>Review</h3>
+                    <div class="kv">${kvRows([
+                        ["Manual status", detail.manualReviewStatus],
+                        ["Manual reason", detail.manualReviewReason],
+                        ["Manual note", detail.manualReviewNote],
+                        ["Relevance", detail.dealRelevance],
+                        ["Stage", `${detail.dealStage || "-"} / ${detail.dealTiming || "-"}`]
+                    ])}</div>
+                    <div class="actions compact-actions" style="margin-top: 10px;">
+                        <button type="button" data-telegram-preview-source="${escapeAttr(detail.sourceType)}" data-telegram-preview-id="${escapeAttr(detail.id)}">Preview Telegram</button>
+                    </div>
+                </section>
+            </div>
+            <div style="margin-top: 10px;"><a href="${escapeAttr(detail.url)}" target="_blank" rel="noreferrer">Open source</a></div>
+        `;
+    }
+
+    function renderSecSignalDetails(detail) {
+        return `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(detail.secSignalPriority || "UNKNOWN", detail.secSignalPriority || "disabled")}
+                ${badge(detail.secSignalType || "UNKNOWN", detail.secSignalType || "disabled")}
+                ${badge(detail.documentFetchStatus || "not fetched", detail.documentFetchStatus || "disabled")}
+            </div>
+            <strong>${escapeText(detail.companyName || detail.title || "-")}</strong>
+            <div class="small-cell">${escapeText(detail.form || "-")} / ${escapeText(formatDate(detail.filingDate))}</div>
+            <div class="grid" style="margin-top: 12px;">
+                <section class="panel span-3">
+                    <h3>Summary</h3>
+                    <p class="snippet">${escapeText(detail.secSignalSummary || detail.documentSignalReason || "No SEC signal summary available.")}</p>
+                    <div class="kv">${kvRows([
+                        ["Company", detail.companyName],
+                        ["CIK", detail.cik],
+                        ["Form", detail.form],
+                        ["Accession", detail.accessionNumber],
+                        ["Priority", detail.secSignalPriority],
+                        ["Signal", detail.secSignalType]
+                    ])}</div>
+                </section>
+                <section class="panel span-3">
+                    <h3>Evidence</h3>
+                    <p class="snippet">${escapeText(detail.documentTextSnippet || "No document snippet stored yet.")}</p>
+                    <div class="kv">${kvRows([
+                        ["Document strength", detail.documentSignalStrength],
+                        ["Document status", detail.documentFetchStatus],
+                        ["Document reason", detail.documentSignalReason]
+                    ])}</div>
+                </section>
+                <section class="panel span-3">
+                    <h3>Warnings</h3>
+                    ${detail.secSignalWarnings ? `<p class="snippet danger-text">${escapeText(detail.secSignalWarnings)}</p>` : `<div class="muted">No SEC warnings.</div>`}
+                </section>
+                <section class="panel span-3">
+                    <h3>Review</h3>
+                    <div class="kv">${kvRows([
+                        ["Manual status", detail.manualReviewStatus],
+                        ["Manual reason", detail.manualReviewReason],
+                        ["Manual note", detail.manualReviewNote]
+                    ])}</div>
+                    <div class="actions compact-actions" style="margin-top: 10px;">
+                        <button type="button" data-telegram-preview-source="${escapeAttr(detail.sourceType)}" data-telegram-preview-id="${escapeAttr(detail.id)}">Preview Telegram</button>
+                    </div>
+                </section>
+            </div>
+            <div style="margin-top: 10px;">
+                <a href="${escapeAttr(detail.documentUrl || detail.filingUrl || detail.url)}" target="_blank" rel="noreferrer">Open SEC filing</a>
+            </div>
         `;
     }
 
@@ -2435,6 +2582,11 @@
     });
 
     document.querySelector("#signalInbox").addEventListener("click", event => {
+        const detailsButton = event.target.closest("[data-signal-details-source]");
+        if (detailsButton) {
+            loadSignalDetails(detailsButton.dataset.signalDetailsSource, detailsButton.dataset.signalDetailsId);
+            return;
+        }
         const telegramPreviewButton = event.target.closest("[data-telegram-preview-source]");
         if (telegramPreviewButton) {
             previewSignalTelegram(telegramPreviewButton.dataset.telegramPreviewSource, telegramPreviewButton.dataset.telegramPreviewId);
@@ -2453,6 +2605,13 @@
         const secReviewButton = event.target.closest("[data-signal-sec-review-action]");
         if (secReviewButton) {
             updateSecManualReview(Number(secReviewButton.dataset.secFilingId), secReviewButton.dataset.signalSecReviewAction);
+        }
+    });
+
+    document.querySelector("#signalDetails").addEventListener("click", event => {
+        const telegramPreviewButton = event.target.closest("[data-telegram-preview-source]");
+        if (telegramPreviewButton) {
+            previewSignalTelegram(telegramPreviewButton.dataset.telegramPreviewSource, telegramPreviewButton.dataset.telegramPreviewId);
         }
     });
 

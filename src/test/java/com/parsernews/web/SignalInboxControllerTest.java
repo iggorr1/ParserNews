@@ -195,6 +195,67 @@ class SignalInboxControllerTest {
     }
 
     @Test
+    void rssSignalDetailsReturnEvidenceFields() throws Exception {
+        when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
+
+        mockMvc.perform(get("/api/signals/RSS_NEWS/1").with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceType").value("RSS_NEWS"))
+                .andExpect(jsonPath("$.title").value("Target Enters Definitive Merger Agreement"))
+                .andExpect(jsonPath("$.candidateStrength").value("HIGH"))
+                .andExpect(jsonPath("$.candidateScore").value(90))
+                .andExpect(jsonPath("$.candidateReason").value("Matched merger agreement."))
+                .andExpect(jsonPath("$.matchedPositiveKeywords").value("merger agreement"))
+                .andExpect(jsonPath("$.reviewVerdict").value("LIKELY_DEAL"))
+                .andExpect(jsonPath("$.dealSummary").value("Buyer / Target, cash merger."))
+                .andExpect(jsonPath("$.targetCompany").value("Target Inc."))
+                .andExpect(jsonPath("$.buyerCompany").value("Buyer Inc."))
+                .andExpect(jsonPath("$.dealRelevance").value("PUBLIC_CASH_ACQUISITION"))
+                .andExpect(jsonPath("$.tradability").value("HIGH"))
+                .andExpect(jsonPath("$.dealStage").value("DEFINITIVE_AGREEMENT"))
+                .andExpect(jsonPath("$.dealTiming").value("EARLY"))
+                .andExpect(jsonPath("$.alertEligible").value(true))
+                .andExpect(jsonPath("$.alertEligibilityReason").value("Eligible"))
+                .andExpect(jsonPath("$.manualReviewStatus").value("PENDING"));
+    }
+
+    @Test
+    void secSignalDetailsReturnEvidenceFields() throws Exception {
+        SecFilingEntity sec = secFiling(SecSignalPriority.HIGH, SecSignalType.TENDER_OFFER);
+        when(secFilingRepository.findById(7L)).thenReturn(java.util.Optional.of(sec));
+
+        mockMvc.perform(get("/api/signals/SEC_FILING/7").with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceType").value("SEC_FILING"))
+                .andExpect(jsonPath("$.companyName").value("MICROSOFT CORP"))
+                .andExpect(jsonPath("$.cik").value("0000789019"))
+                .andExpect(jsonPath("$.form").value("8-K"))
+                .andExpect(jsonPath("$.accessionNumber").value("0000789019-26-000001"))
+                .andExpect(jsonPath("$.documentFetchStatus").value("FETCHED"))
+                .andExpect(jsonPath("$.documentTextSnippet").value("Document text"))
+                .andExpect(jsonPath("$.documentSignalStrength").value("HIGH"))
+                .andExpect(jsonPath("$.documentSignalReason").value("SEC document signal."))
+                .andExpect(jsonPath("$.secSignalType").value("TENDER_OFFER"))
+                .andExpect(jsonPath("$.secSignalPriority").value("HIGH"))
+                .andExpect(jsonPath("$.secSignalSummary").value("SEC document signal."))
+                .andExpect(jsonPath("$.manualReviewStatus").value("PENDING"));
+    }
+
+    @Test
+    void signalDetailsReturn404ForUnknownId() throws Exception {
+        when(eventRepository.findById(404L)).thenReturn(java.util.Optional.empty());
+
+        mockMvc.perform(get("/api/signals/RSS_NEWS/404").with(httpBasic("tester", "secret")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void signalDetailsRequireAuth() throws Exception {
+        mockMvc.perform(get("/api/signals/RSS_NEWS/1"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void rssTelegramPreviewReturnsMessageText() throws Exception {
         DetectedEventEntity rss = rssEvent(CandidateStrength.HIGH, true);
         when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rss));

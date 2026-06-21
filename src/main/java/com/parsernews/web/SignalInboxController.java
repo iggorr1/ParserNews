@@ -31,6 +31,7 @@ import org.springframework.http.HttpStatus;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -98,6 +99,30 @@ public class SignalInboxController {
                 .sorted(signalComparator())
                 .limit(normalizedLimit(limit))
                 .toList();
+    }
+
+    @GetMapping("/api/signals/{sourceType}/{id}")
+    @Transactional(readOnly = true)
+    public SignalDetailResponse signalDetails(
+            @PathVariable SourceType sourceType,
+            @PathVariable Long id
+    ) {
+        if (sourceType == SourceType.RSS_NEWS) {
+            DetectedEventEntity event = eventRepository.findById(id)
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "RSS signal not found"));
+            ArticleController.ArticleListResponse article = ArticleController.ArticleListResponse.from(
+                    event.getArticle(),
+                    event,
+                    reviewInsightService,
+                    dealTermsExtractionService,
+                    dealRelevanceService,
+                    dealStageDetectionService
+            );
+            return SignalDetailResponse.fromRss(event.getId(), article);
+        }
+        SecFilingEntity filing = secFilingRepository.findById(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "SEC signal not found"));
+        return SignalDetailResponse.fromSec(filing);
     }
 
     @GetMapping("/api/signals/{sourceType}/{id}/telegram-preview")
@@ -362,6 +387,182 @@ public class SignalInboxController {
     ) {
         Instant sortInstant() {
             return publishedAt != null ? publishedAt : discoveredAt;
+        }
+    }
+
+    public record SignalDetailResponse(
+            SourceType sourceType,
+            Long id,
+            String title,
+            String url,
+            String sourceName,
+            String sourceHost,
+            Instant publishedAt,
+            LocalDate filingDate,
+            CandidateStrength candidateStrength,
+            Integer candidateScore,
+            String candidateReason,
+            String matchedPositiveKeywords,
+            String matchedNegativeKeywords,
+            com.parsernews.model.ReviewVerdict reviewVerdict,
+            String reviewSummary,
+            List<String> reviewRiskFlags,
+            List<String> reviewPositiveSignals,
+            String dealSummary,
+            String targetCompany,
+            String buyerCompany,
+            BigDecimal offerPrice,
+            String offerCurrency,
+            com.parsernews.model.PaymentType paymentType,
+            com.parsernews.model.DealStatus dealStatus,
+            com.parsernews.model.DealConfidence dealConfidence,
+            List<String> dealWarnings,
+            DealRelevance dealRelevance,
+            Tradability tradability,
+            String relevanceSummary,
+            List<String> relevanceWarnings,
+            DealStage dealStage,
+            DealTiming dealTiming,
+            String stageSummary,
+            List<String> stageWarnings,
+            Boolean alertEligible,
+            String alertEligibilityReason,
+            ManualReviewStatus manualReviewStatus,
+            ManualReviewReason manualReviewReason,
+            String manualReviewNote,
+            String companyName,
+            String cik,
+            String form,
+            String accessionNumber,
+            String filingUrl,
+            String documentUrl,
+            String documentFetchStatus,
+            String documentTextSnippet,
+            String documentSignalStrength,
+            String documentSignalReason,
+            SecSignalType secSignalType,
+            SecSignalPriority secSignalPriority,
+            String secSignalSummary,
+            String secSignalWarnings
+    ) {
+        static SignalDetailResponse fromRss(Long signalId, ArticleController.ArticleListResponse article) {
+            return new SignalDetailResponse(
+                    SourceType.RSS_NEWS,
+                    signalId,
+                    article.title(),
+                    article.url(),
+                    article.source(),
+                    article.host(),
+                    article.publishedAt(),
+                    null,
+                    article.candidateStrength(),
+                    article.candidateScore(),
+                    article.candidateReason(),
+                    article.matchedPositiveKeywords(),
+                    article.matchedNegativeKeywords(),
+                    article.reviewVerdict(),
+                    article.reviewSummary(),
+                    article.reviewRiskFlags(),
+                    article.reviewPositiveSignals(),
+                    article.dealSummary(),
+                    article.targetCompany(),
+                    article.buyerCompany(),
+                    article.offerPrice(),
+                    article.offerCurrency(),
+                    article.paymentType(),
+                    article.dealStatus(),
+                    article.dealConfidence(),
+                    article.dealWarnings(),
+                    article.dealRelevance(),
+                    article.tradability(),
+                    article.relevanceSummary(),
+                    article.relevanceWarnings(),
+                    article.dealStage(),
+                    article.dealTiming(),
+                    article.stageSummary(),
+                    article.stageWarnings(),
+                    article.alertEligible(),
+                    article.alertReason(),
+                    article.manualReviewStatus(),
+                    article.manualReviewReason(),
+                    article.manualReviewNote(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null
+            );
+        }
+
+        static SignalDetailResponse fromSec(SecFilingEntity filing) {
+            return new SignalDetailResponse(
+                    SourceType.SEC_FILING,
+                    filing.getId(),
+                    filing.getCompanyName() + " " + filing.getForm(),
+                    firstNonBlankStatic(filing.getDocumentUrl(), filing.getFilingUrl()),
+                    "SEC",
+                    "sec.gov",
+                    null,
+                    filing.getFilingDate(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    null,
+                    null,
+                    null,
+                    List.of(),
+                    null,
+                    null,
+                    filing.getManualReviewStatus(),
+                    filing.getManualReviewReason(),
+                    filing.getManualReviewNote(),
+                    filing.getCompanyName(),
+                    filing.getCik(),
+                    filing.getForm(),
+                    filing.getAccessionNumber(),
+                    filing.getFilingUrl(),
+                    filing.getDocumentUrl(),
+                    filing.getDocumentFetchStatus(),
+                    filing.getDocumentTextSnippet(),
+                    filing.getDocumentSignalStrength(),
+                    filing.getDocumentSignalReason(),
+                    filing.getSecSignalType(),
+                    filing.getSecSignalPriority(),
+                    filing.getSecSignalSummary(),
+                    filing.getSecSignalWarnings()
+            );
+        }
+
+        private static String firstNonBlankStatic(String first, String fallback) {
+            return first == null || first.isBlank() ? fallback : first;
         }
     }
 
