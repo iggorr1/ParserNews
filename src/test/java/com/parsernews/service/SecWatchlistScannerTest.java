@@ -78,6 +78,55 @@ class SecWatchlistScannerTest {
         SecWatchlistScanner.SecScanSummary summary = scanner.scan();
 
         assertThat(summary.enabled()).isFalse();
+        assertThat(summary.configured()).isFalse();
+        assertThat(summary.watchlistSize()).isEqualTo(1);
+        verify(repository, never()).save(any(SecFilingEntity.class));
+    }
+
+    @Test
+    void statusShowsDisabledOrEmptyWarning() {
+        SecWatchlistScanner scanner = scanner(false, "", mock(SecFilingRepository.class), json());
+
+        SecWatchlistScanner.SecStatus status = scanner.status();
+
+        assertThat(status.enabled()).isFalse();
+        assertThat(status.configured()).isFalse();
+        assertThat(status.watchlistSize()).isZero();
+        assertThat(status.warning()).isEqualTo("SEC scanner disabled or watchlist empty");
+    }
+
+    @Test
+    void statusShowsConfiguredWhenEnabledAndWatchlistPresent() {
+        SecWatchlistScanner scanner = scanner(true, "320193,789019", mock(SecFilingRepository.class), json());
+
+        SecWatchlistScanner.SecStatus status = scanner.status();
+
+        assertThat(status.enabled()).isTrue();
+        assertThat(status.configured()).isTrue();
+        assertThat(status.watchlistSize()).isEqualTo(2);
+        assertThat(status.maxFilingsPerCik()).isEqualTo(20);
+        assertThat(status.warning()).isNull();
+    }
+
+    @Test
+    void enabledScannerWithEmptyWatchlistReturnsWarningWithoutFetch() {
+        SecFilingRepository repository = mock(SecFilingRepository.class);
+        SecSubmissionsClient client = paddedCik -> {
+            throw new AssertionError("Should not fetch when watchlist is empty");
+        };
+        SecWatchlistScanner scanner = new SecWatchlistScanner(
+                new SecScannerSettings(true, "", 20),
+                client,
+                repository,
+                new ObjectMapper()
+        );
+
+        SecWatchlistScanner.SecScanSummary summary = scanner.scan();
+
+        assertThat(summary.enabled()).isTrue();
+        assertThat(summary.configured()).isFalse();
+        assertThat(summary.watchlistSize()).isZero();
+        assertThat(summary.message()).isEqualTo("SEC scanner watchlist is empty.");
         verify(repository, never()).save(any(SecFilingEntity.class));
     }
 

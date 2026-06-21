@@ -44,7 +44,7 @@ public class FullRefreshService {
 
         try {
             secScanSummary = secWatchlistScanner.scan();
-            if (!secScanSummary.enabled() || secScanSummary.watchlistCount() == 0) {
+            if (!secScanSummary.enabled() || !secScanSummary.configured() || secScanSummary.watchlistSize() == 0) {
                 warnings.add("SEC scanner disabled or watchlist empty");
             }
             if (secScanSummary.message() != null && !secScanSummary.message().isBlank()

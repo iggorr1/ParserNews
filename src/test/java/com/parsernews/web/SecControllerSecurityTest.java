@@ -65,11 +65,14 @@ class SecControllerSecurityTest {
 
     @Test
     void authenticatedSecStatusReturnsOk() throws Exception {
-        when(secWatchlistScanner.status()).thenReturn(new SecWatchlistScanner.SecStatus(false, 0, 20, 0));
+        when(secWatchlistScanner.status()).thenReturn(new SecWatchlistScanner.SecStatus(false, false, 0, 0, 20, 0, "SEC scanner disabled or watchlist empty"));
 
         mockMvc.perform(get("/api/sec/status").with(httpBasic("tester", "secret")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.configured").value(false))
+                .andExpect(jsonPath("$.watchlistSize").value(0))
+                .andExpect(jsonPath("$.warning").value("SEC scanner disabled or watchlist empty"))
                 .andExpect(jsonPath("$.maxFilingsPerCik").value(20));
     }
 

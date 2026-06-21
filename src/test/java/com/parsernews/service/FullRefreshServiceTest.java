@@ -48,7 +48,7 @@ class FullRefreshServiceTest {
     @Test
     void secDisabledReturnsWarningAndContinues() {
         when(newsScannerService.scan()).thenReturn(new ScanSummary(1, 1, 0, 0, 0, 0));
-        when(secWatchlistScanner.scan()).thenReturn(new SecWatchlistScanner.SecScanSummary(false, 0, 0, 0, 0, 0, "SEC scanner is disabled."));
+        when(secWatchlistScanner.scan()).thenReturn(new SecWatchlistScanner.SecScanSummary(false, false, 0, 0, 20, 0, 0, 0, 0, "SEC scanner is disabled."));
         when(documentFetcher.fetchPendingDocuments()).thenReturn(new SecFilingDocumentFetcher.SecDocumentFetchSummary(0, 0, 0, 0));
         when(recomputeService.recomputeCandidates()).thenReturn(new CandidateRecomputeService.RecomputeSummary(1, 1, 1, 0, 0, 0, 1, 0));
 
@@ -59,6 +59,21 @@ class FullRefreshServiceTest {
         assertThat(summary.warnings()).contains("SEC scanner is disabled.");
         assertThat(summary.rssScanSummary()).isNotNull();
         assertThat(summary.recomputeSummary()).isNotNull();
+    }
+
+    @Test
+    void secEmptyWatchlistReturnsWarningAndContinues() {
+        when(newsScannerService.scan()).thenReturn(new ScanSummary(1, 1, 0, 0, 0, 0));
+        when(secWatchlistScanner.scan()).thenReturn(new SecWatchlistScanner.SecScanSummary(true, false, 0, 0, 20, 0, 0, 0, 0, "SEC scanner watchlist is empty."));
+        when(documentFetcher.fetchPendingDocuments()).thenReturn(new SecFilingDocumentFetcher.SecDocumentFetchSummary(0, 0, 0, 0));
+        when(recomputeService.recomputeCandidates()).thenReturn(new CandidateRecomputeService.RecomputeSummary(1, 1, 1, 0, 0, 0, 1, 0));
+
+        FullRefreshService.FullRefreshSummary summary = service.fullRefresh();
+
+        assertThat(summary.success()).isTrue();
+        assertThat(summary.secScanSummary().watchlistSize()).isZero();
+        assertThat(summary.warnings()).contains("SEC scanner disabled or watchlist empty");
+        assertThat(summary.warnings()).contains("SEC scanner watchlist is empty.");
     }
 
     @Test

@@ -283,6 +283,28 @@ Docker stores PostgreSQL data in the named Docker volume
 directory. Telegram and alert dispatch remain disabled by default in
 `docker-compose.yml`.
 
+SEC watchlist scanning is also disabled by default. Docker Compose reads these
+optional environment variables, or the same values from a local `.env` file:
+
+```text
+SEC_SCANNER_ENABLED=false
+SEC_SCANNER_WATCHLIST=
+SEC_SCANNER_MAX_FILINGS_PER_CIK=20
+```
+
+Example smoke-test watchlist:
+
+```text
+SEC_SCANNER_ENABLED=true
+SEC_SCANNER_WATCHLIST=320193,789019,1318605
+SEC_SCANNER_MAX_FILINGS_PER_CIK=20
+```
+
+These example CIKs are Apple (`320193`), Microsoft (`789019`), and Tesla
+(`1318605`). They are smoke-test examples only, not investment
+recommendations. SEC scanning is watchlist-only; the app does not scan all SEC
+filings.
+
 `stop-docker.bat` / `docker compose down` stops containers but does not delete
 the PostgreSQL volume. `docker compose down -v` deletes database data and should
 be used only for a full reset.
@@ -341,6 +363,15 @@ The PostgreSQL profile reads these environment variables:
 SPRING_DATASOURCE_URL
 SPRING_DATASOURCE_USERNAME
 SPRING_DATASOURCE_PASSWORD
+```
+
+SEC scanner settings can be provided either as Spring properties or environment
+variables. Both forms are supported:
+
+```text
+sec.scanner.enabled / SEC_SCANNER_ENABLED
+sec.scanner.watchlist / SEC_SCANNER_WATCHLIST
+sec.scanner.max-filings-per-cik / SEC_SCANNER_MAX_FILINGS_PER_CIK
 ```
 
 Manual local run against an existing PostgreSQL instance:

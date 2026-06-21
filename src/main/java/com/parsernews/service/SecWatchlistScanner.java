@@ -47,10 +47,13 @@ public class SecWatchlistScanner {
 
     @Transactional
     public SecScanSummary scan() {
-        if (!settings.enabled()) {
-            return new SecScanSummary(false, settings.watchlistCiks().size(), 0, 0, 0, 0, "SEC scanner is disabled.");
-        }
         List<String> ciks = settings.watchlistCiks();
+        if (!settings.enabled()) {
+            return new SecScanSummary(false, false, ciks.size(), ciks.size(), settings.maxFilingsPerCik(), 0, 0, 0, 0, "SEC scanner is disabled.");
+        }
+        if (ciks.isEmpty()) {
+            return new SecScanSummary(true, false, 0, 0, settings.maxFilingsPerCik(), 0, 0, 0, 0, "SEC scanner watchlist is empty.");
+        }
         int fetchedFilings = 0;
         int matchedFilings = 0;
         int savedFilings = 0;
@@ -88,16 +91,31 @@ public class SecWatchlistScanner {
         }
 
         String message = errors.isEmpty() ? "SEC scan completed." : String.join("; ", errors);
-        return new SecScanSummary(true, ciks.size(), fetchedFilings, matchedFilings, savedFilings, duplicatesSkipped, message);
+        return new SecScanSummary(true, true, ciks.size(), ciks.size(), settings.maxFilingsPerCik(), fetchedFilings, matchedFilings, savedFilings, duplicatesSkipped, message);
     }
 
     public SecStatus status() {
+        List<String> ciks = settings.watchlistCiks();
+        boolean configured = settings.enabled() && !ciks.isEmpty();
         return new SecStatus(
                 settings.enabled(),
-                settings.watchlistCiks().size(),
+                configured,
+                ciks.size(),
+                ciks.size(),
                 settings.maxFilingsPerCik(),
-                filingRepository.count()
+                filingRepository.count(),
+                secWarning(settings.enabled(), ciks.size())
         );
+    }
+
+    private String secWarning(boolean enabled, int watchlistSize) {
+        if (!enabled) {
+            return "SEC scanner disabled or watchlist empty";
+        }
+        if (watchlistSize == 0) {
+            return "SEC scanner disabled or watchlist empty";
+        }
+        return null;
     }
 
     SecSubmissions parseSubmissions(String fallbackCik, String json) throws IOException {
@@ -225,20 +243,37 @@ public class SecWatchlistScanner {
 
     public record SecScanSummary(
             boolean enabled,
+            boolean configured,
+            int watchlistSize,
             int watchlistCount,
+            int maxFilingsPerCik,
             int fetchedFilings,
             int matchedFilings,
             int savedFilings,
             int duplicatesSkipped,
             String message
     ) {
+        public SecScanSummary(
+                boolean enabled,
+                int watchlistCount,
+                int fetchedFilings,
+                int matchedFilings,
+                int savedFilings,
+                int duplicatesSkipped,
+                String message
+        ) {
+            this(enabled, enabled && watchlistCount > 0, watchlistCount, watchlistCount, 20, fetchedFilings, matchedFilings, savedFilings, duplicatesSkipped, message);
+        }
     }
 
     public record SecStatus(
             boolean enabled,
+            boolean configured,
+            int watchlistSize,
             int watchlistCount,
             int maxFilingsPerCik,
-            long savedFilings
+            long savedFilings,
+            String warning
     ) {
     }
 

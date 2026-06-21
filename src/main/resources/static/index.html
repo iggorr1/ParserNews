@@ -1641,15 +1641,19 @@
     function renderSecWatchlist() {
         const status = state.secStatus || {};
         const enabled = Boolean(status.enabled);
+        const configured = Boolean(status.configured);
+        const warning = status.warning || (!enabled || !configured ? "SEC scanner disabled or watchlist empty" : "");
         const badgeTarget = document.querySelector("#secStatusBadge");
-        badgeTarget.textContent = enabled ? "Enabled" : "Disabled";
-        badgeTarget.className = `badge ${enabled ? "ok" : "disabled"}`;
+        badgeTarget.textContent = configured ? "Configured" : enabled ? "Watchlist empty" : "Disabled";
+        badgeTarget.className = `badge ${configured ? "ok" : "disabled"}`;
         document.querySelector("#secStatus").innerHTML = kvRows([
             ["Enabled", enabled ? "Yes" : "No"],
-            ["Watchlist CIKs", status.watchlistCount ?? 0],
+            ["Configured", configured ? "Yes" : "No"],
+            ["Watchlist CIKs", status.watchlistSize ?? status.watchlistCount ?? 0],
             ["Max filings / CIK", status.maxFilingsPerCik ?? 20],
-            ["Saved filings", status.savedFilings ?? 0]
-        ]);
+            ["Saved filings", status.savedFilings ?? 0],
+            ["Warning", warning || "-"]
+        ]) + (warning ? `<div class="warning">${escapeText(warning)}</div>` : "");
 
         const target = document.querySelector("#secFilings");
         const priority = secPriorityFilter.value;
@@ -1821,6 +1825,10 @@
         const sec = result.secScanSummary || {};
         const docs = result.secDocumentFetchSummary || {};
         const recompute = result.recomputeSummary || {};
+        const secWatchlistSize = sec.watchlistSize ?? sec.watchlistCount;
+        const secSkipReason = (!sec.enabled || !sec.configured || secWatchlistSize === 0)
+            ? (sec.message || "SEC scanner disabled or watchlist empty")
+            : "";
         target.innerHTML = `
             <div class="badge-row" style="margin-bottom: 8px;">
                 ${badge(result.success ? "success" : "completed with errors", result.success ? "ok" : "warn")}
@@ -1833,10 +1841,14 @@
                     ["RSS saved/analyzed", rss.analyzed ?? "-"],
                     ["RSS candidates", recompute.highCount != null ? `${recompute.highCount} HIGH / ${recompute.mediumCount} MEDIUM` : "-"],
                     ["RSS duplicates", rss.duplicatesSkipped ?? "-"],
+                    ["SEC configured", sec.configured ? "Yes" : "No"],
+                    ["SEC watchlist size", secWatchlistSize ?? "-"],
+                    ["SEC max / CIK", sec.maxFilingsPerCik ?? "-"],
                     ["SEC fetched", sec.fetchedFilings ?? "-"],
                     ["SEC matched", sec.matchedFilings ?? "-"],
                     ["SEC saved", sec.savedFilings ?? "-"],
                     ["SEC duplicates", sec.duplicatesSkipped ?? "-"],
+                    ["SEC skip reason", secSkipReason || "-"],
                     ["SEC docs fetched", docs.fetchedCount ?? "-"],
                     ["SEC docs failed", docs.failedCount ?? "-"],
                     ["Recompute updated", recompute.updatedEvents ?? "-"],
