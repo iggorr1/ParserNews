@@ -223,6 +223,25 @@ Docker Compose runs the Spring Boot app plus PostgreSQL. The app starts with
 the `live,postgres` profiles, Flyway applies database migrations, and Hibernate
 validates the schema instead of creating it dynamically.
 
+Quick start:
+
+```powershell
+.\run-docker.bat
+```
+
+Then open:
+
+```text
+http://localhost:8080/
+```
+
+Default Docker login:
+
+```text
+username: admin
+password: change-me
+```
+
 On Windows, the easiest Docker/PostgreSQL launch is:
 
 ```powershell
@@ -241,6 +260,9 @@ Docker Basic Auth defaults:
 username: admin
 password: change-me
 ```
+
+Optional local overrides can be placed in `.env`. Start from `.env.example` and
+keep real secrets out of git.
 
 Build and run:
 
@@ -311,6 +333,57 @@ be used only for a full reset.
 
 This is a simple local/server-deployment foundation, not production hardening.
 Do not commit real credentials; the compose file uses safe local defaults only.
+
+## MVP v1 Dashboard Workflow
+
+For day-to-day review, use the dashboard instead of opening raw endpoints:
+
+1. Open `http://localhost:8080/`.
+2. Review the Signal Inbox first. It combines RSS candidates and SEC filing
+   signals into one queue.
+3. Click Details on a signal to inspect evidence, warnings, deal terms,
+   relevance, timing, SEC document signals, and manual review state.
+4. Use Mark useful / Ignore / Reset review to build quality feedback.
+5. Use Full Refresh when you want one manual research cycle:
+   - RSS scan
+   - SEC scan if enabled/configured
+   - SEC document fetch
+   - RSS candidate recompute
+6. SEC scanner disabled or empty watchlist warnings are normal on a fresh
+   install. They mean SEC scanning is safely off until you add CIKs.
+
+The SEC Watchlist Manager lets you add/remove CIKs from the database without
+editing `.env` or restarting Docker. Use the SEC Company Lookup box to search by
+ticker or company name, for example `AAPL` or `Apple`, then add the result to
+the DB watchlist. Manual CIK entry remains available.
+
+Manual Telegram preview/send is available from Signal Inbox, but Telegram is
+disabled by default. Disabled/not configured responses are safe no-ops and do
+not send external messages.
+
+## Smoke Test
+
+After Docker is running, verify the core private deployment flow with:
+
+```powershell
+.\scripts\smoke-test.ps1
+```
+
+The script uses Basic Auth from environment variables or defaults to
+`admin/change-me`. It checks:
+
+- `GET /api/status`
+- `GET /api/signals?limit=5`
+- `GET /api/sec/status`
+- `GET /api/articles/candidates/export.csv`
+
+It does not run alert dispatch and does not send Telegram messages.
+
+If the app runs on another port:
+
+```powershell
+.\scripts\smoke-test.ps1 -BaseUrl http://localhost:8081 -Username admin -Password admin
+```
 
 ## Live RSS Smoke Check
 
@@ -411,49 +484,49 @@ Quick local development can still use H2 with the normal live launcher:
 Run a scan:
 
 ```powershell
-curl.exe -X POST http://localhost:8080/api/scan
+curl.exe -u admin:change-me -X POST http://localhost:8080/api/scan
 ```
 
 Check system status:
 
 ```powershell
-curl.exe http://localhost:8080/api/status
+curl.exe -u admin:change-me http://localhost:8080/api/status
 ```
 
 View latest scan runs:
 
 ```powershell
-curl.exe http://localhost:8080/api/scan-runs
+curl.exe -u admin:change-me http://localhost:8080/api/scan-runs
 ```
 
 View saved articles:
 
 ```powershell
-curl.exe http://localhost:8080/api/articles
+curl.exe -u admin:change-me http://localhost:8080/api/articles
 ```
 
 View detected M&A candidates:
 
 ```powershell
-curl.exe http://localhost:8080/api/articles/candidates
+curl.exe -u admin:change-me http://localhost:8080/api/articles/candidates
 ```
 
 View eligible alert candidates:
 
 ```powershell
-curl.exe http://localhost:8080/api/alerts/candidates
+curl.exe -u admin:change-me http://localhost:8080/api/alerts/candidates
 ```
 
 Preview all current alert messages without sending:
 
 ```powershell
-curl.exe -X POST http://localhost:8080/api/alerts/dry-run
+curl.exe -u admin:change-me -X POST http://localhost:8080/api/alerts/dry-run
 ```
 
 Run one alert dispatch cycle manually:
 
 ```powershell
-curl.exe -X POST http://localhost:8080/api/alerts/dispatch
+curl.exe -u admin:change-me -X POST http://localhost:8080/api/alerts/dispatch
 ```
 
 With default config this returns a disabled/no-op response and sends nothing.
@@ -469,44 +542,44 @@ With default config this returns a disabled/no-op response and sends nothing.
 2. Confirm the backend is healthy:
 
 ```powershell
-curl.exe http://localhost:8080/api/status
+curl.exe -u admin:change-me http://localhost:8080/api/status
 ```
 
 3. Trigger one scan:
 
 ```powershell
-curl.exe -X POST http://localhost:8080/api/scan
+curl.exe -u admin:change-me -X POST http://localhost:8080/api/scan
 ```
 
 4. Check scan history:
 
 ```powershell
-curl.exe http://localhost:8080/api/scan-runs
+curl.exe -u admin:change-me http://localhost:8080/api/scan-runs
 ```
 
 5. Check saved articles and candidates:
 
 ```powershell
-curl.exe http://localhost:8080/api/articles
-curl.exe http://localhost:8080/api/articles/candidates
+curl.exe -u admin:change-me http://localhost:8080/api/articles
+curl.exe -u admin:change-me http://localhost:8080/api/articles/candidates
 ```
 
 6. Backfill candidate metadata if using an old local database:
 
 ```powershell
-curl.exe -X POST http://localhost:8080/api/admin/recompute-candidates
+curl.exe -u admin:change-me -X POST http://localhost:8080/api/admin/recompute-candidates
 ```
 
 7. Preview alert text without sending:
 
 ```powershell
-curl.exe -X POST http://localhost:8080/api/alerts/dry-run
+curl.exe -u admin:change-me -X POST http://localhost:8080/api/alerts/dry-run
 ```
 
 8. Run manual dispatch and verify it is disabled/no-op by default:
 
 ```powershell
-curl.exe -X POST http://localhost:8080/api/alerts/dispatch
+curl.exe -u admin:change-me -X POST http://localhost:8080/api/alerts/dispatch
 ```
 
 ## API Endpoints
@@ -720,3 +793,4 @@ show matched keywords, score, strength, and reason.
 - No AI/Ollama/OpenAI classifier yet.
 - No trading, broker, wallet, or exchange integration.
 - Telegram and alert dispatch are foundations only and disabled by default.
+
