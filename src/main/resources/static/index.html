@@ -1008,7 +1008,7 @@
             <div class="panel-head">
                 <div>
                     <h3>SEC Watchlist Manager</h3>
-                    <div class="muted">DB watchlist is used when entries exist; otherwise env watchlist is used as fallback.</div>
+                    <div class="muted">Search by ticker or company, then add the selected company. Manual CIK entry is available under Advanced.</div>
                 </div>
                 <span class="badge" id="secWatchlistCount">0</span>
             </div>
@@ -1033,33 +1033,39 @@
                     </tr>
                     </thead>
                     <tbody id="secCompanyLookupResults">
-                    <tr><td colspan="6" class="muted">Search SEC mapping to add by ticker or company name.</td></tr>
+                    <tr><td colspan="6" class="muted">Search by ticker or company name to add a company.</td></tr>
                     </tbody>
                 </table>
             </div>
-            <div class="filters" style="margin-bottom: 12px;">
-                <div class="control">
-                    <label for="secWatchlistCikInput">CIK</label>
-                    <input id="secWatchlistCikInput" placeholder="320193">
+            <details class="preview-details" style="margin-bottom: 12px;">
+                <summary class="preview-header">
+                    <span>Advanced manual CIK add</span>
+                    <span class="badge disabled">optional</span>
+                </summary>
+                <div class="filters" style="margin-top: 12px;">
+                    <div class="control">
+                        <label for="secWatchlistCikInput">CIK</label>
+                        <input id="secWatchlistCikInput" placeholder="320193">
+                    </div>
+                    <div class="control">
+                        <label for="secWatchlistCompanyInput">Company</label>
+                        <input id="secWatchlistCompanyInput" placeholder="Apple Inc.">
+                    </div>
+                    <div class="control">
+                        <label for="secWatchlistTickerInput">Ticker</label>
+                        <input id="secWatchlistTickerInput" placeholder="AAPL">
+                    </div>
+                    <div class="control">
+                        <label for="secWatchlistNotesInput">Notes</label>
+                        <input id="secWatchlistNotesInput" placeholder="Smoke test">
+                    </div>
+                    <label class="toggle">
+                        <input id="secWatchlistEnabledInput" type="checkbox" checked>
+                        Enabled
+                    </label>
+                    <button id="secWatchlistAddButton" class="primary" type="button">Add manual CIK</button>
                 </div>
-                <div class="control">
-                    <label for="secWatchlistCompanyInput">Company</label>
-                    <input id="secWatchlistCompanyInput" placeholder="Apple Inc.">
-                </div>
-                <div class="control">
-                    <label for="secWatchlistTickerInput">Ticker</label>
-                    <input id="secWatchlistTickerInput" placeholder="AAPL">
-                </div>
-                <div class="control">
-                    <label for="secWatchlistNotesInput">Notes</label>
-                    <input id="secWatchlistNotesInput" placeholder="Smoke test">
-                </div>
-                <label class="toggle">
-                    <input id="secWatchlistEnabledInput" type="checkbox" checked>
-                    Enabled
-                </label>
-                <button id="secWatchlistAddButton" class="primary" type="button">Add CIK</button>
-            </div>
+            </details>
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -1555,7 +1561,7 @@
         } catch (error) {
             showError("SEC watchlist", error.message);
         } finally {
-            setBusy(secWatchlistAddButton, false, "Add CIK");
+            setBusy(secWatchlistAddButton, false, "Add manual CIK");
         }
     }
 
@@ -1571,7 +1577,9 @@
         secCompanyLookupStatus.textContent = "";
         try {
             state.secCompanyLookupResults = await fetchJson(`/api/sec/company-lookup?q=${encodeURIComponent(query)}`);
-            secCompanyLookupStatus.textContent = `${state.secCompanyLookupResults.length} result(s)`;
+            secCompanyLookupStatus.textContent = state.secCompanyLookupResults.some(result => result.alreadyInWatchlist)
+                ? "Already in watchlist"
+                : `${state.secCompanyLookupResults.length} result(s)`;
             renderSecCompanyLookupResults();
         } catch (error) {
             state.secCompanyLookupResults = [];
@@ -1589,6 +1597,10 @@
             showError("SEC company lookup", "Lookup result not found in current dashboard state.");
             return;
         }
+        if (result.alreadyInWatchlist) {
+            secCompanyLookupStatus.textContent = "Already in watchlist";
+            return;
+        }
         try {
             await postJson("/api/sec/watchlist/from-lookup", {
                 cik: result.cik,
@@ -1597,10 +1609,17 @@
                 notes: "Added from SEC lookup",
                 enabled: true
             });
+            const label = `${result.ticker || result.cik} / ${result.companyName || "Company"} added to SEC watchlist`;
+            state.secCompanyLookupResults = [];
+            secCompanyLookupStatus.textContent = label;
+            renderSecCompanyLookupResults();
             await reloadSecWatchlistState();
-            await searchSecCompanyLookup();
         } catch (error) {
-            showError("SEC company lookup", error.message);
+            if ((error.message || "").toLowerCase().includes("already") || (error.message || "").toLowerCase().includes("duplicate")) {
+                secCompanyLookupStatus.textContent = "Already in watchlist";
+            } else {
+                showError("SEC company lookup", error.message);
+            }
         }
     }
 
@@ -1934,9 +1953,9 @@
 
     function renderSecWatchlistEntries() {
         const target = document.querySelector("#secWatchlistEntries");
-        document.querySelector("#secWatchlistCount").textContent = `${state.secWatchlist.length} DB entries`;
+        document.querySelector("#secWatchlistCount").textContent = `${state.secWatchlist.length} watchlist companies`;
         if (!state.secWatchlist.length) {
-            target.innerHTML = `<tr><td colspan="7" class="muted">No DB watchlist entries. SEC scanner will use ENV watchlist if configured.</td></tr>`;
+            target.innerHTML = `<tr><td colspan="7" class="muted">No watchlist companies yet. Search by ticker/company above, or use ENV fallback if configured.</td></tr>`;
             return;
         }
         target.innerHTML = state.secWatchlist.map(entry => `
@@ -1960,7 +1979,7 @@
     function renderSecCompanyLookupResults() {
         const target = document.querySelector("#secCompanyLookupResults");
         if (!state.secCompanyLookupResults.length) {
-            target.innerHTML = `<tr><td colspan="6" class="muted">No SEC lookup results loaded.</td></tr>`;
+            target.innerHTML = `<tr><td colspan="6" class="muted">Search by ticker or company name to add a company.</td></tr>`;
             return;
         }
         target.innerHTML = state.secCompanyLookupResults.map(result => `
