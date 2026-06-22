@@ -10,6 +10,8 @@ import com.parsernews.model.ReviewVerdict;
 import com.parsernews.model.Tradability;
 import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.CompanyMatchConfidence;
+import com.parsernews.persistence.DealGroupReviewEntity;
+import com.parsernews.persistence.DealGroupReviewRepository;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
@@ -43,6 +45,7 @@ class DealGroupingServiceTest {
     private DealTermsExtractionService dealTermsExtractionService;
     private DealRelevanceService dealRelevanceService;
     private DealStageDetectionService dealStageDetectionService;
+    private DealGroupReviewRepository dealGroupReviewRepository;
     private DealGroupingService service;
 
     @BeforeEach
@@ -53,6 +56,7 @@ class DealGroupingServiceTest {
         dealTermsExtractionService = mock(DealTermsExtractionService.class);
         dealRelevanceService = mock(DealRelevanceService.class);
         dealStageDetectionService = mock(DealStageDetectionService.class);
+        dealGroupReviewRepository = mock(DealGroupReviewRepository.class);
         when(reviewInsightService.insight(any(), any())).thenReturn(new CandidateReviewInsightService.ReviewInsight(
                 ReviewVerdict.LIKELY_DEAL,
                 "Likely public deal.",
@@ -94,7 +98,8 @@ class DealGroupingServiceTest {
                 reviewInsightService,
                 dealTermsExtractionService,
                 dealRelevanceService,
-                dealStageDetectionService
+                dealStageDetectionService,
+                dealGroupReviewRepository
         );
     }
 
@@ -155,6 +160,59 @@ class DealGroupingServiceTest {
         assertThat(service.groups(null, null, 50)).isEmpty();
         assertThat(service.groups(ManualReviewStatus.IGNORED, null, 50)).hasSize(1);
         assertThat(service.groups(ManualReviewStatus.IGNORED, com.parsernews.web.SignalInboxController.UnifiedPriority.HIGH, 50)).hasSize(1);
+    }
+
+    @Test
+    void persistedGroupReviewOverridesDerivedPrimaryReview() {
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
+        DealGroupReviewEntity review = new DealGroupReviewEntity("target-cik:1550760");
+        review.updateManualReview(ManualReviewStatus.USEFUL, com.parsernews.persistence.ManualReviewReason.GOOD_SIGNAL, "Reviewed as one deal");
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
+        when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
+        when(dealGroupReviewRepository.findByGroupKey("target-cik:1550760")).thenReturn(java.util.Optional.of(review));
+
+        DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
+
+        assertThat(group.reviewStatus()).isEqualTo(ManualReviewStatus.USEFUL);
+        assertThat(group.reviewReason()).isEqualTo(com.parsernews.persistence.ManualReviewReason.GOOD_SIGNAL);
+        assertThat(group.reviewNote()).isEqualTo("Reviewed as one deal");
+        assertThat(group.groupReviewStored()).isTrue();
+    }
+
+    @Test
+    void resetGroupReviewReturnsPendingAndClearsReason() {
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
+        DealGroupReviewEntity review = new DealGroupReviewEntity("target-cik:1550760");
+        review.updateManualReview(ManualReviewStatus.PENDING, com.parsernews.persistence.ManualReviewReason.GOOD_SIGNAL, "Reset me");
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
+        when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
+        when(dealGroupReviewRepository.findByGroupKey("target-cik:1550760")).thenReturn(java.util.Optional.of(review));
+
+        DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
+
+        assertThat(group.reviewStatus()).isEqualTo(ManualReviewStatus.PENDING);
+        assertThat(group.reviewReason()).isNull();
+        assertThat(group.reviewNote()).isNull();
+        assertThat(group.reviewedAt()).isNull();
+        assertThat(group.groupReviewStored()).isTrue();
+    }
+
+    @Test
+    void telegramPreviewIncludesRssAndSecEvidence() {
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
+        SecFilingEntity sec = secFiling(10L, "0001550760", "APOGEE THERAPEUTICS INC", "8-K", "Agreement and plan of merger with AbbVie Inc.");
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
+        when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(sec));
+
+        DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
+        String preview = service.formatTelegramPreview(group);
+
+        assertThat(preview).contains("DEAL GROUP SIGNAL");
+        assertThat(preview).contains("AbbVie");
+        assertThat(preview).contains("Apogee");
+        assertThat(preview).contains("RSS_NEWS");
+        assertThat(preview).contains("SEC_FILING");
+        assertThat(preview).contains("Related evidence: 2");
     }
 
     private DetectedEventEntity rssEvent(

@@ -3,6 +3,7 @@ package com.parsernews.web;
 import com.parsernews.config.SecurityConfig;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
+import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
@@ -19,8 +20,10 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -37,6 +40,9 @@ class DealGroupControllerTest {
 
     @MockitoBean
     private DealGroupingService dealGroupingService;
+
+    @MockitoBean
+    private DealGroupReviewService dealGroupReviewService;
 
     @MockitoBean
     private NewsScannerService newsScannerService;
@@ -83,6 +89,52 @@ class DealGroupControllerTest {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void manualReviewEndpointUpdatesGroupReview() throws Exception {
+        DealGroupingService.DealGroupResponse group = group();
+        when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
+        when(dealGroupReviewService.update(
+                org.mockito.ArgumentMatchers.eq("target-ticker:APGE"),
+                org.mockito.ArgumentMatchers.eq(ManualReviewStatus.USEFUL),
+                org.mockito.ArgumentMatchers.eq(ManualReviewReason.GOOD_SIGNAL),
+                org.mockito.ArgumentMatchers.eq("Reviewed group")
+        )).thenReturn(new com.parsernews.persistence.DealGroupReviewEntity("target-ticker:APGE"));
+
+        mockMvc.perform(patch("/api/deal-groups/target-ticker:APGE/manual-review")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "status": "USEFUL",
+                                  "reason": "GOOD_SIGNAL",
+                                  "note": "Reviewed group"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groupKey").value("target-ticker:APGE"));
+
+        verify(dealGroupReviewService).update(
+                "target-ticker:APGE",
+                ManualReviewStatus.USEFUL,
+                ManualReviewReason.GOOD_SIGNAL,
+                "Reviewed group"
+        );
+    }
+
+    @Test
+    void telegramPreviewReturnsGroupMessage() throws Exception {
+        DealGroupingService.DealGroupResponse group = group();
+        when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
+        when(dealGroupingService.formatTelegramPreview(group)).thenReturn("DEAL GROUP SIGNAL\nRSS_NEWS\nSEC_FILING");
+
+        mockMvc.perform(get("/api/deal-groups/target-ticker:APGE/telegram-preview")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.groupKey").value("target-ticker:APGE"))
+                .andExpect(jsonPath("$.messageText").value("DEAL GROUP SIGNAL\nRSS_NEWS\nSEC_FILING"))
+                .andExpect(jsonPath("$.reviewStatus").value("PENDING"));
+    }
+
     private DealGroupingService.DealGroupResponse group() {
         return new DealGroupingService.DealGroupResponse(
                 "target-ticker:APGE",
@@ -102,6 +154,9 @@ class DealGroupControllerTest {
                 com.parsernews.model.DealTiming.EARLY,
                 ManualReviewStatus.PENDING,
                 ManualReviewReason.GOOD_SIGNAL,
+                null,
+                null,
+                false,
                 List.of(
                         new DealGroupingService.RelatedSignalResponse(
                                 SignalInboxController.SourceType.RSS_NEWS,

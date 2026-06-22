@@ -5,6 +5,8 @@ import com.parsernews.model.DealStage;
 import com.parsernews.model.DealTiming;
 import com.parsernews.model.Tradability;
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.DealGroupReviewEntity;
+import com.parsernews.persistence.DealGroupReviewRepository;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.ManualReviewReason;
@@ -41,6 +43,7 @@ public class DealGroupingService {
     private final DealTermsExtractionService dealTermsExtractionService;
     private final DealRelevanceService dealRelevanceService;
     private final DealStageDetectionService dealStageDetectionService;
+    private final DealGroupReviewRepository dealGroupReviewRepository;
 
     public DealGroupingService(
             DetectedEventRepository eventRepository,
@@ -48,7 +51,8 @@ public class DealGroupingService {
             CandidateReviewInsightService reviewInsightService,
             DealTermsExtractionService dealTermsExtractionService,
             DealRelevanceService dealRelevanceService,
-            DealStageDetectionService dealStageDetectionService
+            DealStageDetectionService dealStageDetectionService,
+            DealGroupReviewRepository dealGroupReviewRepository
     ) {
         this.eventRepository = eventRepository;
         this.secFilingRepository = secFilingRepository;
@@ -56,13 +60,14 @@ public class DealGroupingService {
         this.dealTermsExtractionService = dealTermsExtractionService;
         this.dealRelevanceService = dealRelevanceService;
         this.dealStageDetectionService = dealStageDetectionService;
+        this.dealGroupReviewRepository = dealGroupReviewRepository;
     }
 
     @Transactional(readOnly = true)
     public List<DealGroupResponse> groups(ManualReviewStatus reviewStatus, UnifiedPriority priority, int limit) {
         List<GroupBuilder> builders = buildGroups();
         return builders.stream()
-                .map(GroupBuilder::toResponse)
+                .map(this::toResponse)
                 .filter(group -> reviewStatus == null
                         ? group.reviewStatus() != ManualReviewStatus.IGNORED
                         : group.reviewStatus() == reviewStatus)
@@ -75,9 +80,92 @@ public class DealGroupingService {
     @Transactional(readOnly = true)
     public Optional<DealGroupResponse> group(String groupKey) {
         return buildGroups().stream()
-                .map(GroupBuilder::toResponse)
+                .map(this::toResponse)
                 .filter(group -> group.groupKey().equals(groupKey))
                 .findFirst();
+    }
+
+    public String formatTelegramPreview(DealGroupResponse group) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("DEAL GROUP SIGNAL").append('\n');
+        builder.append("Title: ").append(firstNonBlank(group.title(), "Unknown")).append('\n');
+        builder.append("Buyer: ").append(firstNonBlank(group.buyerCompany(), "Unknown"));
+        if (!isBlank(group.buyerTicker()) || !isBlank(group.buyerCik())) {
+            builder.append(" (").append(firstNonBlank(group.buyerTicker(), "-")).append(" / CIK ")
+                    .append(firstNonBlank(group.buyerCik(), "-")).append(")");
+        }
+        builder.append('\n');
+        builder.append("Target: ").append(firstNonBlank(group.targetCompany(), "Unknown"));
+        if (!isBlank(group.targetTicker()) || !isBlank(group.targetCik())) {
+            builder.append(" (").append(firstNonBlank(group.targetTicker(), "-")).append(" / CIK ")
+                    .append(firstNonBlank(group.targetCik(), "-")).append(")");
+        }
+        builder.append('\n');
+        builder.append("Priority: ").append(group.priority()).append('\n');
+        builder.append("Relevance: ").append(firstNonBlank(stringValue(group.dealRelevance()), "UNKNOWN"))
+                .append(" / Tradability: ").append(firstNonBlank(stringValue(group.tradability()), "UNKNOWN")).append('\n');
+        builder.append("Stage: ").append(firstNonBlank(stringValue(group.dealStage()), "UNKNOWN"))
+                .append(" / Timing: ").append(firstNonBlank(stringValue(group.dealTiming()), "UNKNOWN")).append('\n');
+        builder.append("Review: ").append(group.reviewStatus());
+        if (group.reviewReason() != null) {
+            builder.append(" / ").append(group.reviewReason());
+        }
+        if (!isBlank(group.reviewNote())) {
+            builder.append(" / ").append(group.reviewNote());
+        }
+        builder.append('\n');
+        builder.append("Related evidence: ").append(group.relatedSignals().size()).append('\n');
+        group.relatedSignals().stream().limit(5).forEach(signal -> builder
+                .append("- ")
+                .append(signal.sourceType())
+                .append(" ")
+                .append(firstNonBlank(signal.signalType(), "UNKNOWN"))
+                .append(": ")
+                .append(firstNonBlank(signal.title(), "Untitled"))
+                .append('\n')
+                .append("  ")
+                .append(firstNonBlank(signal.url(), "No URL"))
+                .append('\n'));
+        if (!group.warnings().isEmpty()) {
+            builder.append("Warnings: ").append(String.join("; ", group.warnings())).append('\n');
+        }
+        return builder.toString().trim();
+    }
+
+    private DealGroupResponse toResponse(GroupBuilder builder) {
+        DealGroupResponse derived = builder.toResponse();
+        return dealGroupReviewRepository.findByGroupKey(derived.groupKey())
+                .map(review -> withReview(derived, review))
+                .orElse(derived);
+    }
+
+    private DealGroupResponse withReview(DealGroupResponse group, DealGroupReviewEntity review) {
+        return new DealGroupResponse(
+                group.groupKey(),
+                group.primarySignalSourceType(),
+                group.primarySignalId(),
+                group.title(),
+                group.buyerCompany(),
+                group.targetCompany(),
+                group.targetTicker(),
+                group.targetCik(),
+                group.buyerTicker(),
+                group.buyerCik(),
+                group.priority(),
+                group.dealRelevance(),
+                group.tradability(),
+                group.dealStage(),
+                group.dealTiming(),
+                review.getManualReviewStatus(),
+                review.getManualReviewReason(),
+                review.getManualReviewNote(),
+                review.getManualReviewedAt(),
+                true,
+                group.relatedSignals(),
+                group.evidenceUrls(),
+                group.warnings(),
+                group.sortInstant()
+        );
     }
 
     private List<GroupBuilder> buildGroups() {
@@ -265,6 +353,14 @@ public class DealGroupingService {
 
     private static String firstNonBlank(String first, String fallback) {
         return first == null || first.isBlank() ? fallback : first;
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : value.toString();
     }
 
     private static String normalizeTicker(String value) {
@@ -497,6 +593,9 @@ public class DealGroupingService {
                     dealTiming,
                     reviewStatus,
                     reviewReason,
+                    null,
+                    null,
+                    false,
                     List.copyOf(relatedSignals),
                     List.copyOf(evidenceUrls),
                     List.copyOf(warnings),
@@ -536,6 +635,9 @@ public class DealGroupingService {
             DealTiming dealTiming,
             ManualReviewStatus reviewStatus,
             ManualReviewReason reviewReason,
+            String reviewNote,
+            Instant reviewedAt,
+            boolean groupReviewStored,
             List<RelatedSignalResponse> relatedSignals,
             List<String> evidenceUrls,
             List<String> warnings,

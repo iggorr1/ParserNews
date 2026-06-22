@@ -1841,6 +1841,47 @@
         }
     }
 
+    async function updateDealGroupReview(groupKey, status) {
+        const note = document.querySelector(`[data-deal-group-review-note="${CSS.escape(String(groupKey))}"]`)?.value || "";
+        const reason = document.querySelector(`[data-deal-group-review-reason="${CSS.escape(String(groupKey))}"]`)?.value || null;
+        try {
+            const updated = await patchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/manual-review`, {
+                status,
+                reason,
+                note
+            });
+            state.dealGroups = state.dealGroups.map(group => group.groupKey === updated.groupKey ? updated : group);
+            if (state.dealGroupDetails && state.dealGroupDetails.groupKey === updated.groupKey) {
+                state.dealGroupDetails = updated;
+            }
+            renderDealGroups();
+            renderDealGroupDetails();
+        } catch (error) {
+            showError("Deal group review", error.message);
+        }
+    }
+
+    async function previewDealGroupTelegram(groupKey) {
+        try {
+            const preview = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/telegram-preview`);
+            state.telegramPreview = {
+                sourceType: "DEAL_GROUP",
+                id: preview.groupKey,
+                title: preview.title,
+                messageText: preview.messageText,
+                telegramEnabled: false,
+                telegramConfigured: false,
+                sendAllowed: false,
+                reason: "Deal group preview only. No Telegram message was sent."
+            };
+            renderTelegramPreview();
+            document.querySelector("#telegramPreviewPanel").open = true;
+            document.querySelector("#telegramPreviewPanel").scrollIntoView({behavior: "smooth", block: "start"});
+        } catch (error) {
+            showError("Deal group Telegram preview", error.message);
+        }
+    }
+
     async function fetchJson(url) {
         const response = await fetch(url, {cache: "no-store"});
         return readJsonResponse(response, url);
@@ -2272,10 +2313,28 @@
                 <td>
                     ${badge(group.reviewStatus || "PENDING", group.reviewStatus === "USEFUL" ? "ok" : group.reviewStatus === "IGNORED" ? "disabled" : "warn")}
                     <div class="small-cell">${escapeText(group.reviewReason || "")}</div>
+                    ${group.groupReviewStored ? `<div class="small-cell">group review</div>` : `<div class="small-cell muted">derived</div>`}
                 </td>
                 <td>
+                    <select data-deal-group-review-reason="${escapeAttr(group.groupKey)}">
+                        <option value="">Reason</option>
+                        <option ${group.reviewReason === "GOOD_SIGNAL" ? "selected" : ""}>GOOD_SIGNAL</option>
+                        <option ${group.reviewReason === "FALSE_POSITIVE" ? "selected" : ""}>FALSE_POSITIVE</option>
+                        <option ${group.reviewReason === "PRIVATE_COMPANY" ? "selected" : ""}>PRIVATE_COMPANY</option>
+                        <option ${group.reviewReason === "NOT_TRADABLE" ? "selected" : ""}>NOT_TRADABLE</option>
+                        <option ${group.reviewReason === "LATE_STAGE_UPDATE" ? "selected" : ""}>LATE_STAGE_UPDATE</option>
+                        <option ${group.reviewReason === "LAW_FIRM_OR_SHAREHOLDER_ALERT" ? "selected" : ""}>LAW_FIRM_OR_SHAREHOLDER_ALERT</option>
+                        <option ${group.reviewReason === "WRONG_EXTRACTION" ? "selected" : ""}>WRONG_EXTRACTION</option>
+                        <option ${group.reviewReason === "DUPLICATE_OR_UPDATE" ? "selected" : ""}>DUPLICATE_OR_UPDATE</option>
+                        <option ${group.reviewReason === "OTHER" ? "selected" : ""}>OTHER</option>
+                    </select>
+                    <input data-deal-group-review-note="${escapeAttr(group.groupKey)}" placeholder="Note" value="${escapeAttr(group.reviewNote || "")}">
                     <div class="actions compact-actions">
                         <button type="button" data-deal-group-key="${escapeAttr(group.groupKey)}">Details</button>
+                        <button type="button" data-deal-group-review-action="USEFUL" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Mark useful</button>
+                        <button type="button" data-deal-group-review-action="IGNORED" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Ignore</button>
+                        <button type="button" data-deal-group-review-action="PENDING" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Reset</button>
+                        <button type="button" data-deal-group-telegram-key="${escapeAttr(group.groupKey)}">Telegram Preview</button>
                     </div>
                 </td>
             </tr>
@@ -2307,9 +2366,14 @@
                 ["Buyer ticker / CIK", [group.buyerTicker, group.buyerCik].filter(Boolean).join(" / ")],
                 ["Target", group.targetCompany],
                 ["Target ticker / CIK", [group.targetTicker, group.targetCik].filter(Boolean).join(" / ")],
-                ["Review", [group.reviewStatus, group.reviewReason].filter(Boolean).join(" / ")]
+                ["Review", [group.reviewStatus, group.reviewReason].filter(Boolean).join(" / ")],
+                ["Review note", group.reviewNote],
+                ["Review source", group.groupReviewStored ? "Deal group review" : "Primary signal"]
             ])}</div>
             ${chipList("Warnings", group.warnings, "risk")}
+            <div class="actions compact-actions" style="margin-top: 10px;">
+                <button type="button" data-deal-group-telegram-key="${escapeAttr(group.groupKey)}">Telegram Preview</button>
+            </div>
             <div class="table-wrap" style="margin-top: 10px;">
                 <table>
                     <thead>
@@ -3144,6 +3208,16 @@
     });
 
     document.querySelector("#dealGroups").addEventListener("click", event => {
+        const reviewButton = event.target.closest("[data-deal-group-review-action]");
+        if (reviewButton) {
+            updateDealGroupReview(reviewButton.dataset.dealGroupReviewKey, reviewButton.dataset.dealGroupReviewAction);
+            return;
+        }
+        const telegramButton = event.target.closest("[data-deal-group-telegram-key]");
+        if (telegramButton) {
+            previewDealGroupTelegram(telegramButton.dataset.dealGroupTelegramKey);
+            return;
+        }
         const dealGroupButton = event.target.closest("[data-deal-group-key]");
         if (dealGroupButton) {
             loadDealGroupDetails(dealGroupButton.dataset.dealGroupKey);
@@ -3181,6 +3255,13 @@
         const telegramPreviewButton = event.target.closest("[data-telegram-preview-source]");
         if (telegramPreviewButton) {
             previewSignalTelegram(telegramPreviewButton.dataset.telegramPreviewSource, telegramPreviewButton.dataset.telegramPreviewId);
+        }
+    });
+
+    document.querySelector("#dealGroupDetails").addEventListener("click", event => {
+        const telegramButton = event.target.closest("[data-deal-group-telegram-key]");
+        if (telegramButton) {
+            previewDealGroupTelegram(telegramButton.dataset.dealGroupTelegramKey);
         }
     });
 
