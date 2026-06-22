@@ -907,6 +907,7 @@
                     <option>IGNORED</option>
                 </select>
             </div>
+            <a id="exportDealGroupsCsv" class="button-link" href="/api/deal-groups/export.csv">Export Deal Groups CSV</a>
         </div>
         <div class="table-wrap" style="margin-bottom: 12px;">
             <table>
@@ -1430,6 +1431,7 @@
     const exportCandidatesCsv = document.querySelector("#exportCandidatesCsv");
     const exportReviewedCsv = document.querySelector("#exportReviewedCsv");
     const exportSecCsv = document.querySelector("#exportSecCsv");
+    const exportDealGroupsCsv = document.querySelector("#exportDealGroupsCsv");
 
     refreshButton.addEventListener("click", loadDashboard);
     scanButton.addEventListener("click", runManualScan);
@@ -1879,6 +1881,30 @@
             document.querySelector("#telegramPreviewPanel").scrollIntoView({behavior: "smooth", block: "start"});
         } catch (error) {
             showError("Deal group Telegram preview", error.message);
+        }
+    }
+
+    async function sendDealGroupTelegram(groupKey) {
+        try {
+            const preview = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/telegram-preview`);
+            const result = await postJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/send-telegram`);
+            state.telegramPreview = {
+                sourceType: "DEAL_GROUP",
+                id: groupKey,
+                title: preview.title,
+                messageText: preview.messageText,
+                telegramEnabled: result.telegramEnabled,
+                telegramConfigured: result.telegramConfigured,
+                sendAllowed: result.sent,
+                sent: result.sent,
+                reason: result.message,
+                error: result.error
+            };
+            renderTelegramPreview();
+            document.querySelector("#telegramPreviewPanel").open = true;
+            document.querySelector("#telegramPreviewPanel").scrollIntoView({behavior: "smooth", block: "start"});
+        } catch (error) {
+            showError("Deal group Telegram send", error.message);
         }
     }
 
@@ -2335,6 +2361,7 @@
                         <button type="button" data-deal-group-review-action="IGNORED" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Ignore</button>
                         <button type="button" data-deal-group-review-action="PENDING" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Reset</button>
                         <button type="button" data-deal-group-telegram-key="${escapeAttr(group.groupKey)}">Telegram Preview</button>
+                        <button type="button" data-deal-group-telegram-send-key="${escapeAttr(group.groupKey)}">Send Telegram</button>
                     </div>
                 </td>
             </tr>
@@ -3110,6 +3137,11 @@
             status: reviewedStatusFilter.value,
             reason: reviewedReasonFilter.value
         });
+        exportDealGroupsCsv.href = exportUrl("/api/deal-groups/export.csv", {
+            priority: dealGroupPriorityFilter.value,
+            reviewStatus: dealGroupReviewFilter.value,
+            limit: "500"
+        });
     }
 
     function exportUrl(path, params) {
@@ -3216,6 +3248,11 @@
         const telegramButton = event.target.closest("[data-deal-group-telegram-key]");
         if (telegramButton) {
             previewDealGroupTelegram(telegramButton.dataset.dealGroupTelegramKey);
+            return;
+        }
+        const telegramSendButton = event.target.closest("[data-deal-group-telegram-send-key]");
+        if (telegramSendButton) {
+            sendDealGroupTelegram(telegramSendButton.dataset.dealGroupTelegramSendKey);
             return;
         }
         const dealGroupButton = event.target.closest("[data-deal-group-key]");
