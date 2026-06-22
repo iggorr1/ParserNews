@@ -2,6 +2,7 @@ package com.parsernews.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.parsernews.persistence.CompanyMatchConfidence;
 import com.parsernews.persistence.SecWatchlistCompanyEntity;
 import com.parsernews.persistence.SecWatchlistCompanyRepository;
 import org.springframework.stereotype.Service;
@@ -14,6 +15,7 @@ import java.util.Comparator;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 @Service
 public class SecCompanyLookupService {
@@ -48,6 +50,43 @@ public class SecCompanyLookupService {
                         .thenComparing(SecCompanyLookupResult::companyName))
                 .limit(DEFAULT_LIMIT)
                 .toList();
+    }
+
+    public Optional<CompanyLookupMatch> findBestMatch(String explicitTicker, String companyName) {
+        String ticker = normalizeOptionalTicker(explicitTicker);
+        List<CompanyTickerEntry> entries = loadEntries();
+        if (ticker != null) {
+            Optional<CompanyTickerEntry> tickerMatch = entries.stream()
+                    .filter(entry -> entry.ticker().equalsIgnoreCase(ticker))
+                    .findFirst();
+            if (tickerMatch.isPresent()) {
+                return tickerMatch.map(entry -> toCompanyMatch(entry, CompanyMatchConfidence.EXACT_TICKER));
+            }
+        }
+
+        String normalizedCompanyName = normalizeCompanyName(companyName);
+        if (normalizedCompanyName == null || isGenericCompanyName(normalizedCompanyName)) {
+            return Optional.empty();
+        }
+
+        Optional<CompanyTickerEntry> exactName = entries.stream()
+                .filter(entry -> normalizeCompanyName(entry.companyName()).equals(normalizedCompanyName))
+                .findFirst();
+        if (exactName.isPresent()) {
+            return exactName.map(entry -> toCompanyMatch(entry, CompanyMatchConfidence.EXACT_NAME));
+        }
+
+        if (normalizedCompanyName.length() < 12 || normalizedCompanyName.split(" ").length < 2) {
+            return Optional.empty();
+        }
+        return entries.stream()
+                .filter(entry -> {
+                    String entryName = normalizeCompanyName(entry.companyName());
+                    return entryName.contains(normalizedCompanyName) || normalizedCompanyName.contains(entryName);
+                })
+                .filter(entry -> normalizeCompanyName(entry.companyName()).length() >= 12)
+                .findFirst()
+                .map(entry -> toCompanyMatch(entry, CompanyMatchConfidence.PARTIAL_NAME));
     }
 
     private SecCompanyLookupResult match(
@@ -133,7 +172,53 @@ public class SecCompanyLookupService {
         return normalized.toUpperCase(Locale.ROOT);
     }
 
+    private CompanyLookupMatch toCompanyMatch(CompanyTickerEntry entry, CompanyMatchConfidence confidence) {
+        return new CompanyLookupMatch(
+                entry.cik(),
+                entry.ticker().toUpperCase(Locale.ROOT),
+                entry.companyName(),
+                confidence
+        );
+    }
+
+    private String normalizeOptionalTicker(String value) {
+        if (value == null || value.isBlank() || "UNKNOWN".equalsIgnoreCase(value.trim())) {
+            return null;
+        }
+        String normalized = value.trim().toUpperCase(Locale.ROOT);
+        return normalized.matches("[A-Z][A-Z0-9.-]{0,9}") ? normalized : null;
+    }
+
+    private String normalizeCompanyName(String value) {
+        if (value == null || value.isBlank() || "UNKNOWN".equalsIgnoreCase(value.trim())) {
+            return null;
+        }
+        String normalized = value.toLowerCase(Locale.ROOT)
+                .replace("&", " and ")
+                .replaceAll("[^a-z0-9 ]", " ")
+                .replaceAll("\\b(incorporated|inc|corp|corporation|co|company|ltd|limited|plc|holdings|holding|group|sa|nv|ag|common|stock|class|ordinary|shares)\\b", " ")
+                .replaceAll("\\s+", " ")
+                .trim();
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private boolean isGenericCompanyName(String normalized) {
+        return normalized.length() < 4
+                || List.of("the", "company", "target", "buyer", "business", "assets", "shareholders").contains(normalized);
+    }
+
     private record CompanyTickerEntry(String cik, String ticker, String companyName) {
+    }
+
+    public record CompanyLookupMatch(
+            String cik,
+            String ticker,
+            String companyName,
+            CompanyMatchConfidence confidence
+    ) {
+        public boolean publicCompanyEvidence() {
+            return confidence == CompanyMatchConfidence.EXACT_TICKER || confidence == CompanyMatchConfidence.EXACT_NAME;
+        }
     }
 
     public enum MatchType {

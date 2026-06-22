@@ -5,6 +5,7 @@ import com.parsernews.model.DealStage;
 import com.parsernews.model.DealTiming;
 import com.parsernews.model.Tradability;
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.CompanyMatchConfidence;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.ManualReviewReason;
@@ -175,7 +176,7 @@ public class SignalInboxController {
         return new UnifiedSignalResponse(
                 event.getId(),
                 SourceType.RSS_NEWS,
-                article.title(),
+                titleWithTicker(article.title(), article.targetTicker(), article.targetPublicCompany()),
                 article.url(),
                 article.source(),
                 article.host(),
@@ -410,7 +411,16 @@ public class SignalInboxController {
             List<String> reviewPositiveSignals,
             String dealSummary,
             String targetCompany,
+            String targetTicker,
+            String targetCik,
+            Boolean targetPublicCompany,
+            CompanyMatchConfidence targetMatchConfidence,
             String buyerCompany,
+            String buyerTicker,
+            String buyerCik,
+            Boolean buyerPublicCompany,
+            CompanyMatchConfidence buyerMatchConfidence,
+            String companyEnrichmentWarnings,
             BigDecimal offerPrice,
             String offerCurrency,
             com.parsernews.model.PaymentType paymentType,
@@ -466,7 +476,16 @@ public class SignalInboxController {
                     article.reviewPositiveSignals(),
                     article.dealSummary(),
                     article.targetCompany(),
+                    article.targetTicker(),
+                    article.targetCik(),
+                    article.targetPublicCompany(),
+                    article.targetMatchConfidence(),
                     article.buyerCompany(),
+                    article.buyerTicker(),
+                    article.buyerCik(),
+                    article.buyerPublicCompany(),
+                    article.buyerMatchConfidence(),
+                    article.companyEnrichmentWarnings(),
                     article.offerPrice(),
                     article.offerCurrency(),
                     article.paymentType(),
@@ -530,6 +549,15 @@ public class SignalInboxController {
                     null,
                     null,
                     null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
                     List.of(),
                     null,
                     null,
@@ -564,6 +592,13 @@ public class SignalInboxController {
         private static String firstNonBlankStatic(String first, String fallback) {
             return first == null || first.isBlank() ? fallback : first;
         }
+    }
+
+    private String titleWithTicker(String title, String targetTicker, boolean targetPublicCompany) {
+        if (!targetPublicCompany || targetTicker == null || targetTicker.isBlank()) {
+            return title;
+        }
+        return "[" + targetTicker + "] " + title;
     }
 
     public record TelegramPreviewResponse(

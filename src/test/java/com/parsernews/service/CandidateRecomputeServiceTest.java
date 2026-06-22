@@ -1,6 +1,7 @@
 package com.parsernews.service;
 
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.CompanyMatchConfidence;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
@@ -40,6 +41,8 @@ class CandidateRecomputeServiceTest {
         assertThat(event.getCandidateReason()).contains("HIGH");
         assertThat(event.isAlertEligible()).isTrue();
         assertThat(event.getAlertReason()).contains("Strategy-eligible");
+        assertThat(event.getTargetCik()).isEqualTo("123456");
+        assertThat(event.getTargetMatchConfidence()).isEqualTo(CompanyMatchConfidence.EXACT_TICKER);
         assertThat(summary.scannedEvents()).isEqualTo(1);
         assertThat(summary.updatedEvents()).isEqualTo(1);
         assertThat(summary.highCount()).isEqualTo(1);
@@ -84,7 +87,24 @@ class CandidateRecomputeServiceTest {
     private CandidateRecomputeService serviceFor(List<DetectedEventEntity> events) {
         DetectedEventRepository repository = mock(DetectedEventRepository.class);
         when(repository.findAll()).thenReturn(events);
-        return new CandidateRecomputeService(repository, new CandidateScoringService(), new AlertEligibilityService());
+        RssCompanyEnrichmentService enrichmentService = mock(RssCompanyEnrichmentService.class);
+        when(enrichmentService.enrich(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new RssCompanyEnrichmentService.CompanyEnrichment(
+                        new RssCompanyEnrichmentService.CompanyRoleEnrichment(
+                                "TEST",
+                                "123456",
+                                true,
+                                CompanyMatchConfidence.EXACT_TICKER
+                        ),
+                        new RssCompanyEnrichmentService.CompanyRoleEnrichment(
+                                null,
+                                null,
+                                false,
+                                CompanyMatchConfidence.NONE
+                        ),
+                        List.of()
+                ));
+        return new CandidateRecomputeService(repository, new CandidateScoringService(), new AlertEligibilityService(), enrichmentService);
     }
 
     private DetectedEventEntity event(String headline, String body, String url) {

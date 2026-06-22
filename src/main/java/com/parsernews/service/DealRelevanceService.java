@@ -4,6 +4,7 @@ import com.parsernews.model.DealRelevance;
 import com.parsernews.model.PaymentType;
 import com.parsernews.model.ReviewVerdict;
 import com.parsernews.model.Tradability;
+import com.parsernews.persistence.CompanyMatchConfidence;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.NewsArticleEntity;
 import org.springframework.stereotype.Service;
@@ -98,6 +99,10 @@ public class DealRelevanceService {
         if (privateTargetSignal) {
             warnings.add("private company target");
             warnings.add("not directly tradable via target shares");
+        }
+        if (event != null && event.isBuyerPublicCompany() && !event.isTargetPublicCompany()) {
+            warnings.add("buyer resolved but target not resolved");
+            warnings.add("do not infer public target from public buyer");
         }
         if (containsAny(lower, "terms were not disclosed", "terms undisclosed")) {
             warnings.add("terms undisclosed");
@@ -213,8 +218,14 @@ public class DealRelevanceService {
         if (privateTargetSignal) {
             return false;
         }
+        if (event != null && event.isTargetPublicCompany()
+                && (event.getTargetMatchConfidence() == CompanyMatchConfidence.EXACT_TICKER
+                || event.getTargetMatchConfidence() == CompanyMatchConfidence.EXACT_NAME)) {
+            return true;
+        }
         if (event != null && event.getTargetTicker() != null && !event.getTargetTicker().isBlank()
-                && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())) {
+                && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())
+                && event.getTargetMatchConfidence() != CompanyMatchConfidence.PARTIAL_NAME) {
             return true;
         }
         if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())) {
@@ -236,6 +247,11 @@ public class DealRelevanceService {
     }
 
     private boolean hasPublicBuyerSignal(DetectedEventEntity event, String lower) {
+        if (event != null && event.isBuyerPublicCompany()
+                && (event.getBuyerMatchConfidence() == CompanyMatchConfidence.EXACT_TICKER
+                || event.getBuyerMatchConfidence() == CompanyMatchConfidence.EXACT_NAME)) {
+            return true;
+        }
         if (event != null && event.getAcquirer() != null && PUBLIC_TICKER.matcher(event.getAcquirer()).find()) {
             return true;
         }
@@ -265,8 +281,12 @@ public class DealRelevanceService {
         values.add(article.getCompanyName());
         if (event != null) {
             values.add(event.getTargetTicker());
+            values.add(event.getTargetCik());
             values.add(event.getTargetCompany());
             values.add(event.getAcquirer());
+            values.add(event.getBuyerTicker());
+            values.add(event.getBuyerCik());
+            values.add(event.getCompanyEnrichmentWarnings());
             values.add(event.getCashOrStock());
             values.add(event.getMatchedPositiveKeywords());
             values.add(event.getMatchedNegativeKeywords());

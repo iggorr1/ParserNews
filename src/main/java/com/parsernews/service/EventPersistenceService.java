@@ -33,6 +33,7 @@ public class EventPersistenceService {
     private final FalsePositiveFilter falsePositiveFilter;
     private final CandidateScoringService candidateScoringService;
     private final AlertEligibilityService alertEligibilityService;
+    private final RssCompanyEnrichmentService rssCompanyEnrichmentService;
 
     public EventPersistenceService(
             NewsSourceRepository sourceRepository,
@@ -40,7 +41,8 @@ public class EventPersistenceService {
             DetectedEventRepository eventRepository,
             FalsePositiveFilter falsePositiveFilter,
             CandidateScoringService candidateScoringService,
-            AlertEligibilityService alertEligibilityService
+            AlertEligibilityService alertEligibilityService,
+            RssCompanyEnrichmentService rssCompanyEnrichmentService
     ) {
         this.sourceRepository = sourceRepository;
         this.articleRepository = articleRepository;
@@ -48,6 +50,7 @@ public class EventPersistenceService {
         this.falsePositiveFilter = falsePositiveFilter;
         this.candidateScoringService = candidateScoringService;
         this.alertEligibilityService = alertEligibilityService;
+        this.rssCompanyEnrichmentService = rssCompanyEnrichmentService;
     }
 
     @Transactional
@@ -106,9 +109,25 @@ public class EventPersistenceService {
                 join(falsePositiveFilter.reasons(newsEvent.fullText())),
                 analysisResult.reason()
         );
+        RssCompanyEnrichmentService.CompanyEnrichment enrichment = rssCompanyEnrichmentService.enrich(article, event);
+        applyEnrichment(event, enrichment);
         AlertEligibilityService.AlertEligibility alertEligibility = alertEligibilityService.evaluate(event);
         event.updateAlertEligibility(alertEligibility.eligible(), alertEligibility.reason());
         eventRepository.save(event);
+    }
+
+    private void applyEnrichment(DetectedEventEntity event, RssCompanyEnrichmentService.CompanyEnrichment enrichment) {
+        event.updateCompanyEnrichment(
+                enrichment.target().ticker(),
+                enrichment.target().cik(),
+                enrichment.target().publicCompany(),
+                enrichment.target().matchConfidence(),
+                enrichment.buyer().ticker(),
+                enrichment.buyer().cik(),
+                enrichment.buyer().publicCompany(),
+                enrichment.buyer().matchConfidence(),
+                join(enrichment.warnings())
+        );
     }
 
     private boolean shouldPersistDetectedEvent(AnalysisResult result) {

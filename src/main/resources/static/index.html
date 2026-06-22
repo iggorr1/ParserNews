@@ -2269,6 +2269,15 @@
                     ${chipList("Positive signals", detail.reviewPositiveSignals, "")}
                     ${chipList("Positive keywords", splitKeywords(detail.matchedPositiveKeywords), "")}
                     <p class="snippet">${escapeText(detail.dealSummary || detail.relevanceSummary || detail.stageSummary || "")}</p>
+                    ${detail.sourceType === "RSS_NEWS" ? `
+                        <h3>Company enrichment</h3>
+                        <div class="kv">${kvRows([
+                            ["Target ticker / CIK", `${detail.targetTicker || "-"} / ${detail.targetCik || "-"}`],
+                            ["Target public / confidence", `${detail.targetPublicCompany ? "yes" : "no"} / ${detail.targetMatchConfidence || "NONE"}`],
+                            ["Buyer ticker / CIK", `${detail.buyerTicker || "-"} / ${detail.buyerCik || "-"}`],
+                            ["Buyer public / confidence", `${detail.buyerPublicCompany ? "yes" : "no"} / ${detail.buyerMatchConfidence || "NONE"}`]
+                        ])}</div>
+                    ` : ""}
                 </section>
                 <section class="panel span-3">
                     <h3>Warnings</h3>
@@ -2276,6 +2285,7 @@
                     ${chipList("Deal warnings", detail.dealWarnings, "risk")}
                     ${chipList("Relevance warnings", detail.relevanceWarnings, "risk")}
                     ${chipList("Stage warnings", detail.stageWarnings, "risk")}
+                    ${detail.companyEnrichmentWarnings ? chipList("Enrichment warnings", splitKeywords(detail.companyEnrichmentWarnings), "risk") : ""}
                     ${detail.alertEligibilityReason ? `<p class="snippet">${escapeText(detail.alertEligibilityReason)}</p>` : ""}
                 </section>
                 <section class="panel span-3">
@@ -2463,6 +2473,9 @@
                         <div><span>Reason</span><strong title="${escapeAttr(candidate.candidateReason)}">${escapeText(candidate.candidateReason)}</strong></div>
                         <div><span>Positive keywords</span><strong title="${escapeAttr(splitKeywords(candidate.matchedPositiveKeywords).join(", "))}">${escapeText(splitKeywords(candidate.matchedPositiveKeywords).join(", ") || "-")}</strong></div>
                         <div><span>Alert state</span><strong>${escapeText(isAlertVisible(candidate) ? "eligible" : "not eligible")}${candidate.alertQueuedAt ? ", queued" : ""}</strong></div>
+                        <div><span>Target public</span><strong>${escapeText(candidate.targetPublicCompany ? `${candidate.targetTicker || "-"} / ${candidate.targetCik || "-"} (${candidate.targetMatchConfidence || "NONE"})` : "no strong target match")}</strong></div>
+                        <div><span>Buyer public</span><strong>${escapeText(candidate.buyerPublicCompany ? `${candidate.buyerTicker || "-"} / ${candidate.buyerCik || "-"} (${candidate.buyerMatchConfidence || "NONE"})` : "not resolved")}</strong></div>
+                        <div><span>Enrichment warnings</span><strong title="${escapeAttr(splitKeywords(candidate.companyEnrichmentWarnings).join(", "))}">${escapeText(splitKeywords(candidate.companyEnrichmentWarnings).join(", ") || "-")}</strong></div>
                         <div><span>Automatic reviewStatus</span><strong>${escapeText(candidate.reviewStatus || "-")}</strong></div>
                         <div><span>Manual reason</span><strong>${escapeText(candidate.manualReviewReason || "-")}</strong></div>
                         <div><span>Manual note</span><strong title="${escapeAttr(candidate.manualReviewNote)}">${escapeText(candidate.manualReviewNote || "-")}</strong></div>

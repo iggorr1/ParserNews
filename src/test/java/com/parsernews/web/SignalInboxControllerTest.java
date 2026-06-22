@@ -11,6 +11,7 @@ import com.parsernews.model.PaymentType;
 import com.parsernews.model.ReviewVerdict;
 import com.parsernews.model.Tradability;
 import com.parsernews.persistence.CandidateStrength;
+import com.parsernews.persistence.CompanyMatchConfidence;
 import com.parsernews.persistence.DetectedEventEntity;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.DetectedEventType;
@@ -209,7 +210,16 @@ class SignalInboxControllerTest {
                 .andExpect(jsonPath("$.reviewVerdict").value("LIKELY_DEAL"))
                 .andExpect(jsonPath("$.dealSummary").value("Buyer / Target, cash merger."))
                 .andExpect(jsonPath("$.targetCompany").value("Target Inc."))
+                .andExpect(jsonPath("$.targetTicker").value("TGT"))
+                .andExpect(jsonPath("$.targetCik").value("123456"))
+                .andExpect(jsonPath("$.targetPublicCompany").value(true))
+                .andExpect(jsonPath("$.targetMatchConfidence").value("EXACT_TICKER"))
                 .andExpect(jsonPath("$.buyerCompany").value("Buyer Inc."))
+                .andExpect(jsonPath("$.buyerTicker").value("BUY"))
+                .andExpect(jsonPath("$.buyerCik").value("654321"))
+                .andExpect(jsonPath("$.buyerPublicCompany").value(true))
+                .andExpect(jsonPath("$.buyerMatchConfidence").value("EXACT_NAME"))
+                .andExpect(jsonPath("$.companyEnrichmentWarnings").value("buyer resolved but target not resolved"))
                 .andExpect(jsonPath("$.dealRelevance").value("PUBLIC_CASH_ACQUISITION"))
                 .andExpect(jsonPath("$.tradability").value("HIGH"))
                 .andExpect(jsonPath("$.dealStage").value("DEFINITIVE_AGREEMENT"))
@@ -355,7 +365,7 @@ class SignalInboxControllerTest {
                 "https://example.test/news/target",
                 Instant.parse("2026-06-19T12:00:00Z")
         );
-        return new DetectedEventEntity(
+        DetectedEventEntity event = new DetectedEventEntity(
                 article,
                 DetectedEventType.MERGER,
                 ReviewStatus.MANUAL_REVIEW,
@@ -376,6 +386,18 @@ class SignalInboxControllerTest {
                 "",
                 "Detected as candidate."
         );
+        event.updateCompanyEnrichment(
+                "TGT",
+                "123456",
+                true,
+                CompanyMatchConfidence.EXACT_TICKER,
+                "BUY",
+                "654321",
+                true,
+                CompanyMatchConfidence.EXACT_NAME,
+                "buyer resolved but target not resolved"
+        );
+        return event;
     }
 
     private SecFilingEntity secFiling(SecSignalPriority priority, SecSignalType type) {

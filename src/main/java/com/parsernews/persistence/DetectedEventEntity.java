@@ -45,7 +45,31 @@ public class DetectedEventEntity {
     @Column(length = 32)
     private String targetTicker;
 
+    @Column(length = 16)
+    private String targetCik;
+
+    private Boolean targetPublicCompany = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32, columnDefinition = "varchar(32)")
+    private CompanyMatchConfidence targetMatchConfidence = CompanyMatchConfidence.NONE;
+
     private String acquirer;
+
+    @Column(length = 32)
+    private String buyerTicker;
+
+    @Column(length = 16)
+    private String buyerCik;
+
+    private Boolean buyerPublicCompany = false;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 32, columnDefinition = "varchar(32)")
+    private CompanyMatchConfidence buyerMatchConfidence = CompanyMatchConfidence.NONE;
+
+    @Column(length = 1024)
+    private String companyEnrichmentWarnings;
 
     private String offerPrice;
 
@@ -179,8 +203,40 @@ public class DetectedEventEntity {
         return targetTicker;
     }
 
+    public String getTargetCik() {
+        return targetCik;
+    }
+
+    public boolean isTargetPublicCompany() {
+        return Boolean.TRUE.equals(targetPublicCompany);
+    }
+
+    public CompanyMatchConfidence getTargetMatchConfidence() {
+        return targetMatchConfidence == null ? CompanyMatchConfidence.NONE : targetMatchConfidence;
+    }
+
     public String getAcquirer() {
         return acquirer;
+    }
+
+    public String getBuyerTicker() {
+        return buyerTicker;
+    }
+
+    public String getBuyerCik() {
+        return buyerCik;
+    }
+
+    public boolean isBuyerPublicCompany() {
+        return Boolean.TRUE.equals(buyerPublicCompany);
+    }
+
+    public CompanyMatchConfidence getBuyerMatchConfidence() {
+        return buyerMatchConfidence == null ? CompanyMatchConfidence.NONE : buyerMatchConfidence;
+    }
+
+    public String getCompanyEnrichmentWarnings() {
+        return companyEnrichmentWarnings;
     }
 
     public String getOfferPrice() {
@@ -278,6 +334,28 @@ public class DetectedEventEntity {
         this.candidateScore = candidateScore;
         this.candidateStrength = candidateStrength == null ? CandidateStrength.NONE : candidateStrength;
         this.candidateReason = candidateReason;
+    }
+
+    public void updateCompanyEnrichment(
+            String targetTicker,
+            String targetCik,
+            boolean targetPublicCompany,
+            CompanyMatchConfidence targetMatchConfidence,
+            String buyerTicker,
+            String buyerCik,
+            boolean buyerPublicCompany,
+            CompanyMatchConfidence buyerMatchConfidence,
+            String companyEnrichmentWarnings
+    ) {
+        this.targetTicker = normalizeBlank(targetTicker);
+        this.targetCik = normalizeBlank(targetCik);
+        this.targetPublicCompany = targetPublicCompany;
+        this.targetMatchConfidence = targetMatchConfidence == null ? CompanyMatchConfidence.NONE : targetMatchConfidence;
+        this.buyerTicker = normalizeBlank(buyerTicker);
+        this.buyerCik = normalizeBlank(buyerCik);
+        this.buyerPublicCompany = buyerPublicCompany;
+        this.buyerMatchConfidence = buyerMatchConfidence == null ? CompanyMatchConfidence.NONE : buyerMatchConfidence;
+        this.companyEnrichmentWarnings = normalizeBlank(companyEnrichmentWarnings);
     }
 
     public void updateAlertEligibility(boolean alertEligible, String alertReason) {

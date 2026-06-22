@@ -43,7 +43,8 @@ class EventPersistenceServiceTest {
                 eventRepository,
                 new FalsePositiveFilter(),
                 new CandidateScoringService(),
-                new AlertEligibilityService()
+                new AlertEligibilityService(),
+                mock(RssCompanyEnrichmentService.class)
         );
         String longBody = "A".repeat(EventPersistenceService.MAX_ARTICLE_TEXT_LENGTH + 500);
         NewsEvent event = new NewsEvent(
