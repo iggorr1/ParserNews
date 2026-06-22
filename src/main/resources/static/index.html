@@ -882,6 +882,60 @@
     <section class="panel review-quality">
         <div class="panel-head">
             <div>
+                <h2>Deal Groups</h2>
+                <div class="muted">Grouped deal-level view that links related RSS and SEC evidence without hiding original records.</div>
+            </div>
+            <span class="badge" id="dealGroupCount">0</span>
+        </div>
+        <div class="filters" style="margin-bottom: 12px;">
+            <div class="control">
+                <label for="dealGroupPriorityFilter">Priority</label>
+                <select id="dealGroupPriorityFilter">
+                    <option value="">ALL</option>
+                    <option>HIGH</option>
+                    <option>MEDIUM</option>
+                    <option>LOW</option>
+                    <option>NONE</option>
+                </select>
+            </div>
+            <div class="control">
+                <label for="dealGroupReviewFilter">Review</label>
+                <select id="dealGroupReviewFilter">
+                    <option value="">PENDING/USEFUL</option>
+                    <option>PENDING</option>
+                    <option>USEFUL</option>
+                    <option>IGNORED</option>
+                </select>
+            </div>
+        </div>
+        <div class="table-wrap" style="margin-bottom: 12px;">
+            <table>
+                <thead>
+                <tr>
+                    <th>Deal</th>
+                    <th>Buyer / Target</th>
+                    <th>Priority</th>
+                    <th>Strategy</th>
+                    <th>Evidence</th>
+                    <th>Review</th>
+                    <th>Actions</th>
+                </tr>
+                </thead>
+                <tbody id="dealGroups"></tbody>
+            </table>
+        </div>
+        <details class="preview-details" id="dealGroupDetailsPanel">
+            <summary class="preview-header">
+                <span>Deal Group Evidence</span>
+                <span class="badge disabled" id="dealGroupDetailsStatus">not loaded</span>
+            </summary>
+            <div id="dealGroupDetails" class="notice">Select Details on a deal group to inspect related RSS and SEC evidence.</div>
+        </details>
+    </section>
+
+    <section class="panel review-quality">
+        <div class="panel-head">
+            <div>
                 <h2>Signal Inbox</h2>
                 <div class="muted">Unified review queue for RSS candidates and SEC filing signals.</div>
             </div>
@@ -1320,6 +1374,8 @@
         secWatchlist: [],
         secCompanyLookupResults: [],
         signals: [],
+        dealGroups: [],
+        dealGroupDetails: null,
         telegramPreview: null,
         signalDetails: null,
         fullRefreshResult: null,
@@ -1365,6 +1421,8 @@
     const signalSourceTypeFilter = document.querySelector("#signalSourceTypeFilter");
     const signalPriorityFilter = document.querySelector("#signalPriorityFilter");
     const signalReviewFilter = document.querySelector("#signalReviewFilter");
+    const dealGroupPriorityFilter = document.querySelector("#dealGroupPriorityFilter");
+    const dealGroupReviewFilter = document.querySelector("#dealGroupReviewFilter");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -1409,6 +1467,8 @@
     signalSourceTypeFilter.addEventListener("change", loadSignals);
     signalPriorityFilter.addEventListener("change", loadSignals);
     signalReviewFilter.addEventListener("change", loadSignals);
+    dealGroupPriorityFilter.addEventListener("change", loadDealGroups);
+    dealGroupReviewFilter.addEventListener("change", loadDealGroups);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -1428,7 +1488,8 @@
             fetchJson("/api/sec/status"),
             fetchJson("/api/sec/filings"),
             fetchJson("/api/sec/watchlist"),
-            fetchJson("/api/signals?limit=100")
+            fetchJson("/api/signals?limit=100"),
+            fetchJson("/api/deal-groups?limit=100")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1442,6 +1503,7 @@
         assignResult(results[9], "secFilings", [], "SEC filings");
         assignResult(results[10], "secWatchlist", [], "SEC watchlist");
         assignResult(results[11], "signals", [], "Signal inbox");
+        assignResult(results[12], "dealGroups", [], "Deal groups");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -1465,6 +1527,23 @@
             renderSignalInbox();
         } catch (error) {
             showError("Signal inbox", error.message);
+        }
+    }
+
+    async function loadDealGroups() {
+        try {
+            const params = new URLSearchParams();
+            if (dealGroupPriorityFilter.value) {
+                params.set("priority", dealGroupPriorityFilter.value);
+            }
+            if (dealGroupReviewFilter.value) {
+                params.set("reviewStatus", dealGroupReviewFilter.value);
+            }
+            params.set("limit", "100");
+            state.dealGroups = await fetchJson(`/api/deal-groups?${params.toString()}`);
+            renderDealGroups();
+        } catch (error) {
+            showError("Deal groups", error.message);
         }
     }
 
@@ -1688,6 +1767,7 @@
             updateArticleInState(updated);
             render();
             await loadSignals();
+            await loadDealGroups();
         } catch (error) {
             showError("Manual review", error.message);
         }
@@ -1705,6 +1785,7 @@
             state.secFilings = state.secFilings.map(filing => filing.id === updated.id ? updated : filing);
             renderSecWatchlist();
             await loadSignals();
+            await loadDealGroups();
         } catch (error) {
             showError("SEC manual review", error.message);
         }
@@ -1746,6 +1827,17 @@
             document.querySelector("#signalDetailsPanel").scrollIntoView({behavior: "smooth", block: "start"});
         } catch (error) {
             showError("Signal details", error.message);
+        }
+    }
+
+    async function loadDealGroupDetails(groupKey) {
+        try {
+            state.dealGroupDetails = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}`);
+            renderDealGroupDetails();
+            document.querySelector("#dealGroupDetailsPanel").open = true;
+            document.querySelector("#dealGroupDetailsPanel").scrollIntoView({behavior: "smooth", block: "start"});
+        } catch (error) {
+            showError("Deal group details", error.message);
         }
     }
 
@@ -1802,6 +1894,8 @@
     function render() {
         renderActionCenter();
         renderFullRefreshResult();
+        renderDealGroups();
+        renderDealGroupDetails();
         renderSignalInbox();
         renderTelegramPreview();
         renderSignalDetails();
@@ -2145,6 +2239,103 @@
             ${Array.isArray(result.errors) && result.errors.length > 0
                 ? `<div class="small-cell danger-text" style="margin-top: 8px;">Errors: ${escapeText(result.errors.join("; "))}</div>`
                 : ""}
+        `;
+    }
+
+    function renderDealGroups() {
+        const target = document.querySelector("#dealGroups");
+        document.querySelector("#dealGroupCount").textContent = String(state.dealGroups.length);
+        if (!state.dealGroups.length) {
+            target.innerHTML = `<tr><td colspan="7" class="muted">No deal groups match current filters.</td></tr>`;
+            return;
+        }
+        target.innerHTML = state.dealGroups.slice(0, 50).map(group => `
+            <tr>
+                <td class="title-cell">
+                    ${escapeText(group.title || "-")}
+                    <div class="small-cell">${escapeText(group.groupKey || "")}</div>
+                </td>
+                <td>
+                    <div><strong>Buyer:</strong> ${escapeText(group.buyerCompany || "Unknown")} ${group.buyerTicker ? badge(group.buyerTicker, "neutral") : ""}</div>
+                    <div><strong>Target:</strong> ${escapeText(group.targetCompany || "Unknown")} ${group.targetTicker ? badge(group.targetTicker, "ok") : ""}</div>
+                    ${group.targetCik ? `<div class="small-cell">Target CIK: ${escapeText(group.targetCik)}</div>` : ""}
+                </td>
+                <td>${badge(group.priority || "NONE", group.priority || "disabled")}</td>
+                <td>
+                    ${group.dealRelevance ? badge(group.dealRelevance, group.tradability || "disabled") : badge("UNKNOWN", "disabled")}
+                    <div class="small-cell">${escapeText(group.tradability || "UNKNOWN")} / ${escapeText(group.dealTiming || "UNKNOWN")}</div>
+                </td>
+                <td>
+                    ${badge(`${(group.relatedSignals || []).length} signals`, (group.relatedSignals || []).length > 1 ? "ok" : "neutral")}
+                    <div class="small-cell">${escapeText((group.relatedSignals || []).map(signal => signal.sourceType).join(" + "))}</div>
+                </td>
+                <td>
+                    ${badge(group.reviewStatus || "PENDING", group.reviewStatus === "USEFUL" ? "ok" : group.reviewStatus === "IGNORED" ? "disabled" : "warn")}
+                    <div class="small-cell">${escapeText(group.reviewReason || "")}</div>
+                </td>
+                <td>
+                    <div class="actions compact-actions">
+                        <button type="button" data-deal-group-key="${escapeAttr(group.groupKey)}">Details</button>
+                    </div>
+                </td>
+            </tr>
+        `).join("");
+    }
+
+    function renderDealGroupDetails() {
+        const status = document.querySelector("#dealGroupDetailsStatus");
+        const target = document.querySelector("#dealGroupDetails");
+        const group = state.dealGroupDetails;
+        if (!group) {
+            status.className = "badge disabled";
+            status.textContent = "not loaded";
+            target.innerHTML = "Select Details on a deal group to inspect related RSS and SEC evidence.";
+            return;
+        }
+        status.className = `badge ${group.priority || "disabled"}`;
+        status.textContent = group.priority || "UNKNOWN";
+        target.innerHTML = `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(group.primarySignalSourceType || "UNKNOWN", group.primarySignalSourceType || "disabled")}
+                ${badge(group.priority || "NONE", group.priority || "disabled")}
+                ${group.dealRelevance ? badge(group.dealRelevance, group.tradability || "disabled") : ""}
+                ${group.dealStage ? badge(group.dealStage, group.dealTiming || "disabled") : ""}
+            </div>
+            <strong>${escapeText(group.title || "-")}</strong>
+            <div class="kv" style="margin-top: 8px;">${kvRows([
+                ["Buyer", group.buyerCompany],
+                ["Buyer ticker / CIK", [group.buyerTicker, group.buyerCik].filter(Boolean).join(" / ")],
+                ["Target", group.targetCompany],
+                ["Target ticker / CIK", [group.targetTicker, group.targetCik].filter(Boolean).join(" / ")],
+                ["Review", [group.reviewStatus, group.reviewReason].filter(Boolean).join(" / ")]
+            ])}</div>
+            ${chipList("Warnings", group.warnings, "risk")}
+            <div class="table-wrap" style="margin-top: 10px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Signal</th>
+                        <th>Priority</th>
+                        <th>Date</th>
+                        <th>Reason</th>
+                        <th>URL</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    ${(group.relatedSignals || []).map(signal => `
+                        <tr>
+                            <td>${badge(signal.sourceType || "UNKNOWN", signal.sourceType || "disabled")}</td>
+                            <td class="title-cell">${escapeText(signal.title || "-")}<div class="small-cell">${escapeText(signal.signalType || "")}</div></td>
+                            <td>${badge(signal.priority || "NONE", signal.priority || "disabled")}</td>
+                            <td>${escapeText(formatDate(signal.date || signal.filingDate))}</td>
+                            <td>${escapeText(signal.relatedReason || "")}</td>
+                            <td><a href="${escapeAttr(signal.url)}" target="_blank" rel="noreferrer">Open</a></td>
+                        </tr>
+                    `).join("")}
+                    </tbody>
+                </table>
+            </div>
         `;
     }
 
@@ -2949,6 +3140,13 @@
         const reviewButton = event.target.closest("[data-review-action]");
         if (reviewButton) {
             updateManualReview(Number(reviewButton.dataset.articleId), reviewButton.dataset.reviewAction);
+        }
+    });
+
+    document.querySelector("#dealGroups").addEventListener("click", event => {
+        const dealGroupButton = event.target.closest("[data-deal-group-key]");
+        if (dealGroupButton) {
+            loadDealGroupDetails(dealGroupButton.dataset.dealGroupKey);
         }
     });
 
