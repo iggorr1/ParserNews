@@ -1014,6 +1014,31 @@
             </div>
             <div class="filters" style="margin-bottom: 12px;">
                 <div class="control">
+                    <label for="secCompanyLookupInput">Find by ticker or company</label>
+                    <input id="secCompanyLookupInput" placeholder="AAPL or Apple">
+                </div>
+                <button id="secCompanyLookupButton" type="button">Search SEC companies</button>
+                <span class="muted" id="secCompanyLookupStatus"></span>
+            </div>
+            <div class="table-wrap" style="margin-bottom: 12px;">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>Ticker</th>
+                        <th>Company</th>
+                        <th>CIK</th>
+                        <th>Match</th>
+                        <th>Watchlist</th>
+                        <th>Action</th>
+                    </tr>
+                    </thead>
+                    <tbody id="secCompanyLookupResults">
+                    <tr><td colspan="6" class="muted">Search SEC mapping to add by ticker or company name.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="filters" style="margin-bottom: 12px;">
+                <div class="control">
                     <label for="secWatchlistCikInput">CIK</label>
                     <input id="secWatchlistCikInput" placeholder="320193">
                 </div>
@@ -1287,6 +1312,7 @@
         secStatus: null,
         secFilings: [],
         secWatchlist: [],
+        secCompanyLookupResults: [],
         signals: [],
         telegramPreview: null,
         signalDetails: null,
@@ -1310,6 +1336,9 @@
     const secWatchlistTickerInput = document.querySelector("#secWatchlistTickerInput");
     const secWatchlistNotesInput = document.querySelector("#secWatchlistNotesInput");
     const secWatchlistEnabledInput = document.querySelector("#secWatchlistEnabledInput");
+    const secCompanyLookupInput = document.querySelector("#secCompanyLookupInput");
+    const secCompanyLookupButton = document.querySelector("#secCompanyLookupButton");
+    const secCompanyLookupStatus = document.querySelector("#secCompanyLookupStatus");
     const errors = document.querySelector("#errors");
     const searchInput = document.querySelector("#searchInput");
     const strengthFilter = document.querySelector("#strengthFilter");
@@ -1348,6 +1377,13 @@
     secScanButton.addEventListener("click", runSecScan);
     secFetchDocumentsButton.addEventListener("click", runSecFetchDocuments);
     secWatchlistAddButton.addEventListener("click", addSecWatchlistEntry);
+    secCompanyLookupButton.addEventListener("click", searchSecCompanyLookup);
+    secCompanyLookupInput.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            searchSecCompanyLookup();
+        }
+    });
     searchInput.addEventListener("input", render);
     strengthFilter.addEventListener("change", render);
     sourceFilter.addEventListener("change", render);
@@ -1520,6 +1556,51 @@
             showError("SEC watchlist", error.message);
         } finally {
             setBusy(secWatchlistAddButton, false, "Add CIK");
+        }
+    }
+
+    async function searchSecCompanyLookup() {
+        const query = secCompanyLookupInput.value.trim();
+        if (!query) {
+            state.secCompanyLookupResults = [];
+            secCompanyLookupStatus.textContent = "Enter ticker or company name.";
+            renderSecCompanyLookupResults();
+            return;
+        }
+        setBusy(secCompanyLookupButton, true, "Searching");
+        secCompanyLookupStatus.textContent = "";
+        try {
+            state.secCompanyLookupResults = await fetchJson(`/api/sec/company-lookup?q=${encodeURIComponent(query)}`);
+            secCompanyLookupStatus.textContent = `${state.secCompanyLookupResults.length} result(s)`;
+            renderSecCompanyLookupResults();
+        } catch (error) {
+            state.secCompanyLookupResults = [];
+            renderSecCompanyLookupResults();
+            showError("SEC company lookup", error.message);
+            secCompanyLookupStatus.textContent = "Lookup unavailable.";
+        } finally {
+            setBusy(secCompanyLookupButton, false, "Search SEC companies");
+        }
+    }
+
+    async function addSecCompanyLookupResult(cik) {
+        const result = state.secCompanyLookupResults.find(item => item.cik === String(cik));
+        if (!result) {
+            showError("SEC company lookup", "Lookup result not found in current dashboard state.");
+            return;
+        }
+        try {
+            await postJson("/api/sec/watchlist/from-lookup", {
+                cik: result.cik,
+                companyName: result.companyName,
+                ticker: result.ticker,
+                notes: "Added from SEC lookup",
+                enabled: true
+            });
+            await reloadSecWatchlistState();
+            await searchSecCompanyLookup();
+        } catch (error) {
+            showError("SEC company lookup", error.message);
         }
     }
 
@@ -1788,6 +1869,7 @@
             ["Warning", warning || "-"]
         ]) + (warning ? `<div class="warning">${escapeText(warning)}</div>` : "");
         renderSecWatchlistEntries();
+        renderSecCompanyLookupResults();
 
         const target = document.querySelector("#secFilings");
         const priority = secPriorityFilter.value;
@@ -1869,6 +1951,28 @@
                     <div class="actions compact-actions">
                         <button type="button" onclick="updateSecWatchlistEntry(${Number(entry.id)}, ${entry.enabled ? "false" : "true"})">${entry.enabled ? "Disable" : "Enable"}</button>
                         <button type="button" onclick="deleteSecWatchlistEntry(${Number(entry.id)})">Delete</button>
+                    </div>
+                </td>
+            </tr>
+        `).join("");
+    }
+
+    function renderSecCompanyLookupResults() {
+        const target = document.querySelector("#secCompanyLookupResults");
+        if (!state.secCompanyLookupResults.length) {
+            target.innerHTML = `<tr><td colspan="6" class="muted">No SEC lookup results loaded.</td></tr>`;
+            return;
+        }
+        target.innerHTML = state.secCompanyLookupResults.map(result => `
+            <tr>
+                <td>${escapeText(result.ticker || "-")}</td>
+                <td class="title-cell">${escapeText(result.companyName || "-")}</td>
+                <td>${escapeText(result.cik || "-")}</td>
+                <td>${badge(result.matchType || "UNKNOWN", result.matchType === "EXACT_TICKER" ? "ok" : "watch")}</td>
+                <td>${result.alreadyInWatchlist ? badge(result.enabledInWatchlist ? "enabled" : "disabled", result.enabledInWatchlist ? "ok" : "disabled") : badge("not added", "neutral")}</td>
+                <td>
+                    <div class="actions compact-actions">
+                        <button type="button" ${result.alreadyInWatchlist ? "disabled" : ""} onclick="addSecCompanyLookupResult('${escapeAttr(result.cik)}')">Add to Watchlist</button>
                     </div>
                 </td>
             </tr>

@@ -10,6 +10,7 @@ import com.parsernews.persistence.SecSignalType;
 import com.parsernews.persistence.SecWatchlistCompanyEntity;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
+import com.parsernews.service.SecCompanyLookupService;
 import com.parsernews.service.SecFilingDocumentFetcher;
 import com.parsernews.service.SecWatchlistManagerService;
 import com.parsernews.service.SecWatchlistScanner;
@@ -59,6 +60,9 @@ class SecControllerSecurityTest {
     private SecWatchlistManagerService watchlistManagerService;
 
     @MockitoBean
+    private SecCompanyLookupService companyLookupService;
+
+    @MockitoBean
     private NewsScannerService newsScannerService;
 
     @MockitoBean
@@ -73,6 +77,12 @@ class SecControllerSecurityTest {
     @Test
     void watchlistEndpointsRequireAuth() throws Exception {
         mockMvc.perform(get("/api/sec/watchlist"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void companyLookupEndpointRequiresAuth() throws Exception {
+        mockMvc.perform(get("/api/sec/company-lookup?q=AAPL"))
                 .andExpect(status().isUnauthorized());
     }
 
@@ -149,6 +159,43 @@ class SecControllerSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.cik").value("789019"))
                 .andExpect(jsonPath("$.companyName").value("Microsoft Corp."));
+    }
+
+    @Test
+    void authenticatedCompanyLookupReturnsResults() throws Exception {
+        when(companyLookupService.search("AAPL")).thenReturn(List.of(
+                new SecCompanyLookupService.SecCompanyLookupResult(
+                        "320193",
+                        "AAPL",
+                        "Apple Inc.",
+                        SecCompanyLookupService.MatchType.EXACT_TICKER,
+                        false,
+                        false
+                )
+        ));
+
+        mockMvc.perform(get("/api/sec/company-lookup?q=AAPL").with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].cik").value("320193"))
+                .andExpect(jsonPath("$[0].ticker").value("AAPL"))
+                .andExpect(jsonPath("$[0].matchType").value("EXACT_TICKER"))
+                .andExpect(jsonPath("$[0].alreadyInWatchlist").value(false));
+    }
+
+    @Test
+    void authenticatedWatchlistAddFromLookupReturnsEntry() throws Exception {
+        when(watchlistManagerService.addEntry(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(new SecWatchlistCompanyEntity("320193", "Apple Inc.", "AAPL", "Added from SEC lookup", true));
+
+        mockMvc.perform(post("/api/sec/watchlist/from-lookup")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"cik":"320193","companyName":"Apple Inc.","ticker":"AAPL","notes":"Added from SEC lookup","enabled":true}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cik").value("320193"))
+                .andExpect(jsonPath("$.ticker").value("AAPL"));
     }
 
     @Test

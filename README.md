@@ -381,6 +381,16 @@ empty, the scanner falls back to `SEC_SCANNER_WATCHLIST`. This lets local Docker
 deployments start safely with no SEC scanning, then add or remove CIKs from the
 dashboard without editing `.env` or restarting containers.
 
+The SEC Watchlist Manager also supports company lookup by ticker or company
+name. It uses the official SEC company ticker mapping
+(`https://www.sec.gov/files/company_tickers.json`) with the same SEC
+User-Agent header as the submissions scanner. Lookup results are cached in
+memory during app runtime so the app does not request the SEC mapping on every
+search. Useful endpoints:
+
+- `GET /api/sec/company-lookup?q=AAPL`
+- `POST /api/sec/watchlist/from-lookup`
+
 Manual local run against an existing PostgreSQL instance:
 
 ```powershell

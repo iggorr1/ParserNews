@@ -11,7 +11,6 @@ import java.time.Duration;
 
 @Component
 public class HttpSecDocumentClient implements SecDocumentClient {
-    private static final String USER_AGENT = "ParserNews SEC Watchlist Scanner/1.0 contact: local-research@example.invalid";
     private final HttpClient httpClient = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(15))
             .build();
@@ -22,7 +21,7 @@ public class HttpSecDocumentClient implements SecDocumentClient {
                 .uri(URI.create(documentUrl))
                 .timeout(Duration.ofSeconds(30))
                 .header("Accept", "text/html, text/plain, */*")
-                .header("User-Agent", USER_AGENT)
+                .header("User-Agent", SecHttpUserAgent.VALUE)
                 .GET()
                 .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());

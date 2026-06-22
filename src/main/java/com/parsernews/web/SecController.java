@@ -8,6 +8,7 @@ import com.parsernews.persistence.SecSignalPriority;
 import com.parsernews.persistence.SecSignalType;
 import com.parsernews.persistence.SecWatchlistCompanyEntity;
 import com.parsernews.service.SecFilingDocumentFetcher;
+import com.parsernews.service.SecCompanyLookupService;
 import com.parsernews.service.SecWatchlistManagerService;
 import com.parsernews.service.SecWatchlistScanner;
 import jakarta.persistence.EntityNotFoundException;
@@ -36,17 +37,20 @@ public class SecController {
     private final SecFilingRepository filingRepository;
     private final SecFilingDocumentFetcher documentFetcher;
     private final SecWatchlistManagerService watchlistManagerService;
+    private final SecCompanyLookupService companyLookupService;
 
     public SecController(
             SecWatchlistScanner secWatchlistScanner,
             SecFilingRepository filingRepository,
             SecFilingDocumentFetcher documentFetcher,
-            SecWatchlistManagerService watchlistManagerService
+            SecWatchlistManagerService watchlistManagerService,
+            SecCompanyLookupService companyLookupService
     ) {
         this.secWatchlistScanner = secWatchlistScanner;
         this.filingRepository = filingRepository;
         this.documentFetcher = documentFetcher;
         this.watchlistManagerService = watchlistManagerService;
+        this.companyLookupService = companyLookupService;
     }
 
     @PostMapping("/api/sec/scan")
@@ -57,6 +61,18 @@ public class SecController {
     @GetMapping("/api/sec/status")
     public SecWatchlistScanner.SecStatus status() {
         return secWatchlistScanner.status();
+    }
+
+    @GetMapping("/api/sec/company-lookup")
+    @Transactional(readOnly = true)
+    public List<SecCompanyLookupService.SecCompanyLookupResult> companyLookup(@RequestParam String q) {
+        try {
+            return companyLookupService.search(q);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        } catch (SecCompanyLookupService.SecCompanyLookupException exception) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, exception.getMessage(), exception);
+        }
     }
 
     @GetMapping("/api/sec/watchlist")
@@ -70,6 +86,16 @@ public class SecController {
     @PostMapping("/api/sec/watchlist")
     @Transactional
     public SecWatchlistCompanyResponse addWatchlistEntry(@RequestBody SecWatchlistManagerService.WatchlistRequest request) {
+        try {
+            return SecWatchlistCompanyResponse.from(watchlistManagerService.addEntry(request));
+        } catch (IllegalArgumentException | SecWatchlistManagerService.DuplicateSecWatchlistCompanyException exception) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    @PostMapping("/api/sec/watchlist/from-lookup")
+    @Transactional
+    public SecWatchlistCompanyResponse addWatchlistEntryFromLookup(@RequestBody SecWatchlistManagerService.WatchlistRequest request) {
         try {
             return SecWatchlistCompanyResponse.from(watchlistManagerService.addEntry(request));
         } catch (IllegalArgumentException | SecWatchlistManagerService.DuplicateSecWatchlistCompanyException exception) {
