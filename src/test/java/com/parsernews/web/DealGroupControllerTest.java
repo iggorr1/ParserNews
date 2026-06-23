@@ -5,6 +5,7 @@ import com.parsernews.config.TelegramAlertSettings;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.service.AlertNotifier;
+import com.parsernews.service.DealGroupAiReviewService;
 import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
 import com.parsernews.service.NewsScannerService;
@@ -48,6 +49,9 @@ class DealGroupControllerTest {
 
     @MockitoBean
     private DealGroupReviewService dealGroupReviewService;
+
+    @MockitoBean
+    private DealGroupAiReviewService dealGroupAiReviewService;
 
     @MockitoBean
     private AlertNotifier alertNotifier;
@@ -212,6 +216,43 @@ class DealGroupControllerTest {
                 .andExpect(jsonPath("$.message").value("Telegram message sent."));
 
         verify(alertNotifier).send("DEAL GROUP SIGNAL");
+    }
+
+    @Test
+    void aiReviewLatestReturnsSafeResponse() throws Exception {
+        DealGroupingService.DealGroupResponse group = group();
+        when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
+        when(dealGroupAiReviewService.latest("target-ticker:APGE"))
+                .thenReturn(DealGroupAiReviewService.AiReviewResponse.empty(false, false, "No AI review has been saved for this deal group yet."));
+
+        mockMvc.perform(get("/api/deal-groups/target-ticker:APGE/ai-review/latest")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openAiEnabled").value(false))
+                .andExpect(jsonPath("$.message").value("No AI review has been saved for this deal group yet."));
+    }
+
+    @Test
+    void aiReviewPostReturnsDisabledSafeResponse() throws Exception {
+        DealGroupingService.DealGroupResponse group = group();
+        when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
+        when(dealGroupAiReviewService.review("target-ticker:APGE"))
+                .thenReturn(DealGroupAiReviewService.AiReviewResponse.empty(false, false, "OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it."));
+
+        mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/ai-review")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openAiEnabled").value(false))
+                .andExpect(jsonPath("$.message").value("OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it."));
+    }
+
+    @Test
+    void aiReviewEndpointsRequireAuth() throws Exception {
+        mockMvc.perform(get("/api/deal-groups/target-ticker:APGE/ai-review/latest"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/ai-review"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

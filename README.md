@@ -368,6 +368,11 @@ Manual Telegram preview/send is available from Signal Inbox, but Telegram is
 disabled by default. Disabled/not configured responses are safe no-ops and do
 not send external messages.
 
+Optional OpenAI AI Review is available from Deal Groups as a manual-only helper.
+It is disabled by default, never runs during scanning or Full Refresh, and does
+not provide buy/sell/investment advice. It only judges whether the grouped deal
+looks like a useful M&A research signal for human review.
+
 ## Smoke Test
 
 After Docker is running, verify the core private deployment flow with:
@@ -742,6 +747,36 @@ Scheduler status is available in the dashboard Action Center and at:
 ```text
 GET /api/admin/scheduler-status
 ```
+
+### OpenAI AI Review
+
+```properties
+openai.analysis.enabled=false
+openai.analysis.api-key=
+openai.analysis.model=gpt-4.1-mini
+openai.analysis.max-input-chars=12000
+
+OPENAI_ANALYSIS_ENABLED=false
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_ANALYSIS_MAX_INPUT_CHARS=12000
+```
+
+OpenAI AI Review is disabled by default and runs only when a user clicks AI
+Review on a Deal Group. The API key is read only on the server from environment
+configuration and is never returned by API responses or shown in the dashboard.
+Do not commit real API keys. `.env` and `.env.*` are ignored by git.
+
+Endpoints:
+
+```text
+GET /api/deal-groups/{groupKey}/ai-review/latest
+POST /api/deal-groups/{groupKey}/ai-review
+```
+
+The review prompt asks only whether the Deal Group is a useful M&A research
+signal: public target, tradable target, cash/fixed-price offer, and early enough
+signal. It explicitly must not provide buy/sell/investment advice.
 
 ### Telegram
 

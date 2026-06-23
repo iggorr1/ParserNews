@@ -973,6 +973,13 @@
             </summary>
             <div id="dealGroupDetails" class="notice">Select Details on a deal group to inspect related RSS and SEC evidence.</div>
         </details>
+        <details class="preview-details" id="dealGroupAiReviewPanel">
+            <summary class="preview-header">
+                <span>AI Review</span>
+                <span class="badge disabled" id="dealGroupAiReviewStatus">disabled</span>
+            </summary>
+            <div id="dealGroupAiReview" class="notice">Select AI Review on a deal group to run optional OpenAI analysis.</div>
+        </details>
     </section>
 
     <details class="panel review-quality">
@@ -1423,6 +1430,7 @@
         dealGroups: [],
         dealGroupStats: null,
         dealGroupDetails: null,
+        dealGroupAiReview: null,
         telegramPreview: null,
         signalDetails: null,
         fullRefreshResult: null,
@@ -2023,6 +2031,7 @@
         renderDealGroupQuality();
         renderDealGroups();
         renderDealGroupDetails();
+        renderDealGroupAiReview();
         renderSignalInbox();
         renderTelegramPreview();
         renderSignalDetails();
@@ -2489,6 +2498,7 @@
                         <button type="button" data-deal-group-review-action="PENDING" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Reset</button>
                         <button type="button" data-deal-group-telegram-key="${escapeAttr(group.groupKey)}">Telegram Preview</button>
                         <button type="button" data-deal-group-telegram-send-key="${escapeAttr(group.groupKey)}">Send Telegram</button>
+                        <button type="button" data-deal-group-ai-review-key="${escapeAttr(group.groupKey)}">AI Review</button>
                     </div>
                 </td>
             </tr>
@@ -2527,6 +2537,7 @@
             ${chipList("Warnings", group.warnings, "risk")}
             <div class="actions compact-actions" style="margin-top: 10px;">
                 <button type="button" data-deal-group-telegram-key="${escapeAttr(group.groupKey)}">Telegram Preview</button>
+                <button type="button" data-deal-group-ai-review-key="${escapeAttr(group.groupKey)}">AI Review</button>
             </div>
             <div class="table-wrap" style="margin-top: 10px;">
                 <table>
@@ -2554,6 +2565,57 @@
                     </tbody>
                 </table>
             </div>
+        `;
+    }
+
+    async function runDealGroupAiReview(groupKey) {
+        try {
+            state.dealGroupAiReview = await postJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/ai-review`);
+            renderDealGroupAiReview();
+            document.querySelector("#dealGroupAiReviewPanel").open = true;
+            document.querySelector("#dealGroupAiReviewPanel").scrollIntoView({behavior: "smooth", block: "start"});
+        } catch (error) {
+            showError("Deal group AI review", error.message);
+        }
+    }
+
+    function renderDealGroupAiReview() {
+        const status = document.querySelector("#dealGroupAiReviewStatus");
+        const target = document.querySelector("#dealGroupAiReview");
+        const review = state.dealGroupAiReview;
+        if (!review) {
+            status.className = "badge disabled";
+            status.textContent = "disabled";
+            target.innerHTML = "Select AI Review on a deal group to run optional OpenAI analysis.";
+            return;
+        }
+        status.className = `badge ${review.openAiEnabled && review.openAiConfigured ? "ok" : "disabled"}`;
+        status.textContent = review.openAiEnabled
+            ? review.openAiConfigured ? "configured" : "missing key"
+            : "disabled";
+        target.innerHTML = `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(review.openAiEnabled ? "OpenAI enabled" : "OpenAI disabled", review.openAiEnabled ? "ok" : "disabled")}
+                ${badge(review.openAiConfigured ? "configured" : "not configured", review.openAiConfigured ? "ok" : "disabled")}
+                ${review.verdict ? badge(review.verdict, review.verdict === "GOOD_SIGNAL" ? "ok" : review.verdict === "NEEDS_HUMAN_REVIEW" ? "warn" : "disabled") : ""}
+                ${review.confidence ? badge(review.confidence, review.confidence) : ""}
+            </div>
+            <div class="muted">${escapeText(review.message || "")}</div>
+            ${review.id ? `
+                <div class="kv" style="margin-top: 8px;">${kvRows([
+                    ["Group", review.groupKey],
+                    ["Model", review.model],
+                    ["Verdict", review.verdict],
+                    ["Confidence", review.confidence],
+                    ["Tradable public target", review.tradablePublicTarget ? "Yes" : "No"],
+                    ["Suggested review", [review.suggestedReviewStatus, review.suggestedReviewReason].filter(Boolean).join(" / ")],
+                    ["Created", formatDate(review.createdAt)]
+                ])}</div>
+                <div style="margin-top: 8px;"><strong>Reason:</strong> ${escapeText(review.reason || "-")}</div>
+                ${Array.isArray(review.riskFlags) && review.riskFlags.length
+                    ? `<div class="chip-list" style="margin-top: 8px;">${review.riskFlags.map(flag => badge(flag, "warn")).join("")}</div>`
+                    : ""}
+            ` : ""}
         `;
     }
 
@@ -3392,9 +3454,26 @@
             sendDealGroupTelegram(telegramSendButton.dataset.dealGroupTelegramSendKey);
             return;
         }
+        const aiReviewButton = event.target.closest("[data-deal-group-ai-review-key]");
+        if (aiReviewButton) {
+            runDealGroupAiReview(aiReviewButton.dataset.dealGroupAiReviewKey);
+            return;
+        }
         const dealGroupButton = event.target.closest("[data-deal-group-key]");
         if (dealGroupButton) {
             loadDealGroupDetails(dealGroupButton.dataset.dealGroupKey);
+        }
+    });
+
+    document.querySelector("#dealGroupDetails").addEventListener("click", event => {
+        const telegramButton = event.target.closest("[data-deal-group-telegram-key]");
+        if (telegramButton) {
+            previewDealGroupTelegram(telegramButton.dataset.dealGroupTelegramKey);
+            return;
+        }
+        const aiReviewButton = event.target.closest("[data-deal-group-ai-review-key]");
+        if (aiReviewButton) {
+            runDealGroupAiReview(aiReviewButton.dataset.dealGroupAiReviewKey);
         }
     });
 

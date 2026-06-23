@@ -9,6 +9,7 @@ import com.parsernews.persistence.DealGroupReviewEntity;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.service.AlertNotifier;
+import com.parsernews.service.DealGroupAiReviewService;
 import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
 import com.parsernews.web.SignalInboxController.UnifiedPriority;
@@ -36,17 +37,20 @@ import java.util.Map;
 public class DealGroupController {
     private final DealGroupingService dealGroupingService;
     private final DealGroupReviewService dealGroupReviewService;
+    private final DealGroupAiReviewService dealGroupAiReviewService;
     private final AlertNotifier alertNotifier;
     private final TelegramAlertSettings telegramAlertSettings;
 
     public DealGroupController(
             DealGroupingService dealGroupingService,
             DealGroupReviewService dealGroupReviewService,
+            DealGroupAiReviewService dealGroupAiReviewService,
             AlertNotifier alertNotifier,
             TelegramAlertSettings telegramAlertSettings
     ) {
         this.dealGroupingService = dealGroupingService;
         this.dealGroupReviewService = dealGroupReviewService;
+        this.dealGroupAiReviewService = dealGroupAiReviewService;
         this.alertNotifier = alertNotifier;
         this.telegramAlertSettings = telegramAlertSettings;
     }
@@ -165,6 +169,22 @@ public class DealGroupController {
                 notification.reason(),
                 notification.sent() ? null : notification.status()
         );
+    }
+
+    @GetMapping("/api/deal-groups/{groupKey}/ai-review/latest")
+    @Transactional(readOnly = true)
+    public DealGroupAiReviewService.AiReviewResponse latestAiReview(@PathVariable String groupKey) {
+        dealGroupingService.group(groupKey)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal group not found"));
+        return dealGroupAiReviewService.latest(groupKey);
+    }
+
+    @PostMapping("/api/deal-groups/{groupKey}/ai-review")
+    @Transactional
+    public DealGroupAiReviewService.AiReviewResponse aiReview(@PathVariable String groupKey) {
+        dealGroupingService.group(groupKey)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal group not found"));
+        return dealGroupAiReviewService.review(groupKey);
     }
 
     private TelegramReadiness telegramReadiness() {

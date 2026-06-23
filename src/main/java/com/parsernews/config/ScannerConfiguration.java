@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
         AlertDispatchSettings.class,
         AnalyzerSettings.class,
         ConsoleSettings.class,
+        OpenAiAnalysisSettings.class,
         RssSettings.class,
         SafetySettings.class,
         SecScannerSettings.class,
