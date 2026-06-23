@@ -1,6 +1,10 @@
 package com.parsernews.web;
 
 import com.parsernews.config.TelegramAlertSettings;
+import com.parsernews.model.DealRelevance;
+import com.parsernews.model.DealStage;
+import com.parsernews.model.DealTiming;
+import com.parsernews.model.Tradability;
 import com.parsernews.persistence.DealGroupReviewEntity;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
@@ -24,7 +28,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 public class DealGroupController {
@@ -53,6 +59,34 @@ public class DealGroupController {
             @RequestParam(defaultValue = "50") int limit
     ) {
         return dealGroupingService.groups(reviewStatus, priority, limit);
+    }
+
+    @GetMapping("/api/deal-groups/stats")
+    @Transactional(readOnly = true)
+    public DealGroupStatsResponse dealGroupStats() {
+        List<DealGroupingService.DealGroupResponse> groups = allGroupsForStats();
+        long groupedEvidenceTotal = groups.stream()
+                .mapToLong(group -> group.relatedSignals().size())
+                .sum();
+        double averageEvidencePerGroup = groups.isEmpty()
+                ? 0.0
+                : (double) groupedEvidenceTotal / groups.size();
+        return new DealGroupStatsResponse(
+                groups.size(),
+                countReviewStatus(groups, ManualReviewStatus.PENDING),
+                countReviewStatus(groups, ManualReviewStatus.USEFUL),
+                countReviewStatus(groups, ManualReviewStatus.IGNORED),
+                countPriority(groups, UnifiedPriority.HIGH),
+                groups.stream().filter(this::isAlertLikeGroup).count(),
+                groupedEvidenceTotal,
+                averageEvidencePerGroup,
+                reasonBreakdown(groups),
+                dealRelevanceBreakdown(groups),
+                tradabilityBreakdown(groups),
+                dealStageBreakdown(groups),
+                dealTimingBreakdown(groups),
+                priorityBreakdown(groups)
+        );
     }
 
     @GetMapping(value = "/api/deal-groups/export.csv", produces = "text/csv")
@@ -143,6 +177,95 @@ public class DealGroupController {
             return new TelegramReadiness(true, false, false, "Telegram is enabled but bot token or chat id is missing.");
         }
         return new TelegramReadiness(true, true, true, null);
+    }
+
+    private List<DealGroupingService.DealGroupResponse> allGroupsForStats() {
+        Map<String, DealGroupingService.DealGroupResponse> groupsByKey = new LinkedHashMap<>();
+        for (ManualReviewStatus status : ManualReviewStatus.values()) {
+            dealGroupingService.groups(status, null, 200)
+                    .forEach(group -> groupsByKey.put(group.groupKey(), group));
+        }
+        return List.copyOf(groupsByKey.values());
+    }
+
+    private boolean isAlertLikeGroup(DealGroupingService.DealGroupResponse group) {
+        return group.warnings().stream()
+                .anyMatch(warning -> "RSS signal is alert eligible".equalsIgnoreCase(warning))
+                || (group.priority() == UnifiedPriority.HIGH
+                && (group.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE
+                || group.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION)
+                && (group.tradability() == Tradability.HIGH || group.tradability() == Tradability.MEDIUM)
+                && group.dealTiming() != DealTiming.LATE_STAGE
+                && group.dealTiming() != DealTiming.POST_CLOSE
+                && group.dealTiming() != DealTiming.NOISE);
+    }
+
+    private long countReviewStatus(List<DealGroupingService.DealGroupResponse> groups, ManualReviewStatus status) {
+        return groups.stream().filter(group -> group.reviewStatus() == status).count();
+    }
+
+    private long countPriority(List<DealGroupingService.DealGroupResponse> groups, UnifiedPriority priority) {
+        return groups.stream().filter(group -> group.priority() == priority).count();
+    }
+
+    private Map<String, Long> reasonBreakdown(List<DealGroupingService.DealGroupResponse> groups) {
+        Map<String, Long> counts = enumMap(ManualReviewReason.values());
+        groups.stream()
+                .map(DealGroupingService.DealGroupResponse::reviewReason)
+                .filter(reason -> reason != null)
+                .forEach(reason -> counts.compute(reason.name(), (key, count) -> count == null ? 1 : count + 1));
+        return counts;
+    }
+
+    private Map<String, Long> dealRelevanceBreakdown(List<DealGroupingService.DealGroupResponse> groups) {
+        Map<String, Long> counts = enumMap(DealRelevance.values());
+        groups.stream()
+                .map(DealGroupingService.DealGroupResponse::dealRelevance)
+                .filter(value -> value != null)
+                .forEach(value -> counts.compute(value.name(), (key, count) -> count == null ? 1 : count + 1));
+        return counts;
+    }
+
+    private Map<String, Long> tradabilityBreakdown(List<DealGroupingService.DealGroupResponse> groups) {
+        Map<String, Long> counts = enumMap(Tradability.values());
+        groups.stream()
+                .map(DealGroupingService.DealGroupResponse::tradability)
+                .filter(value -> value != null)
+                .forEach(value -> counts.compute(value.name(), (key, count) -> count == null ? 1 : count + 1));
+        return counts;
+    }
+
+    private Map<String, Long> dealStageBreakdown(List<DealGroupingService.DealGroupResponse> groups) {
+        Map<String, Long> counts = enumMap(DealStage.values());
+        groups.stream()
+                .map(DealGroupingService.DealGroupResponse::dealStage)
+                .filter(value -> value != null)
+                .forEach(value -> counts.compute(value.name(), (key, count) -> count == null ? 1 : count + 1));
+        return counts;
+    }
+
+    private Map<String, Long> dealTimingBreakdown(List<DealGroupingService.DealGroupResponse> groups) {
+        Map<String, Long> counts = enumMap(DealTiming.values());
+        groups.stream()
+                .map(DealGroupingService.DealGroupResponse::dealTiming)
+                .filter(value -> value != null)
+                .forEach(value -> counts.compute(value.name(), (key, count) -> count == null ? 1 : count + 1));
+        return counts;
+    }
+
+    private Map<String, Long> priorityBreakdown(List<DealGroupingService.DealGroupResponse> groups) {
+        Map<String, Long> counts = enumMap(UnifiedPriority.values());
+        groups.stream()
+                .map(DealGroupingService.DealGroupResponse::priority)
+                .filter(value -> value != null)
+                .forEach(value -> counts.compute(value.name(), (key, count) -> count == null ? 1 : count + 1));
+        return counts;
+    }
+
+    private Map<String, Long> enumMap(Enum<?>[] values) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        Arrays.stream(values).forEach(value -> counts.put(value.name(), 0L));
+        return counts;
     }
 
     private String toCsv(List<DealGroupingService.DealGroupResponse> groups) {
@@ -247,6 +370,24 @@ public class DealGroupController {
             boolean telegramConfigured,
             String message,
             String error
+    ) {
+    }
+
+    public record DealGroupStatsResponse(
+            long totalGroups,
+            long pendingGroups,
+            long usefulGroups,
+            long ignoredGroups,
+            long highPriorityGroups,
+            long alertLikeGroups,
+            long groupedEvidenceTotal,
+            double averageEvidencePerGroup,
+            Map<String, Long> reviewReasonBreakdown,
+            Map<String, Long> byDealRelevance,
+            Map<String, Long> byTradability,
+            Map<String, Long> byDealStage,
+            Map<String, Long> byDealTiming,
+            Map<String, Long> byPriority
     ) {
     }
 

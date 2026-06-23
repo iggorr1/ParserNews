@@ -75,6 +75,12 @@ class DealGroupControllerTest {
     }
 
     @Test
+    void dealGroupStatsRequireAuth() throws Exception {
+        mockMvc.perform(get("/api/deal-groups/stats"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void dealGroupsReturnGroupedSignals() throws Exception {
         DealGroupingService.DealGroupResponse group = group();
         when(dealGroupingService.groups(null, null, 50)).thenReturn(List.of(group));
@@ -222,6 +228,39 @@ class DealGroupControllerTest {
     }
 
     @Test
+    void statsCountReviewStatusesAndBreakdowns() throws Exception {
+        when(dealGroupingService.groups(ManualReviewStatus.PENDING, null, 200))
+                .thenReturn(List.of(groupWithReview("pending-group", ManualReviewStatus.PENDING, null)));
+        when(dealGroupingService.groups(ManualReviewStatus.USEFUL, null, 200))
+                .thenReturn(List.of(groupWithReview("useful-group", ManualReviewStatus.USEFUL, ManualReviewReason.GOOD_SIGNAL)));
+        when(dealGroupingService.groups(ManualReviewStatus.IGNORED, null, 200))
+                .thenReturn(List.of(
+                        groupWithReview("ignored-private", ManualReviewStatus.IGNORED, ManualReviewReason.PRIVATE_COMPANY),
+                        groupWithReview("ignored-false", ManualReviewStatus.IGNORED, ManualReviewReason.FALSE_POSITIVE)
+                ));
+
+        mockMvc.perform(get("/api/deal-groups/stats")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalGroups").value(4))
+                .andExpect(jsonPath("$.pendingGroups").value(1))
+                .andExpect(jsonPath("$.usefulGroups").value(1))
+                .andExpect(jsonPath("$.ignoredGroups").value(2))
+                .andExpect(jsonPath("$.highPriorityGroups").value(4))
+                .andExpect(jsonPath("$.alertLikeGroups").value(4))
+                .andExpect(jsonPath("$.groupedEvidenceTotal").value(8))
+                .andExpect(jsonPath("$.averageEvidencePerGroup").value(2.0))
+                .andExpect(jsonPath("$.reviewReasonBreakdown.GOOD_SIGNAL").value(1))
+                .andExpect(jsonPath("$.reviewReasonBreakdown.PRIVATE_COMPANY").value(1))
+                .andExpect(jsonPath("$.reviewReasonBreakdown.FALSE_POSITIVE").value(1))
+                .andExpect(jsonPath("$.byDealRelevance.PUBLIC_CASH_ACQUISITION").value(4))
+                .andExpect(jsonPath("$.byTradability.HIGH").value(4))
+                .andExpect(jsonPath("$.byDealStage.DEFINITIVE_AGREEMENT").value(4))
+                .andExpect(jsonPath("$.byDealTiming.EARLY").value(4))
+                .andExpect(jsonPath("$.byPriority.HIGH").value(4));
+    }
+
+    @Test
     void sendAndExportRequireAuth() throws Exception {
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/send-telegram"))
                 .andExpect(status().isUnauthorized());
@@ -231,8 +270,16 @@ class DealGroupControllerTest {
     }
 
     private DealGroupingService.DealGroupResponse group() {
+        return groupWithReview("target-ticker:APGE", ManualReviewStatus.PENDING, ManualReviewReason.GOOD_SIGNAL);
+    }
+
+    private DealGroupingService.DealGroupResponse groupWithReview(
+            String groupKey,
+            ManualReviewStatus status,
+            ManualReviewReason reason
+    ) {
         return new DealGroupingService.DealGroupResponse(
-                "target-ticker:APGE",
+                groupKey,
                 SignalInboxController.SourceType.RSS_NEWS,
                 1L,
                 "AbbVie to Acquire Apogee",
@@ -247,11 +294,11 @@ class DealGroupControllerTest {
                 com.parsernews.model.Tradability.HIGH,
                 com.parsernews.model.DealStage.DEFINITIVE_AGREEMENT,
                 com.parsernews.model.DealTiming.EARLY,
-                ManualReviewStatus.PENDING,
-                ManualReviewReason.GOOD_SIGNAL,
+                status,
+                reason,
                 null,
                 null,
-                false,
+                status != ManualReviewStatus.PENDING,
                 List.of(
                         new DealGroupingService.RelatedSignalResponse(
                                 SignalInboxController.SourceType.RSS_NEWS,
@@ -277,7 +324,7 @@ class DealGroupControllerTest {
                         )
                 ),
                 List.of("https://example.test/rss", "https://sec.gov/test"),
-                List.of("Multiple related signals found for this deal"),
+                List.of("RSS signal is alert eligible", "Multiple related signals found for this deal"),
                 Instant.parse("2026-06-20T12:01:00Z")
         );
     }

@@ -909,6 +909,17 @@
             </div>
             <a id="exportDealGroupsCsv" class="button-link" href="/api/deal-groups/export.csv">Export Deal Groups CSV</a>
         </div>
+        <div class="notice" style="margin-bottom: 12px;">
+            <div class="panel-head" style="margin-bottom: 8px;">
+                <div>
+                    <strong>Deal Group Quality</strong>
+                    <div class="muted">Manual feedback and classification mix for grouped signals.</div>
+                </div>
+                <span class="badge" id="dealGroupQualityBadge">0 groups</span>
+            </div>
+            <div id="dealGroupQuality" class="kv"></div>
+            <div id="dealGroupNoisyReasons" class="chip-list" style="margin-top: 8px;"></div>
+        </div>
         <div class="table-wrap" style="margin-bottom: 12px;">
             <table>
                 <thead>
@@ -1376,6 +1387,7 @@
         secCompanyLookupResults: [],
         signals: [],
         dealGroups: [],
+        dealGroupStats: null,
         dealGroupDetails: null,
         telegramPreview: null,
         signalDetails: null,
@@ -1491,7 +1503,8 @@
             fetchJson("/api/sec/filings"),
             fetchJson("/api/sec/watchlist"),
             fetchJson("/api/signals?limit=100"),
-            fetchJson("/api/deal-groups?limit=100")
+            fetchJson("/api/deal-groups?limit=100"),
+            fetchJson("/api/deal-groups/stats")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1506,6 +1519,7 @@
         assignResult(results[10], "secWatchlist", [], "SEC watchlist");
         assignResult(results[11], "signals", [], "Signal inbox");
         assignResult(results[12], "dealGroups", [], "Deal groups");
+        assignResult(results[13], "dealGroupStats", null, "Deal group stats");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -1542,8 +1556,14 @@
                 params.set("reviewStatus", dealGroupReviewFilter.value);
             }
             params.set("limit", "100");
-            state.dealGroups = await fetchJson(`/api/deal-groups?${params.toString()}`);
+            const [groups, stats] = await Promise.all([
+                fetchJson(`/api/deal-groups?${params.toString()}`),
+                fetchJson("/api/deal-groups/stats")
+            ]);
+            state.dealGroups = groups;
+            state.dealGroupStats = stats;
             renderDealGroups();
+            renderDealGroupQuality();
         } catch (error) {
             showError("Deal groups", error.message);
         }
@@ -1856,7 +1876,9 @@
             if (state.dealGroupDetails && state.dealGroupDetails.groupKey === updated.groupKey) {
                 state.dealGroupDetails = updated;
             }
+            state.dealGroupStats = await fetchJson("/api/deal-groups/stats");
             renderDealGroups();
+            renderDealGroupQuality();
             renderDealGroupDetails();
         } catch (error) {
             showError("Deal group review", error.message);
@@ -1961,6 +1983,7 @@
     function render() {
         renderActionCenter();
         renderFullRefreshResult();
+        renderDealGroupQuality();
         renderDealGroups();
         renderDealGroupDetails();
         renderSignalInbox();
@@ -2026,6 +2049,34 @@
             ["Wrong extraction", reasonCounts.WRONG_EXTRACTION || 0],
             ["Duplicate/update", reasonCounts.DUPLICATE_OR_UPDATE || 0]
         ]);
+    }
+
+    function renderDealGroupQuality() {
+        const stats = state.dealGroupStats || {};
+        const total = stats.totalGroups ?? 0;
+        document.querySelector("#dealGroupQualityBadge").textContent = `${total} groups`;
+        document.querySelector("#dealGroupQuality").innerHTML = kvRows([
+            ["Useful", stats.usefulGroups ?? 0],
+            ["Ignored", stats.ignoredGroups ?? 0],
+            ["Pending", stats.pendingGroups ?? 0],
+            ["HIGH priority", stats.highPriorityGroups ?? 0],
+            ["Alert-like", stats.alertLikeGroups ?? 0],
+            ["Evidence total", stats.groupedEvidenceTotal ?? 0],
+            ["Avg evidence", formatNumber(stats.averageEvidencePerGroup ?? 0)]
+        ]);
+        const reasons = stats.reviewReasonBreakdown || {};
+        const noisyReasons = [
+            ["FALSE_POSITIVE", reasons.FALSE_POSITIVE || 0],
+            ["PRIVATE_COMPANY", reasons.PRIVATE_COMPANY || 0],
+            ["NOT_TRADABLE", reasons.NOT_TRADABLE || 0],
+            ["LATE_STAGE_UPDATE", reasons.LATE_STAGE_UPDATE || 0],
+            ["LAW_FIRM_OR_SHAREHOLDER_ALERT", reasons.LAW_FIRM_OR_SHAREHOLDER_ALERT || 0],
+            ["DUPLICATE_OR_UPDATE", reasons.DUPLICATE_OR_UPDATE || 0],
+            ["WRONG_EXTRACTION", reasons.WRONG_EXTRACTION || 0]
+        ].filter(([, count]) => count > 0);
+        document.querySelector("#dealGroupNoisyReasons").innerHTML = noisyReasons.length
+            ? noisyReasons.map(([reason, count]) => `<span class="chip risk">${escapeText(reason)}: ${escapeText(count)}</span>`).join("")
+            : `<span class="muted">No noisy group review reasons yet.</span>`;
     }
 
     function renderSecWatchlist() {
@@ -3189,6 +3240,14 @@
             return value;
         }
         return date.toLocaleString();
+    }
+
+    function formatNumber(value) {
+        const number = Number(value);
+        if (Number.isNaN(number)) {
+            return "0";
+        }
+        return number.toFixed(2).replace(/\.00$/, "");
     }
 
     function setBusy(button, busy, text) {
