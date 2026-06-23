@@ -248,6 +248,28 @@
             margin-bottom: 12px;
         }
 
+        .workflow-label {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 999px;
+            padding: 4px 9px;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--ok);
+            background: var(--soft-ok);
+            border: 1px solid #badfce;
+            margin-bottom: 6px;
+        }
+
+        .section-summary {
+            cursor: pointer;
+            list-style: none;
+        }
+
+        .section-summary::-webkit-details-marker {
+            display: none;
+        }
+
         .metric {
             font-size: 28px;
             font-weight: 700;
@@ -717,7 +739,12 @@
         </div>
     </section>
 
-    <section class="panel filters">
+    <details class="panel preview-details">
+        <summary class="preview-header">
+            <span>Advanced filters</span>
+            <span class="badge disabled">Debug / raw feeds</span>
+        </summary>
+        <div class="filters" style="margin-top: 12px;">
         <div class="control">
             <label for="searchInput">Search</label>
             <input id="searchInput" type="search" placeholder="Title, source, host, reason, snippet">
@@ -847,7 +874,8 @@
             Auto-refresh 30s
         </label>
         <div class="muted">Last updated: <span id="lastUpdated">never</span></div>
-    </section>
+        </div>
+    </details>
 
     <div id="errors"></div>
 
@@ -882,6 +910,7 @@
     <section class="panel review-quality">
         <div class="panel-head">
             <div>
+                <div class="workflow-label">Primary workflow</div>
                 <h2>Deal Groups</h2>
                 <div class="muted">Grouped deal-level view that links related RSS and SEC evidence without hiding original records.</div>
             </div>
@@ -945,14 +974,14 @@
         </details>
     </section>
 
-    <section class="panel review-quality">
-        <div class="panel-head">
+    <details class="panel review-quality">
+        <summary class="section-summary panel-head">
             <div>
                 <h2>Signal Inbox</h2>
-                <div class="muted">Unified review queue for RSS candidates and SEC filing signals.</div>
+                <div class="muted">Debug / raw signal view for RSS candidates and SEC filing signals.</div>
             </div>
             <span class="badge" id="signalInboxCount">0</span>
-        </div>
+        </summary>
         <div class="filters" style="margin-bottom: 12px;">
             <div class="control">
                 <label for="signalSourceTypeFilter">Type</label>
@@ -1013,16 +1042,16 @@
             </summary>
             <div id="signalDetails" class="notice">Select Details on a signal to inspect evidence, warnings, review state, and Telegram preview actions.</div>
         </details>
-    </section>
+    </details>
 
-    <section class="panel source-quality">
-        <div class="panel-head">
+    <details class="panel source-quality">
+        <summary class="section-summary panel-head">
             <div>
                 <h2>Source Quality</h2>
-                <div class="muted">Click a source to filter articles and candidates.</div>
+                <div class="muted">Debug / raw feeds. Click a source to filter articles and candidates.</div>
             </div>
             <span class="badge" id="sourceStatsCount">0</span>
-        </div>
+        </summary>
         <div class="table-wrap">
             <table class="source-table">
                 <thead>
@@ -1043,24 +1072,24 @@
                 <tbody id="sourceQuality"></tbody>
             </table>
         </div>
-    </section>
+    </details>
 
-    <section class="panel review-quality">
-        <div class="panel-head">
+    <details class="panel review-quality">
+        <summary class="section-summary panel-head">
             <div>
                 <h2>Review Quality</h2>
                 <div class="muted">Manual feedback reasons for tuning rules and extraction.</div>
             </div>
             <span class="badge" id="reviewQualityCount">0 reviewed</span>
-        </div>
+        </summary>
         <div class="kv" id="reviewQuality"></div>
-    </section>
+    </details>
 
-    <section class="panel review-quality">
-        <div class="panel-head">
+    <details class="panel review-quality">
+        <summary class="section-summary panel-head">
             <div>
                 <h2>SEC Watchlist</h2>
-                <div class="muted">Selected CIK filings from SEC submissions API. Separate from RSS articles.</div>
+                <div class="muted">Advanced tools. Selected CIK filings from SEC submissions API. Separate from RSS articles.</div>
             </div>
             <div class="actions">
                 <a class="button" id="exportSecCsv" href="/api/sec/filings/export.csv">Export SEC CSV</a>
@@ -1068,7 +1097,7 @@
                 <button id="secFetchDocumentsButton" type="button">Fetch SEC documents</button>
                 <span class="badge" id="secStatusBadge">Loading</span>
             </div>
-        </div>
+        </summary>
         <div class="kv" id="secStatus"></div>
         <div class="panel" style="margin-top: 12px;">
             <div class="panel-head">
@@ -1204,10 +1233,10 @@
                 <tbody id="secFilings"></tbody>
             </table>
         </div>
-    </section>
+    </details>
 
-    <section class="panel review-quality">
-        <div class="panel-head">
+    <details class="panel review-quality">
+        <summary class="section-summary panel-head">
             <div>
                 <h2>Reviewed Candidates</h2>
                 <div class="muted">Already reviewed candidates and the reason they were marked useful or ignored.</div>
@@ -1216,7 +1245,7 @@
                 <a class="button" id="exportReviewedCsv" href="/api/articles/reviewed/export.csv">Export reviewed CSV</a>
                 <span class="badge" id="reviewedCount">0</span>
             </div>
-        </div>
+        </summary>
         <div class="filters" style="margin-bottom: 12px;">
             <div class="control">
                 <label for="reviewedStatusFilter">Review status</label>
@@ -1260,19 +1289,22 @@
                 <tbody id="reviewedCandidates"></tbody>
             </table>
         </div>
-    </section>
+    </details>
 
     <section class="grid">
-        <section class="panel span-12" id="candidateSection">
-            <div class="panel-head">
-                <h2>Candidates</h2>
+        <details class="panel span-12" id="candidateSection">
+            <summary class="section-summary panel-head">
+                <div>
+                    <h2>Candidates</h2>
+                    <div class="muted">Secondary candidate cards. Use Deal Groups for daily review first.</div>
+                </div>
                 <div class="actions">
                     <a class="button" id="exportCandidatesCsv" href="/api/articles/candidates/export.csv">Export candidates CSV</a>
                     <span class="badge" id="candidateCount">0</span>
                 </div>
-            </div>
+            </summary>
             <div class="card-list" id="candidates"></div>
-        </section>
+        </details>
 
         <details class="panel span-12 preview-details" id="alertPreviewPanel">
             <summary class="preview-header">
@@ -1282,14 +1314,14 @@
             <div id="alertPreview"></div>
         </details>
 
-        <section class="panel span-12">
-            <div class="panel-head">
+        <details class="panel span-12">
+            <summary class="section-summary panel-head">
                 <div>
                     <h2>Latest Articles</h2>
-                    <div class="muted">Secondary feed view. Use candidates above for review first.</div>
+                    <div class="muted">Debug / raw feeds. Secondary feed view; Deal Groups are the primary workflow.</div>
                 </div>
                 <span class="badge" id="articleCount">0</span>
-            </div>
+            </summary>
             <div class="table-wrap">
                 <table>
                     <thead>
@@ -1306,7 +1338,7 @@
                     <tbody id="articles"></tbody>
                 </table>
             </div>
-        </section>
+        </details>
 
         <details class="panel span-12 technical-details">
             <summary>Technical details</summary>
@@ -3059,7 +3091,9 @@
         strengthFilter.value = "HIGH";
         manualReviewFilter.value = "";
         eligibleOnlyToggle.checked = false;
-        document.querySelector("#candidateSection").scrollIntoView({behavior: "smooth", block: "start"});
+        const candidateSection = document.querySelector("#candidateSection");
+        candidateSection.open = true;
+        candidateSection.scrollIntoView({behavior: "smooth", block: "start"});
         render();
     }
 
