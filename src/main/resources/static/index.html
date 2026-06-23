@@ -904,6 +904,7 @@
             <button id="scanButtonTop" class="primary" type="button">Run manual scan</button>
             <button id="dryRunButtonTop" type="button">Run dry-run</button>
         </div>
+        <div id="schedulerStatus" class="notice" style="margin-top: 12px;">Checking scheduler status...</div>
         <div id="fullRefreshResult" class="notice" style="margin-top: 12px;">Full refresh has not run yet.</div>
     </section>
 
@@ -1406,6 +1407,7 @@
 <script>
     const state = {
         status: null,
+        schedulerStatus: null,
         articles: [],
         candidates: [],
         alerts: [],
@@ -1536,7 +1538,8 @@
             fetchJson("/api/sec/watchlist"),
             fetchJson("/api/signals?limit=100"),
             fetchJson("/api/deal-groups?limit=100"),
-            fetchJson("/api/deal-groups/stats")
+            fetchJson("/api/deal-groups/stats"),
+            fetchJson("/api/admin/scheduler-status")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1552,6 +1555,7 @@
         assignResult(results[11], "signals", [], "Signal inbox");
         assignResult(results[12], "dealGroups", [], "Deal groups");
         assignResult(results[13], "dealGroupStats", null, "Deal group stats");
+        assignResult(results[14], "schedulerStatus", null, "Scheduler status");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -2014,6 +2018,7 @@
 
     function render() {
         renderActionCenter();
+        renderSchedulerStatus();
         renderFullRefreshResult();
         renderDealGroupQuality();
         renderDealGroups();
@@ -2338,6 +2343,45 @@
         document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
         document.querySelector("#actionNeedsReviewCount").textContent = String(needsReview);
         document.querySelector("#actionScanStatus").textContent = latestScanStatus;
+    }
+
+    function renderSchedulerStatus() {
+        const target = document.querySelector("#schedulerStatus");
+        const scheduler = state.schedulerStatus;
+        if (!scheduler) {
+            target.innerHTML = "Scheduler status is not loaded yet.";
+            return;
+        }
+        const rss = scheduler.latestScheduledRssScan;
+        const fullRefreshEnabled = Boolean(scheduler.fullRefreshSchedulerEnabled);
+        const fullRefreshRunning = Boolean(scheduler.fullRefreshSchedulerRunning);
+        target.innerHTML = `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(scheduler.rssMonitoringEnabled ? "RSS auto scan enabled" : "RSS auto scan disabled", scheduler.rssMonitoringEnabled ? "ok" : "disabled")}
+                ${badge(fullRefreshEnabled ? "Scheduled Full Refresh enabled" : "Full Refresh manual-only", fullRefreshEnabled ? "ok" : "disabled")}
+                ${badge(scheduler.telegramEnabled ? "Telegram enabled" : "Telegram disabled", scheduler.telegramEnabled ? "warn" : "disabled")}
+                ${badge(scheduler.dispatchEnabled ? "Dispatch enabled" : "Dispatch disabled", scheduler.dispatchEnabled ? "warn" : "disabled")}
+                ${fullRefreshRunning ? badge("Full Refresh running", "warn") : ""}
+            </div>
+            <div class="kv">
+                ${kvRows([
+                    ["Last RSS scheduled scan", rss ? `${formatDate(rss.startedAt)} / ${rss.status}` : "No scheduled RSS scan yet"],
+                    ["Last scheduled Full Refresh", scheduler.lastScheduledFullRefreshStartedAt
+                        ? `${formatDate(scheduler.lastScheduledFullRefreshStartedAt)} / ${scheduler.lastScheduledFullRefreshSuccess === false ? "FAILED" : scheduler.lastScheduledFullRefreshSuccess === true ? "SUCCESS" : "RUNNING"}`
+                        : "No scheduled Full Refresh yet"],
+                    ["Full Refresh trigger", scheduler.scheduledFullRefreshTriggerType || "SCHEDULED_FULL_REFRESH"],
+                    ["Next expected Full Refresh", scheduler.nextExpectedFullRefreshAt ? formatDate(scheduler.nextExpectedFullRefreshAt) : "-"],
+                    ["Full Refresh delay", scheduler.fullRefreshFixedDelayMs ? `${Math.round(scheduler.fullRefreshFixedDelayMs / 1000)}s` : "-"],
+                    ["Scheduler note", scheduler.message || "-"]
+                ])}
+            </div>
+            ${Array.isArray(scheduler.lastScheduledFullRefreshWarnings) && scheduler.lastScheduledFullRefreshWarnings.length > 0
+                ? `<div class="small-cell warn-text" style="margin-top: 8px;">Last scheduled warnings: ${escapeText(scheduler.lastScheduledFullRefreshWarnings.join("; "))}</div>`
+                : ""}
+            ${scheduler.lastScheduledFullRefreshError
+                ? `<div class="small-cell danger-text" style="margin-top: 8px;">Last scheduled error: ${escapeText(scheduler.lastScheduledFullRefreshError)}</div>`
+                : ""}
+        `;
     }
 
     function renderFullRefreshResult() {

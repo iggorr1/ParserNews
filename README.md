@@ -339,18 +339,25 @@ Do not commit real credentials; the compose file uses safe local defaults only.
 For day-to-day review, use the dashboard instead of opening raw endpoints:
 
 1. Open `http://localhost:8080/`.
-2. Review the Signal Inbox first. It combines RSS candidates and SEC filing
-   signals into one queue.
-3. Click Details on a signal to inspect evidence, warnings, deal terms,
-   relevance, timing, SEC document signals, and manual review state.
-4. Use Mark useful / Ignore / Reset review to build quality feedback.
-5. Use Full Refresh when you want one manual research cycle:
+2. Review Deal Groups first. This is the primary workflow and groups related
+   RSS/SEC evidence into one deal-level review item.
+3. Use Signal Inbox only when you need the raw RSS/SEC signal view.
+4. Click Details on a signal or deal group to inspect evidence, warnings, deal
+   terms, relevance, timing, SEC document signals, and manual review state.
+5. Use Mark useful / Ignore / Reset review to build quality feedback.
+6. Use Full Refresh when you want one manual research cycle:
    - RSS scan
    - SEC scan if enabled/configured
    - SEC document fetch
    - RSS candidate recompute
-6. SEC scanner disabled or empty watchlist warnings are normal on a fresh
+7. SEC scanner disabled or empty watchlist warnings are normal on a fresh
    install. They mean SEC scanning is safely off until you add CIKs.
+
+RSS auto scan is separate from Full Refresh. In the live profile,
+`scanner.monitoring.enabled=true` runs scheduled RSS polling. Full Refresh runs
+only when you click the dashboard button unless optional Scheduled Full Refresh
+is explicitly enabled. Telegram and alert dispatch remain disabled unless you
+configure and manually use them.
 
 The SEC Watchlist Manager lets you add/remove CIKs from the database without
 editing `.env` or restarting Docker. Use the SEC Company Lookup box to search by
@@ -712,6 +719,29 @@ scanner.monitoring.poll-delay-ms=300000
 ```
 
 Enables scheduled scanner polling when set to `true`.
+
+### Full Refresh Scheduler
+
+```properties
+full-refresh.scheduler.enabled=false
+full-refresh.scheduler.initial-delay-ms=120000
+full-refresh.scheduler.fixed-delay-ms=900000
+
+FULL_REFRESH_SCHEDULER_ENABLED=false
+FULL_REFRESH_SCHEDULER_INITIAL_DELAY_MS=120000
+FULL_REFRESH_SCHEDULER_FIXED_DELAY_MS=900000
+```
+
+Full Refresh is manual by default. When this optional scheduler is enabled, the
+app periodically runs the same research cycle as the dashboard Full Refresh
+button: RSS scan, SEC scan, SEC document fetch, and RSS candidate recompute. It
+does not send Telegram messages and does not run alert dispatch.
+
+Scheduler status is available in the dashboard Action Center and at:
+
+```text
+GET /api/admin/scheduler-status
+```
 
 ### Telegram
 

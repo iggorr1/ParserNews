@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface ScanRunRepository extends JpaRepository<ScanRunEntity, Long> {
     List<ScanRunEntity> findTop100ByOrderByStartedAtDesc();
     Optional<ScanRunEntity> findTopByOrderByStartedAtDesc();
+    Optional<ScanRunEntity> findTopByTriggerTypeOrderByStartedAtDesc(ScanRunTriggerType triggerType);
 }

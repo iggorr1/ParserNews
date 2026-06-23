@@ -16,7 +16,10 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
-@EnableConfigurationProperties(SecurityConfig.ParserNewsAuthProperties.class)
+@EnableConfigurationProperties({
+        SecurityConfig.ParserNewsAuthProperties.class,
+        FullRefreshSchedulerSettings.class
+})
 public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, ParserNewsAuthProperties authProperties) throws Exception {
