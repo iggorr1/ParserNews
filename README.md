@@ -763,15 +763,24 @@ OPENAI_ANALYSIS_MAX_INPUT_CHARS=12000
 ```
 
 OpenAI AI Review is disabled by default and runs only when a user clicks AI
-Review on a Deal Group. The API key is read only on the server from environment
-configuration and is never returned by API responses or shown in the dashboard.
-Do not commit real API keys. `.env` and `.env.*` are ignored by git.
+Review on a Deal Group. The dashboard also has an advanced OpenAI settings
+panel for local testing. A pasted API key is sent to the backend and kept only
+in memory for the current app process; it is not saved to `.env`, browser
+storage, git, or the database, and it disappears after restart.
+
+Environment configuration still works as fallback. API responses expose only
+`keySource` and a masked key such as `****abcd`; the full key is never
+returned to the dashboard. Do not commit real API keys. `.env` and `.env.*` are
+ignored by git.
 
 Endpoints:
 
 ```text
 GET /api/deal-groups/{groupKey}/ai-review/latest
 POST /api/deal-groups/{groupKey}/ai-review
+GET /api/admin/openai-settings
+PUT /api/admin/openai-settings
+DELETE /api/admin/openai-settings/runtime-key
 ```
 
 The review prompt asks only whether the Deal Group is a useful M&A research

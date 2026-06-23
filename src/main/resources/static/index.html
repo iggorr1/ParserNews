@@ -1052,6 +1052,41 @@
         </details>
     </details>
 
+    <details class="panel review-quality">
+        <summary class="section-summary panel-head">
+            <div>
+                <h2>OpenAI AI Review Settings</h2>
+                <div class="muted">Advanced tools. Manual-only Deal Group review; no auto-run and no Telegram send.</div>
+            </div>
+            <span class="badge disabled" id="openAiSettingsBadge">disabled</span>
+        </summary>
+        <div class="notice">
+            API key is sent to the backend and stored only in memory for this app process. It is not saved to git, browser storage, .env, or the database.
+        </div>
+        <div class="kv" id="openAiSettingsStatus" style="margin-top: 12px;"></div>
+        <div class="filters" style="margin-top: 12px;">
+            <label class="toggle">
+                <input type="checkbox" id="openAiEnabledInput">
+                Enable OpenAI AI Review
+            </label>
+            <div class="control">
+                <label for="openAiApiKeyInput">OpenAI API key</label>
+                <input id="openAiApiKeyInput" type="password" autocomplete="off" placeholder="OpenAI API key">
+            </div>
+            <div class="control">
+                <label for="openAiModelInput">Model</label>
+                <input id="openAiModelInput" placeholder="gpt-4.1-mini">
+            </div>
+            <div class="control">
+                <label for="openAiMaxInputCharsInput">Max input chars</label>
+                <input id="openAiMaxInputCharsInput" type="number" min="1000" step="500" placeholder="12000">
+            </div>
+            <button id="openAiSettingsSaveButton" type="button">Save AI settings</button>
+            <button id="openAiSettingsClearButton" type="button">Clear runtime key</button>
+            <span class="muted" id="openAiSettingsMessage"></span>
+        </div>
+    </details>
+
     <details class="panel source-quality">
         <summary class="section-summary panel-head">
             <div>
@@ -1431,6 +1466,7 @@
         dealGroupStats: null,
         dealGroupDetails: null,
         dealGroupAiReview: null,
+        openAiSettings: null,
         telegramPreview: null,
         signalDetails: null,
         fullRefreshResult: null,
@@ -1456,6 +1492,13 @@
     const secCompanyLookupInput = document.querySelector("#secCompanyLookupInput");
     const secCompanyLookupButton = document.querySelector("#secCompanyLookupButton");
     const secCompanyLookupStatus = document.querySelector("#secCompanyLookupStatus");
+    const openAiEnabledInput = document.querySelector("#openAiEnabledInput");
+    const openAiApiKeyInput = document.querySelector("#openAiApiKeyInput");
+    const openAiModelInput = document.querySelector("#openAiModelInput");
+    const openAiMaxInputCharsInput = document.querySelector("#openAiMaxInputCharsInput");
+    const openAiSettingsSaveButton = document.querySelector("#openAiSettingsSaveButton");
+    const openAiSettingsClearButton = document.querySelector("#openAiSettingsClearButton");
+    const openAiSettingsMessage = document.querySelector("#openAiSettingsMessage");
     const errors = document.querySelector("#errors");
     const searchInput = document.querySelector("#searchInput");
     const strengthFilter = document.querySelector("#strengthFilter");
@@ -1498,6 +1541,8 @@
     secFetchDocumentsButton.addEventListener("click", runSecFetchDocuments);
     secWatchlistAddButton.addEventListener("click", addSecWatchlistEntry);
     secCompanyLookupButton.addEventListener("click", searchSecCompanyLookup);
+    openAiSettingsSaveButton.addEventListener("click", saveOpenAiSettings);
+    openAiSettingsClearButton.addEventListener("click", clearOpenAiRuntimeKey);
     secCompanyLookupInput.addEventListener("keydown", event => {
         if (event.key === "Enter") {
             event.preventDefault();
@@ -1547,7 +1592,8 @@
             fetchJson("/api/signals?limit=100"),
             fetchJson("/api/deal-groups?limit=100"),
             fetchJson("/api/deal-groups/stats"),
-            fetchJson("/api/admin/scheduler-status")
+            fetchJson("/api/admin/scheduler-status"),
+            fetchJson("/api/admin/openai-settings")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1564,6 +1610,7 @@
         assignResult(results[12], "dealGroups", [], "Deal groups");
         assignResult(results[13], "dealGroupStats", null, "Deal group stats");
         assignResult(results[14], "schedulerStatus", null, "Scheduler status");
+        assignResult(results[15], "openAiSettings", null, "OpenAI settings");
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -1999,6 +2046,21 @@
         return readJsonResponse(response, url);
     }
 
+    async function putJson(url, body) {
+        const response = await fetch(url, {
+            method: "PUT",
+            cache: "no-store",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify(body)
+        });
+        return readJsonResponse(response, url);
+    }
+
+    async function deleteJson(url) {
+        const response = await fetch(url, {method: "DELETE", cache: "no-store"});
+        return readJsonResponse(response, url);
+    }
+
     async function deleteRequest(url) {
         const response = await fetch(url, {method: "DELETE", cache: "no-store"});
         if (!response.ok) {
@@ -2032,6 +2094,7 @@
         renderDealGroups();
         renderDealGroupDetails();
         renderDealGroupAiReview();
+        renderOpenAiSettings();
         renderSignalInbox();
         renderTelegramPreview();
         renderSignalDetails();
@@ -2617,6 +2680,64 @@
                     : ""}
             ` : ""}
         `;
+    }
+
+    async function saveOpenAiSettings() {
+        try {
+            setBusy(openAiSettingsSaveButton, true, "Saving");
+            const apiKey = openAiApiKeyInput.value.trim();
+            state.openAiSettings = await putJson("/api/admin/openai-settings", {
+                enabled: openAiEnabledInput.checked,
+                apiKey: apiKey || null,
+                model: openAiModelInput.value.trim() || null,
+                maxInputChars: Number(openAiMaxInputCharsInput.value) || null
+            });
+            openAiApiKeyInput.value = "";
+            renderOpenAiSettings();
+            openAiSettingsMessage.textContent = state.openAiSettings.message || "OpenAI settings saved.";
+        } catch (error) {
+            showError("OpenAI settings", error.message);
+        } finally {
+            setBusy(openAiSettingsSaveButton, false, "Save AI settings");
+        }
+    }
+
+    async function clearOpenAiRuntimeKey() {
+        try {
+            setBusy(openAiSettingsClearButton, true, "Clearing");
+            state.openAiSettings = await deleteJson("/api/admin/openai-settings/runtime-key");
+            openAiApiKeyInput.value = "";
+            renderOpenAiSettings();
+            openAiSettingsMessage.textContent = state.openAiSettings.message || "Runtime OpenAI key cleared.";
+        } catch (error) {
+            showError("OpenAI settings", error.message);
+        } finally {
+            setBusy(openAiSettingsClearButton, false, "Clear runtime key");
+        }
+    }
+
+    function renderOpenAiSettings() {
+        const settings = state.openAiSettings || {};
+        const badgeTarget = document.querySelector("#openAiSettingsBadge");
+        const enabled = Boolean(settings.enabled);
+        const configured = Boolean(settings.configured);
+        badgeTarget.textContent = enabled ? configured ? "configured" : "missing key" : "disabled";
+        badgeTarget.className = `badge ${enabled && configured ? "ok" : enabled ? "warn" : "disabled"}`;
+        openAiEnabledInput.checked = enabled;
+        openAiModelInput.value = settings.model || "gpt-4.1-mini";
+        openAiMaxInputCharsInput.value = settings.maxInputChars || 12000;
+        document.querySelector("#openAiSettingsStatus").innerHTML = kvRows([
+            ["Enabled", enabled ? "Yes" : "No"],
+            ["Configured", configured ? "Yes" : "No"],
+            ["Key source", settings.keySource || "NONE"],
+            ["Key", settings.keyMasked || "not configured"],
+            ["Model", settings.model || "gpt-4.1-mini"],
+            ["Max input chars", settings.maxInputChars || 12000],
+            ["Status", settings.message || "OpenAI AI Review settings not loaded."]
+        ]);
+        if (!openAiSettingsMessage.textContent) {
+            openAiSettingsMessage.textContent = settings.message || "";
+        }
     }
 
     function renderSignalInbox() {

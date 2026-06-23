@@ -1,6 +1,5 @@
 package com.parsernews.service;
 
-import com.parsernews.config.OpenAiAnalysisSettings;
 import com.parsernews.persistence.AiReviewConfidence;
 import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.DealGroupAiReviewEntity;
@@ -20,18 +19,18 @@ public class DealGroupAiReviewService {
     private static final String DISABLED_MESSAGE = "OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it.";
     private static final String MISSING_KEY_MESSAGE = "OpenAI AI Review is enabled but OPENAI_API_KEY is missing.";
 
-    private final OpenAiAnalysisSettings settings;
+    private final OpenAiRuntimeSettingsService settingsService;
     private final OpenAiAnalysisClient openAiAnalysisClient;
     private final DealGroupingService dealGroupingService;
     private final DealGroupAiReviewRepository repository;
 
     public DealGroupAiReviewService(
-            OpenAiAnalysisSettings settings,
+            OpenAiRuntimeSettingsService settingsService,
             OpenAiAnalysisClient openAiAnalysisClient,
             DealGroupingService dealGroupingService,
             DealGroupAiReviewRepository repository
     ) {
-        this.settings = settings;
+        this.settingsService = settingsService;
         this.openAiAnalysisClient = openAiAnalysisClient;
         this.dealGroupingService = dealGroupingService;
         this.repository = repository;
@@ -39,17 +38,19 @@ public class DealGroupAiReviewService {
 
     @Transactional(readOnly = true)
     public AiReviewResponse latest(String groupKey) {
+        OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings = settingsService.effectiveSettings();
         return repository.findTopByGroupKeyOrderByCreatedAtDesc(groupKey)
-                .map(entity -> response(true, configured(), "Latest AI review loaded.", entity))
-                .orElseGet(() -> AiReviewResponse.empty(settings.enabled(), configured(), "No AI review has been saved for this deal group yet."));
+                .map(entity -> response(settings.enabled(), settings.configured(), "Latest AI review loaded.", entity))
+                .orElseGet(() -> AiReviewResponse.empty(settings.enabled(), settings.configured(), "No AI review has been saved for this deal group yet."));
     }
 
     @Transactional
     public AiReviewResponse review(String groupKey) {
+        OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings = settingsService.effectiveSettings();
         if (!settings.enabled()) {
-            return AiReviewResponse.empty(false, configured(), DISABLED_MESSAGE);
+            return AiReviewResponse.empty(false, settings.configured(), DISABLED_MESSAGE);
         }
-        if (!configured()) {
+        if (!settings.configured()) {
             return AiReviewResponse.empty(true, false, MISSING_KEY_MESSAGE);
         }
         DealGroupingService.DealGroupResponse group = dealGroupingService.group(groupKey)
@@ -73,10 +74,6 @@ public class DealGroupAiReviewService {
                 result.rawJson()
         ));
         return response(true, true, "AI review completed and saved.", saved);
-    }
-
-    private boolean configured() {
-        return settings.apiKey() != null && !settings.apiKey().isBlank();
     }
 
     private String prompt() {

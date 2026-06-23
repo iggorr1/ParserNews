@@ -21,6 +21,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -126,6 +127,47 @@ class DealGroupAiReviewServiceTest {
     }
 
     @Test
+    void reviewUsesRuntimeKeyWhenConfiguredFromUi() {
+        DealGroupingService.DealGroupResponse group = group(
+                "target-ticker:APGE",
+                "AbbVie to Acquire Apogee",
+                "AbbVie Inc.",
+                "Apogee Therapeutics",
+                "ABBV",
+                "APGE",
+                DealRelevance.PUBLIC_CASH_ACQUISITION,
+                Tradability.HIGH
+        );
+        when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
+        when(client.reviewDealGroup(any(), any(), any(), any())).thenReturn(new OpenAiAnalysisClient.AiReviewResult(
+                AiReviewVerdict.GOOD_SIGNAL,
+                AiReviewConfidence.HIGH,
+                true,
+                ManualReviewStatus.USEFUL,
+                ManualReviewReason.GOOD_SIGNAL,
+                "Runtime key was used.",
+                List.of(),
+                "{}"
+        ));
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+        OpenAiRuntimeSettingsService runtimeSettings = new OpenAiRuntimeSettingsService(
+                new OpenAiAnalysisSettings(false, "", "gpt-4.1-mini", 12000)
+        );
+        runtimeSettings.update(true, "test-runtime-key-1234abcd", "gpt-4.1-mini", 12000);
+        DealGroupAiReviewService service = new DealGroupAiReviewService(
+                runtimeSettings,
+                client,
+                dealGroupingService,
+                repository
+        );
+
+        DealGroupAiReviewService.AiReviewResponse response = service.review("target-ticker:APGE");
+
+        assertThat(response.verdict()).isEqualTo(AiReviewVerdict.GOOD_SIGNAL);
+        verify(client).reviewDealGroup(eq("gpt-4.1-mini"), eq("test-runtime-key-1234abcd"), any(), any());
+    }
+
+    @Test
     void latestReturnsSavedReview() {
         DealGroupAiReviewEntity entity = new DealGroupAiReviewEntity(
                 "target-ticker:APGE",
@@ -150,7 +192,7 @@ class DealGroupAiReviewServiceTest {
 
     private DealGroupAiReviewService service(boolean enabled, String apiKey) {
         return new DealGroupAiReviewService(
-                new OpenAiAnalysisSettings(enabled, apiKey, "gpt-4.1-mini", 12000),
+                new OpenAiRuntimeSettingsService(new OpenAiAnalysisSettings(enabled, apiKey, "gpt-4.1-mini", 12000)),
                 client,
                 dealGroupingService,
                 repository
