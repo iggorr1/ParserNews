@@ -572,6 +572,7 @@
         .badge.MERGER_AGREEMENT,
         .badge.LIKELY_DEAL,
         .badge.SUCCESS,
+        .badge.KEEP,
         .badge.eligible {
             color: var(--ok);
             background: var(--soft-ok);
@@ -614,6 +615,7 @@
         .badge.POST_CLOSE,
         .badge.LIKELY_NOISE,
         .badge.disabled,
+        .badge.DISABLE,
         .badge.queued {
             color: var(--muted);
             background: rgba(148, 163, 184, 0.12);
@@ -1410,6 +1412,44 @@
         </div>
     </section>
 
+    <section class="panel source-quality">
+        <div class="panel-head">
+            <div>
+                <div class="section-kicker">Source Lab</div>
+                <h2>Source Preview</h2>
+                <div class="muted">Test a new RSS feed without saving articles or changing scanner configuration.</div>
+            </div>
+            <span class="badge disabled" id="sourcePreviewStatus">idle</span>
+        </div>
+        <div class="filters" style="margin-bottom: 12px;">
+            <div class="control">
+                <label for="sourcePreviewNameInput">Source name</label>
+                <input id="sourcePreviewNameInput" placeholder="Test source">
+            </div>
+            <div class="control">
+                <label for="sourcePreviewUrlInput">RSS URL</label>
+                <input id="sourcePreviewUrlInput" placeholder="https://example.com/rss.xml">
+            </div>
+            <div class="control">
+                <label for="sourcePreviewMaxItemsInput">Max items</label>
+                <input id="sourcePreviewMaxItemsInput" type="number" min="1" max="100" value="20">
+            </div>
+            <button id="sourcePreviewButton" class="primary" type="button">Run Preview</button>
+        </div>
+        <div class="actions compact-actions" id="sourcePreviewQuickFill" style="margin-bottom: 12px;">
+            <button type="button"
+                    data-source-preview-name="GlobeNewswire M&A"
+                    data-source-preview-url="https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions">GlobeNewswire M&A</button>
+            <button type="button"
+                    data-source-preview-name="PRNewswire M&A"
+                    data-source-preview-url="https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/acquisitions-mergers-and-takeovers-list.rss">PRNewswire M&A</button>
+            <button type="button"
+                    data-source-preview-name="PRNewswire Private Placement"
+                    data-source-preview-url="https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/private-placement-list.rss">PRNewswire Private Placement</button>
+        </div>
+        <div id="sourcePreviewResult" class="notice">Choose a feed and run preview. The production scanner and database will not be changed.</div>
+    </section>
+
     <details class="panel review-quality">
         <summary class="section-summary panel-head">
             <div>
@@ -1879,6 +1919,8 @@
         telegramSettings: null,
         telegramPreview: null,
         signalDetails: null,
+        sourcePreview: null,
+        sourcePreviewError: null,
         fullRefreshResult: null,
         selectedPreviewId: null,
         selectedDealGroupKey: null,
@@ -1906,6 +1948,11 @@
     const secCompanyLookupInput = document.querySelector("#secCompanyLookupInput");
     const secCompanyLookupButton = document.querySelector("#secCompanyLookupButton");
     const secCompanyLookupStatus = document.querySelector("#secCompanyLookupStatus");
+    const sourcePreviewNameInput = document.querySelector("#sourcePreviewNameInput");
+    const sourcePreviewUrlInput = document.querySelector("#sourcePreviewUrlInput");
+    const sourcePreviewMaxItemsInput = document.querySelector("#sourcePreviewMaxItemsInput");
+    const sourcePreviewButton = document.querySelector("#sourcePreviewButton");
+    const sourcePreviewQuickFill = document.querySelector("#sourcePreviewQuickFill");
     const openAiEnabledInput = document.querySelector("#openAiEnabledInput");
     const openAiApiKeyInput = document.querySelector("#openAiApiKeyInput");
     const openAiModelInput = document.querySelector("#openAiModelInput");
@@ -1973,6 +2020,8 @@
     secFetchDocumentsButton.addEventListener("click", runSecFetchDocuments);
     secWatchlistAddButton.addEventListener("click", addSecWatchlistEntry);
     secCompanyLookupButton.addEventListener("click", searchSecCompanyLookup);
+    sourcePreviewButton.addEventListener("click", runSourcePreview);
+    sourcePreviewQuickFill.addEventListener("click", fillSourcePreview);
     openAiSettingsSaveButton.addEventListener("click", saveOpenAiSettings);
     openAiSettingsClearButton.addEventListener("click", clearOpenAiRuntimeKey);
     telegramSettingsSaveButton.addEventListener("click", saveTelegramSettings);
@@ -1984,6 +2033,12 @@
         if (event.key === "Enter") {
             event.preventDefault();
             searchSecCompanyLookup();
+        }
+    });
+    sourcePreviewUrlInput.addEventListener("keydown", event => {
+        if (event.key === "Enter") {
+            event.preventDefault();
+            runSourcePreview();
         }
     });
     searchInput.addEventListener("input", render);
@@ -2266,6 +2321,43 @@
             } else {
                 showError("SEC company lookup", error.message);
             }
+        }
+    }
+
+    function fillSourcePreview(event) {
+        const button = event.target.closest("[data-source-preview-url]");
+        if (!button) {
+            return;
+        }
+        sourcePreviewNameInput.value = button.dataset.sourcePreviewName || "";
+        sourcePreviewUrlInput.value = button.dataset.sourcePreviewUrl || "";
+        sourcePreviewMaxItemsInput.value = sourcePreviewMaxItemsInput.value || "20";
+        state.sourcePreview = null;
+        state.sourcePreviewError = null;
+        renderSourcePreview();
+    }
+
+    async function runSourcePreview() {
+        clearErrors();
+        state.sourcePreviewError = null;
+        setBusy(sourcePreviewButton, true, "Previewing");
+        const status = document.querySelector("#sourcePreviewStatus");
+        status.className = "badge warn";
+        status.textContent = "loading";
+        try {
+            state.sourcePreview = await postJson("/api/admin/source-evaluation/preview", {
+                name: sourcePreviewNameInput.value.trim() || "Test source",
+                url: sourcePreviewUrlInput.value.trim(),
+                maxItems: Number(sourcePreviewMaxItemsInput.value) || 20
+            });
+            renderSourcePreview();
+        } catch (error) {
+            state.sourcePreview = null;
+            state.sourcePreviewError = error.message;
+            showError("Source preview", error.message);
+            renderSourcePreview();
+        } finally {
+            setBusy(sourcePreviewButton, false, "Run Preview");
         }
     }
 
@@ -2552,6 +2644,7 @@
         renderSignalInbox();
         renderTelegramPreview();
         renderSignalDetails();
+        renderSourcePreview();
         renderSourceQuality();
         renderReviewQuality();
         renderSecWatchlist();
@@ -2562,6 +2655,72 @@
         renderArticles();
         renderScanRuns();
         updateExportLinks();
+    }
+
+    function renderSourcePreview() {
+        const target = document.querySelector("#sourcePreviewResult");
+        const status = document.querySelector("#sourcePreviewStatus");
+        if (state.sourcePreviewError) {
+            status.className = "badge error";
+            status.textContent = "error";
+            target.innerHTML = `<div class="danger-text">Preview failed: ${escapeText(state.sourcePreviewError)}</div>`;
+            return;
+        }
+        const result = state.sourcePreview;
+        if (!result) {
+            status.className = "badge disabled";
+            status.textContent = "idle";
+            target.innerHTML = "Choose a feed and run preview. The production scanner and database will not be changed.";
+            return;
+        }
+        status.className = `badge ${escapeAttr(result.recommendation || "NEEDS_REVIEW")}`;
+        status.textContent = result.recommendation || "NEEDS_REVIEW";
+        const items = Array.isArray(result.previewItems) ? result.previewItems : [];
+        target.innerHTML = `
+            <div class="kv" style="margin-bottom: 12px;">
+                ${kvRows([
+                    ["Source", result.sourceName || "-"],
+                    ["Fetched", result.fetchedCount ?? 0],
+                    ["Candidates", result.candidateCount ?? 0],
+                    ["Strict candidates", result.strictCandidateCount ?? 0],
+                    ["Noise", result.noiseCount ?? 0],
+                    ["Recommendation", result.recommendation || "NEEDS_REVIEW"]
+                ])}
+            </div>
+            ${(result.errors || []).length
+                ? `<div class="warning">Errors: ${escapeText(result.errors.join("; "))}</div>`
+                : ""}
+            <div class="table-wrap">
+                <table style="min-width: 980px;">
+                    <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Priority</th>
+                        <th>Relevance</th>
+                        <th>Tradability</th>
+                        <th>Stage</th>
+                        <th>Timing</th>
+                        <th>Alert</th>
+                        <th>URL</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    ${items.length ? items.map(item => `
+                        <tr>
+                            <td class="title-cell">${escapeText(item.title || "-")}<div class="small-cell">${escapeText(formatDate(item.publishedAt))}</div></td>
+                            <td>${badge(item.priority || "NONE", item.priority || "NONE")}</td>
+                            <td>${badge(item.dealRelevance || "UNKNOWN", item.dealRelevance || "UNKNOWN")}</td>
+                            <td>${badge(item.tradability || "UNKNOWN", item.tradability || "UNKNOWN")}</td>
+                            <td>${badge(item.dealStage || "UNKNOWN", item.dealStage || "UNKNOWN")}</td>
+                            <td>${badge(item.dealTiming || "UNKNOWN", item.dealTiming || "UNKNOWN")}</td>
+                            <td>${badge(item.alertEligible ? "eligible" : "not eligible", item.alertEligible ? "eligible" : "disabled")}</td>
+                            <td>${item.url ? `<a href="${escapeAttr(item.url)}" target="_blank" rel="noreferrer">Open</a>` : "-"}</td>
+                        </tr>
+                    `).join("") : `<tr><td colspan="8" class="muted">No items returned by this feed.</td></tr>`}
+                    </tbody>
+                </table>
+            </div>
+        `;
     }
 
     function renderSourceQuality() {
