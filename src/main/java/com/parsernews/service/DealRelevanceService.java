@@ -54,17 +54,27 @@ public class DealRelevanceService {
                     positives
             );
         }
+        if (isFinancingOrDebtNoise(lower)) {
+            warnings.add("financing/debt/offering event");
+            return new RelevanceInsight(
+                    DealRelevance.NOT_TRADABLE,
+                    Tradability.NOT_TRADABLE,
+                    "Looks like financing, debt, offering, redemption, or extension-vote news, not an M&A target signal.",
+                    warnings,
+                    positives
+            );
+        }
 
-        boolean privateTargetSignal = hasPrivateTargetSignal(dealTerms, lower);
-        boolean publicTarget = hasPublicTargetSignal(article, event, lower, privateTargetSignal);
         boolean publicBuyer = hasPublicBuyerSignal(event, lower);
+        boolean privateTargetSignal = hasPrivateTargetSignal(dealTerms, lower);
+        boolean publicTarget = hasPublicTargetSignal(article, event, lower, privateTargetSignal, publicBuyer);
         boolean cash = dealTerms.paymentType() == PaymentType.CASH || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
         boolean stock = dealTerms.paymentType() == PaymentType.STOCK || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
         boolean perShare = lower.contains("per share") || lower.contains("a share");
         boolean takePrivate = containsAny(lower, "take private", "going private", "privately held", "private equity");
         boolean reverseTakeover = containsReverseTakeover(lower);
-        boolean publicPublicMerger = publicTarget && publicBuyer
-                || containsAny(lower, "public-public", "combined company", "surviving entity", "stock-for-stock");
+        boolean publicPublicMerger = publicTarget && (publicBuyer
+                || containsAny(lower, "public-public", "combined company", "surviving entity", "stock-for-stock"));
         boolean privateCompanySignal = privateTargetSignal
                 || containsAny(lower, "portfolio company", "privately held", "private company",
                 "subsidiary", "business unit", "terms were not disclosed", "terms undisclosed",
@@ -213,7 +223,8 @@ public class DealRelevanceService {
             NewsArticleEntity article,
             DetectedEventEntity event,
             String lower,
-            boolean privateTargetSignal
+            boolean privateTargetSignal,
+            boolean publicBuyer
     ) {
         if (privateTargetSignal) {
             return false;
@@ -225,13 +236,39 @@ public class DealRelevanceService {
         }
         if (event != null && event.getTargetTicker() != null && !event.getTargetTicker().isBlank()
                 && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())
+                && (event.getBuyerTicker() == null || !event.getTargetTicker().equalsIgnoreCase(event.getBuyerTicker()))
                 && event.getTargetMatchConfidence() != CompanyMatchConfidence.PARTIAL_NAME) {
             return true;
         }
-        if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())) {
+        if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())
+                && !publicBuyer) {
             return true;
         }
+        if (publicBuyer) {
+            return tickerCount(lower).count() >= 2;
+        }
         return PUBLIC_TICKER.matcher(lower).find();
+    }
+
+    private boolean isFinancingOrDebtNoise(String lower) {
+        return (lower.contains("senior notes") && (lower.contains("tender offer") || lower.contains("tender offers")))
+                || (lower.contains("notes due") && (lower.contains("tender offer") || lower.contains("tender offers")))
+                || containsAny(lower,
+                "registered direct offering",
+                "private placement",
+                "at-the-market offering",
+                "atm offering",
+                "public offering",
+                "follow-on offering",
+                "senior notes tender offer",
+                "tender offer for senior notes",
+                "tender offer for notes",
+                "debt tender offer",
+                "exchange offer for notes",
+                "share redemption",
+                "redemption deadline",
+                "extension vote",
+                "extension meeting");
     }
 
     private boolean hasPrivateTargetSignal(DealTermsExtractionService.DealTerms dealTerms, String lower) {

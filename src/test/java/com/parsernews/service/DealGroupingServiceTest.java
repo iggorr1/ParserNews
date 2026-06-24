@@ -105,8 +105,8 @@ class DealGroupingServiceTest {
 
     @Test
     void groupsTwoAbbVieApogeeRssSignalsByTargetTicker() {
-        DetectedEventEntity first = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
-        DetectedEventEntity second = rssEvent(2L, "Apogee Enters Merger Agreement with AbbVie", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
+        DetectedEventEntity first = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
+        DetectedEventEntity second = rssEvent(2L, "Apogee Enters Merger Agreement with AbbVie", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(first, second));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
 
@@ -120,8 +120,8 @@ class DealGroupingServiceTest {
 
     @Test
     void groupsAbbVieApogeeRssAndTargetSecFilingByTargetCik() {
-        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
-        SecFilingEntity sec = secFiling(10L, "0001550760", "APOGEE THERAPEUTICS INC", "8-K", "Agreement and plan of merger with AbbVie Inc.");
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
+        SecFilingEntity sec = secFiling(10L, "0001974640", "APOGEE THERAPEUTICS INC", "8-K", "Agreement and plan of merger with AbbVie Inc.");
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(sec));
 
@@ -135,8 +135,55 @@ class DealGroupingServiceTest {
     }
 
     @Test
+    void groupsAbbVieApogeeRssTargetSecAndBuyerSecEvidenceTogether() {
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
+        SecFilingEntity targetSec = secFiling(10L, "0001974640", "APOGEE THERAPEUTICS INC", "8-K", "Agreement and plan of merger with AbbVie Inc.");
+        SecFilingEntity buyerSec = secFiling(11L, "0001551152", "ABBVIE INC.", "8-K", "AbbVie entered into an agreement and plan of merger to acquire Apogee Therapeutics.");
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
+        when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(targetSec, buyerSec));
+
+        List<DealGroupingService.DealGroupResponse> groups = service.groups(null, null, 50);
+
+        assertThat(groups).hasSize(1);
+        assertThat(groups.getFirst().targetTicker()).isEqualTo("APGE");
+        assertThat(groups.getFirst().targetCik()).isEqualTo("1974640");
+        assertThat(groups.getFirst().buyerTicker()).isEqualTo("ABBV");
+        assertThat(groups.getFirst().buyerCik()).isEqualTo("1551152");
+        assertThat(groups.getFirst().relatedSignals()).hasSize(3);
+        assertThat(groups.getFirst().relatedSignals()).extracting(DealGroupingService.RelatedSignalResponse::relatedReason)
+                .contains("same buyer CIK and SEC document mentions target");
+    }
+
+    @Test
+    void doesNotCopyPublicBuyerTickerAndCikIntoTargetRole() {
+        DetectedEventEntity badRole = rssEvent(1L, "ECARX to Acquire Flyme Auto Software Business", "ECARX Holdings Inc.", "Flyme Auto software business", "ECX", "ECX", "0001861974");
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(badRole));
+        when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
+
+        DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
+
+        assertThat(group.buyerTicker()).isEqualTo("ECX");
+        assertThat(group.buyerCik()).isEqualTo("1551152");
+        assertThat(group.targetTicker()).isNull();
+        assertThat(group.targetCik()).isNull();
+    }
+
+    @Test
+    void nearDuplicateRssTitlesWithoutResolvedTargetGroupTogetherByNormalizedTitle() {
+        DetectedEventEntity first = rssEvent(1L, "True Green Announces Definitive Agreement", null, null, null, null, null);
+        DetectedEventEntity second = rssEvent(2L, "True Green Announces Definitive Agreement", null, null, null, null, null);
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(first, second));
+        when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
+
+        List<DealGroupingService.DealGroupResponse> groups = service.groups(null, null, 50);
+
+        assertThat(groups).hasSize(1);
+        assertThat(groups.getFirst().relatedSignals()).hasSize(2);
+    }
+
+    @Test
     void buyerOnlySecMatchDoesNotGroupUnrelatedDeals() {
-        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
         SecFilingEntity unrelatedBuyerFiling = secFiling(11L, "0001551152", "ABBVIE INC.", "8-K", "AbbVie announces another acquisition of OtherCo.");
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(unrelatedBuyerFiling));
@@ -164,12 +211,12 @@ class DealGroupingServiceTest {
 
     @Test
     void persistedGroupReviewOverridesDerivedPrimaryReview() {
-        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
-        DealGroupReviewEntity review = new DealGroupReviewEntity("target-cik:1550760");
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
+        DealGroupReviewEntity review = new DealGroupReviewEntity("target-cik:1974640");
         review.updateManualReview(ManualReviewStatus.USEFUL, com.parsernews.persistence.ManualReviewReason.GOOD_SIGNAL, "Reviewed as one deal");
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
-        when(dealGroupReviewRepository.findByGroupKey("target-cik:1550760")).thenReturn(java.util.Optional.of(review));
+        when(dealGroupReviewRepository.findByGroupKey("target-cik:1974640")).thenReturn(java.util.Optional.of(review));
 
         DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
 
@@ -181,12 +228,12 @@ class DealGroupingServiceTest {
 
     @Test
     void resetGroupReviewReturnsPendingAndClearsReason() {
-        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
-        DealGroupReviewEntity review = new DealGroupReviewEntity("target-cik:1550760");
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
+        DealGroupReviewEntity review = new DealGroupReviewEntity("target-cik:1974640");
         review.updateManualReview(ManualReviewStatus.PENDING, com.parsernews.persistence.ManualReviewReason.GOOD_SIGNAL, "Reset me");
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
-        when(dealGroupReviewRepository.findByGroupKey("target-cik:1550760")).thenReturn(java.util.Optional.of(review));
+        when(dealGroupReviewRepository.findByGroupKey("target-cik:1974640")).thenReturn(java.util.Optional.of(review));
 
         DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
 
@@ -199,8 +246,8 @@ class DealGroupingServiceTest {
 
     @Test
     void telegramPreviewIncludesRssAndSecEvidence() {
-        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1550760");
-        SecFilingEntity sec = secFiling(10L, "0001550760", "APOGEE THERAPEUTICS INC", "8-K", "Agreement and plan of merger with AbbVie Inc.");
+        DetectedEventEntity rss = rssEvent(1L, "AbbVie to Acquire Apogee", "AbbVie Inc.", "Apogee Therapeutics", "ABBV", "APGE", "1974640");
+        SecFilingEntity sec = secFiling(10L, "0001974640", "APOGEE THERAPEUTICS INC", "8-K", "Agreement and plan of merger with AbbVie Inc.");
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(sec));
 

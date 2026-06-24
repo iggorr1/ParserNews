@@ -40,8 +40,8 @@ public class RssCompanyEnrichmentService {
         String targetCompany = firstNonBlank(dealTerms.targetCompany(), event.getTargetCompany(), article.getCompanyName());
         String buyerCompany = firstNonBlank(dealTerms.buyerCompany(), event.getAcquirer());
         boolean privateTargetSignal = hasPrivateTargetSignal(targetCompany);
-        String targetTicker = privateTargetSignal ? null : firstNonBlank(event.getTargetTicker(), tickerNearCompany(text, targetCompany));
         String buyerTicker = tickerNearCompany(text, buyerCompany);
+        String targetTicker = privateTargetSignal ? null : targetTicker(text, targetCompany, buyerCompany, buyerTicker, event.getTargetTicker());
 
         CompanyRoleEnrichment target = privateTargetSignal
                 ? new CompanyRoleEnrichment(null, null, false, CompanyMatchConfidence.NONE)
@@ -66,6 +66,24 @@ public class RssCompanyEnrichmentService {
             warnings.add("buyer partial name match is weak evidence");
         }
         return new CompanyEnrichment(target, buyer, warnings);
+    }
+
+    private String targetTicker(
+            String text,
+            String targetCompany,
+            String buyerCompany,
+            String buyerTicker,
+            String eventTargetTicker
+    ) {
+        String nearTarget = tickerNearCompanyExcluding(text, targetCompany, buyerTicker);
+        if (nearTarget != null && !isSameTicker(nearTarget, buyerTicker)) {
+            return nearTarget;
+        }
+        String fallback = firstNonBlank(eventTargetTicker);
+        if (sameCompany(targetCompany, buyerCompany)) {
+            return firstNonBlank(nearTarget, fallback);
+        }
+        return isSameTicker(fallback, buyerTicker) ? null : fallback;
     }
 
     private CompanyRoleEnrichment resolveRole(String explicitTicker, String companyName) {
@@ -96,18 +114,33 @@ public class RssCompanyEnrichmentService {
     }
 
     private String tickerNearCompany(String text, String companyName) {
+        return tickerNearCompanyExcluding(text, companyName, null);
+    }
+
+    private String tickerNearCompanyExcluding(String text, String companyName, String excludedTicker) {
         if (text == null || companyName == null || companyName.isBlank()) {
             return null;
         }
-        int companyIndex = text.toLowerCase(Locale.ROOT).indexOf(companyName.toLowerCase(Locale.ROOT));
-        if (companyIndex < 0) {
-            return null;
+        String lowerText = text.toLowerCase(Locale.ROOT);
+        String lowerCompany = companyName.toLowerCase(Locale.ROOT);
+        int searchFrom = 0;
+        while (searchFrom < lowerText.length()) {
+            int companyIndex = lowerText.indexOf(lowerCompany, searchFrom);
+            if (companyIndex < 0) {
+                return null;
+            }
+            int start = Math.max(0, companyIndex);
+            int end = Math.min(text.length(), companyIndex + companyName.length() + 120);
+            String nearby = text.substring(start, end);
+            List<String> nearbyTickers = explicitTickers(nearby);
+            for (String ticker : nearbyTickers) {
+                if (!isSameTicker(ticker, excludedTicker)) {
+                    return ticker;
+                }
+            }
+            searchFrom = companyIndex + lowerCompany.length();
         }
-        int start = Math.max(0, companyIndex);
-        int end = Math.min(text.length(), companyIndex + companyName.length() + 120);
-        String nearby = text.substring(start, end);
-        List<String> nearbyTickers = explicitTickers(nearby);
-        return nearbyTickers.isEmpty() ? null : nearbyTickers.getFirst();
+        return null;
     }
 
     private boolean hasPrivateTargetSignal(String companyName) {
@@ -122,6 +155,23 @@ public class RssCompanyEnrichmentService {
                 || normalized.contains("business unit")
                 || normalized.contains("facility")
                 || normalized.contains("assets");
+    }
+
+    private boolean isSameTicker(String first, String second) {
+        if (first == null || second == null) {
+            return false;
+        }
+        return first.replaceAll("[^A-Za-z0-9]", "")
+                .equalsIgnoreCase(second.replaceAll("[^A-Za-z0-9]", ""));
+    }
+
+    private boolean sameCompany(String first, String second) {
+        if (first == null || second == null) {
+            return false;
+        }
+        String normalizedFirst = first.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
+        String normalizedSecond = second.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", " ").trim();
+        return !normalizedFirst.isBlank() && normalizedFirst.equals(normalizedSecond);
     }
 
     private void addTicker(List<String> tickers, String ticker) {

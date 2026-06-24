@@ -88,6 +88,37 @@ class RssCompanyEnrichmentServiceTest {
     }
 
     @Test
+    void buyerTickerFromArticleDoesNotBecomeTargetWhenTargetTickerIsNearby() {
+        NewsArticleEntity article = article(
+                "AbbVie to Acquire Apogee Therapeutics",
+                "AbbVie Inc. (NYSE: ABBV) will acquire Apogee Therapeutics, Inc. (NASDAQ: APGE)."
+        );
+        DetectedEventEntity event = event(article, "ABBV");
+        mockTerms("Apogee Therapeutics", "AbbVie Inc.");
+        when(lookupService.findBestMatch(eq("APGE"), eq("Apogee Therapeutics")))
+                .thenReturn(Optional.of(new SecCompanyLookupService.CompanyLookupMatch(
+                        "1974640",
+                        "APGE",
+                        "Apogee Therapeutics, Inc.",
+                        CompanyMatchConfidence.EXACT_TICKER
+                )));
+        when(lookupService.findBestMatch(eq("ABBV"), eq("AbbVie Inc.")))
+                .thenReturn(Optional.of(new SecCompanyLookupService.CompanyLookupMatch(
+                        "1551152",
+                        "ABBV",
+                        "AbbVie Inc.",
+                        CompanyMatchConfidence.EXACT_TICKER
+                )));
+
+        RssCompanyEnrichmentService.CompanyEnrichment enrichment = service().enrich(article, event);
+
+        assertThat(enrichment.target().ticker()).isEqualTo("APGE");
+        assertThat(enrichment.target().cik()).isEqualTo("1974640");
+        assertThat(enrichment.buyer().ticker()).isEqualTo("ABBV");
+        assertThat(enrichment.target().ticker()).isNotEqualTo(enrichment.buyer().ticker());
+    }
+
+    @Test
     void publicBuyerPrivateTargetDoesNotCreatePublicTarget() {
         NewsArticleEntity article = article(
                 "MDA Space announces definitive agreement to acquire Blue Canyon Technologies LLC",

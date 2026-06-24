@@ -269,7 +269,11 @@ public class DealGroupingService {
             return "names:" + buyer + ":" + target;
         }
         if (!target.isBlank()) {
-            return "target-name:" + target + ":rss:" + signal.id();
+            return "target-name:" + target;
+        }
+        String normalizedTitle = normalizeTitle(signal.title());
+        if (!normalizedTitle.isBlank()) {
+            return "title:" + normalizedTitle;
         }
         return "rss:" + signal.id();
     }
@@ -388,6 +392,14 @@ public class DealGroupingService {
 
     private static String normalizeKey(String value) {
         return value == null ? "" : NON_ALNUM.matcher(value.toLowerCase(Locale.ROOT)).replaceAll("-");
+    }
+
+    private static String normalizeTitle(String value) {
+        String normalized = normalizeCompany(value)
+                .replaceAll("\\b(announces|announce|enters|entered|definitive|agreement|merger|acquisition|acquire|acquires|to|for|with|and|the|a|an)\\b", " ")
+                .trim()
+                .replaceAll("\\s+", " ");
+        return normalized.length() < 6 || normalized.split(" ").length < 2 ? "" : normalized;
     }
 
     private record RssDealSignal(
@@ -527,8 +539,8 @@ public class DealGroupingService {
             targetCompany = firstNonBlankStatic(targetCompany, signal.targetCompany());
             buyerTicker = firstNonBlankStatic(buyerTicker, signal.buyerTicker());
             buyerCik = firstNonBlankStatic(buyerCik, signal.buyerCik());
-            targetTicker = firstNonBlankStatic(targetTicker, signal.targetTicker());
-            targetCik = firstNonBlankStatic(targetCik, signal.targetCik());
+            targetTicker = firstNonBlankStatic(targetTicker, safeTargetTicker(signal));
+            targetCik = firstNonBlankStatic(targetCik, safeTargetCik(signal));
             if (shouldReplacePrimary(signal.priority(), signal.sortInstant())) {
                 primarySignalSourceType = SourceType.RSS_NEWS;
                 primarySignalId = signal.id();
@@ -614,6 +626,39 @@ public class DealGroupingService {
                 case LOW -> 2;
                 case NONE -> 1;
             };
+        }
+
+        private static String safeTargetTicker(RssDealSignal signal) {
+            if (sameTicker(signal.targetTicker(), signal.buyerTicker())
+                    && !sameCompany(signal.targetCompany(), signal.buyerCompany())) {
+                return null;
+            }
+            return signal.targetTicker();
+        }
+
+        private static String safeTargetCik(RssDealSignal signal) {
+            if ((sameTicker(signal.targetTicker(), signal.buyerTicker()) || sameCik(signal.targetCik(), signal.buyerCik()))
+                    && !sameCompany(signal.targetCompany(), signal.buyerCompany())) {
+                return null;
+            }
+            return signal.targetCik();
+        }
+
+        private static boolean sameTicker(String first, String second) {
+            return first != null
+                    && second != null
+                    && normalizeTicker(first).equals(normalizeTicker(second));
+        }
+
+        private static boolean sameCik(String first, String second) {
+            return first != null
+                    && second != null
+                    && normalizeCik(first).equals(normalizeCik(second));
+        }
+
+        private static boolean sameCompany(String first, String second) {
+            return !normalizeCompany(first).isBlank()
+                    && normalizeCompany(first).equals(normalizeCompany(second));
         }
     }
 

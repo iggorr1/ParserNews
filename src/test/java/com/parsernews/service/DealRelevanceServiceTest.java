@@ -204,6 +204,46 @@ class DealRelevanceServiceTest {
         assertThat(insight.relevanceWarnings()).contains("roundup/aggregator article, not primary source");
     }
 
+    @Test
+    void registeredDirectOfferingIsNotPublicStockMerger() {
+        NewsArticleEntity article = article(
+                "GD Culture Group Announces Registered Direct Offering",
+                "The company entered into a securities purchase agreement for a registered direct offering and private placement."
+        );
+        DetectedEventEntity event = event(article, "GDC", CandidateStrength.HIGH, ReviewStatus.MANUAL_REVIEW);
+
+        DealRelevanceService.RelevanceInsight insight = service.assess(article, event, likelyDeal(), terms(
+                null,
+                null,
+                null,
+                PaymentType.STOCK,
+                DealStatus.DEFINITIVE_AGREEMENT
+        ));
+
+        assertThat(insight.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
+        assertThat(insight.tradability()).isEqualTo(Tradability.NOT_TRADABLE);
+        assertThat(insight.relevanceWarnings()).contains("financing/debt/offering event");
+    }
+
+    @Test
+    void seniorNotesTenderOfferIsNotMaTenderOffer() {
+        NewsArticleEntity article = article(
+                "Company Launches Tender Offer for Senior Notes",
+                "The company commenced a cash tender offer for its outstanding senior notes."
+        );
+
+        DealRelevanceService.RelevanceInsight insight = service.assess(article, null, likelyDeal(), terms(
+                null,
+                null,
+                null,
+                PaymentType.CASH,
+                DealStatus.TENDER_OFFER
+        ));
+
+        assertThat(insight.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
+        assertThat(insight.tradability()).isEqualTo(Tradability.NOT_TRADABLE);
+    }
+
     private CandidateReviewInsightService.ReviewInsight likelyDeal() {
         return new CandidateReviewInsightService.ReviewInsight(
                 ReviewVerdict.LIKELY_DEAL,

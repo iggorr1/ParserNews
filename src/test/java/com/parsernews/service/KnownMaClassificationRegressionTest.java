@@ -169,6 +169,64 @@ class KnownMaClassificationRegressionTest {
     }
 
     @Test
+    void bristowBerryPublicBuyerDoesNotBecomePublicTarget() {
+        DetectedEventEntity event = publicBuyerPrivateTargetEvent(
+                31L,
+                "Bristow Group to Acquire Berry Aviation",
+                "Bristow Group Inc. (NYSE: VTOL) will acquire Berry Aviation, a privately held aviation services provider. Terms were not disclosed.",
+                "VTOL",
+                "Bristow Group Inc.",
+                "Berry Aviation"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isIn(DealRelevance.PRIVATE_COMPANY_ACQUISITION, DealRelevance.NOT_TRADABLE);
+        assertThat(classification.relevance.tradability()).isIn(Tradability.NOT_TRADABLE, Tradability.LOW);
+        assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PUBLIC_CASH_ACQUISITION);
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void energyFuelsVacPublicBuyerDoesNotBecomePublicTarget() {
+        DetectedEventEntity event = publicBuyerPrivateTargetEvent(
+                32L,
+                "Energy Fuels to Acquire VAC Business",
+                "Energy Fuels Inc. (NYSE American: UUUU) announced it will acquire the VAC rare earth separation business. Terms were not disclosed.",
+                "UUUU",
+                "Energy Fuels Inc.",
+                "VAC rare earth separation business"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isIn(DealRelevance.PRIVATE_COMPANY_ACQUISITION, DealRelevance.NOT_TRADABLE);
+        assertThat(classification.relevance.tradability()).isIn(Tradability.NOT_TRADABLE, Tradability.LOW);
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void firstCashRamsdensPublicBuyerDoesNotBecomePublicTarget() {
+        DetectedEventEntity event = publicBuyerPrivateTargetEvent(
+                33L,
+                "FirstCash to Acquire Ramsdens",
+                "FirstCash Holdings, Inc. (NASDAQ: FCFS) announced an agreement to acquire Ramsdens. The target public ticker was not provided.",
+                "FCFS",
+                "FirstCash Holdings, Inc.",
+                "Ramsdens"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isIn(DealRelevance.PRIVATE_COMPANY_ACQUISITION, DealRelevance.NOT_TRADABLE, DealRelevance.UNKNOWN);
+        assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PUBLIC_CASH_ACQUISITION);
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
     void mackayComstockMiningAssetsStayNotTradableAssetAcquisition() {
         DetectedEventEntity event = event(
                 4L,
@@ -188,6 +246,70 @@ class KnownMaClassificationRegressionTest {
 
         assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PUBLIC_CASH_ACQUISITION);
         assertThat(classification.relevance.tradability()).isIn(Tradability.NOT_TRADABLE, Tradability.UNKNOWN, Tradability.LOW);
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void gdCultureRegisteredDirectOfferingIsNotPublicStockMerger() {
+        DetectedEventEntity event = event(
+                41L,
+                "GD Culture Group Announces Registered Direct Offering and Private Placement",
+                "GD Culture Group entered into a securities purchase agreement for a registered direct offering and concurrent private placement.",
+                "https://www.prnewswire.com/news-releases/gdc-offering.html",
+                "GDC",
+                "GD Culture Group",
+                null,
+                CandidateStrength.HIGH,
+                "definitive agreement|common stock"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
+        assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PUBLIC_STOCK_MERGER);
+        assertThat(classification.relevance.relevanceWarnings()).contains("financing/debt/offering event");
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void privatePlacementIsNotMa() {
+        DetectedEventEntity event = event(
+                42L,
+                "Company Announces Private Placement Financing",
+                "The company announced a private placement of common stock and warrants.",
+                "https://www.globenewswire.com/news-release/private-placement.html",
+                "TEST",
+                "Company",
+                null,
+                CandidateStrength.MEDIUM,
+                "private placement"
+        );
+
+        Classification classification = classify(event);
+
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
+        assertThat(classification.relevance.tradability()).isEqualTo(Tradability.NOT_TRADABLE);
+    }
+
+    @Test
+    void seniorNotesTenderOfferIsNotMa() {
+        DetectedEventEntity event = event(
+                43L,
+                "Company Launches Tender Offer for Senior Notes",
+                "The company launched a tender offer for senior notes and debt securities.",
+                "https://www.prnewswire.com/news-releases/senior-notes-tender.html",
+                "TEST",
+                "Company",
+                null,
+                CandidateStrength.HIGH,
+                "tender offer"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
         assertThat(eligibility.eligible()).isFalse();
     }
 
@@ -309,6 +431,39 @@ class KnownMaClassificationRegressionTest {
                 true,
                 CompanyMatchConfidence.EXACT_TICKER,
                 null
+        );
+        return event;
+    }
+
+    private DetectedEventEntity publicBuyerPrivateTargetEvent(
+            Long id,
+            String headline,
+            String body,
+            String buyerTicker,
+            String buyerCompany,
+            String targetCompany
+    ) {
+        DetectedEventEntity event = event(
+                id,
+                headline,
+                body,
+                "https://www.prnewswire.com/news-releases/" + id + ".html",
+                buyerTicker,
+                targetCompany,
+                buyerCompany,
+                CandidateStrength.HIGH,
+                "will acquire"
+        );
+        event.updateCompanyEnrichment(
+                null,
+                null,
+                false,
+                CompanyMatchConfidence.NONE,
+                buyerTicker,
+                "999999",
+                true,
+                CompanyMatchConfidence.EXACT_TICKER,
+                "buyer resolved but target not resolved; do not infer public target from public buyer"
         );
         return event;
     }
