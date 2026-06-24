@@ -17,6 +17,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -74,13 +76,27 @@ public class DealGroupAiReviewService {
         int requestedLimit = normalizedBatchLimit(request == null ? null : request.limit());
         boolean skipAlreadyReviewed = request == null || request.skipAlreadyReviewed() == null || request.skipAlreadyReviewed();
         boolean onlyPromising = request == null || request.onlyPromising() == null || request.onlyPromising();
-        UnifiedPriority minPriority = request == null || request.minPriority() == null ? UnifiedPriority.HIGH : request.minPriority();
-        List<DealGroupingService.DealGroupResponse> allGroups = dealGroupingService.groups(null, null, 200);
-        List<DealGroupingService.DealGroupResponse> eligibleGroups = allGroups.stream()
-                .filter(group -> eligibleForBatch(group, skipAlreadyReviewed, onlyPromising, minPriority))
+        UnifiedPriority minPriority = request == null || request.minPriority() == null ? UnifiedPriority.MEDIUM : request.minPriority();
+        BatchCandidatePreviewResponse preview = previewBatchCandidates(new BatchCandidatePreviewRequest(
+                200,
+                skipAlreadyReviewed,
+                minPriority,
+                onlyPromising
+        ));
+        List<DealGroupingService.DealGroupResponse> groupsByKey = dealGroupingService.groups(null, null, 200);
+        Map<String, DealGroupingService.DealGroupResponse> groupMap = groupsByKey.stream()
+                .collect(Collectors.toMap(
+                        DealGroupingService.DealGroupResponse::groupKey,
+                        Function.identity(),
+                        (first, second) -> first
+                ));
+        List<DealGroupingService.DealGroupResponse> eligibleGroups = preview.candidates().stream()
+                .filter(BatchCandidatePreviewItem::included)
+                .map(item -> groupMap.get(item.groupKey()))
+                .filter(group -> group != null)
                 .limit(requestedLimit)
                 .toList();
-        int skippedByFilter = Math.max(0, allGroups.size() - eligibleGroups.size());
+        int skippedByFilter = (int) (preview.skippedCount() + Math.max(0, preview.eligibleCount() - eligibleGroups.size()));
 
         if (!settings.enabled()) {
             return new BatchAiReviewResponse(
@@ -89,7 +105,7 @@ public class DealGroupAiReviewService {
                     DISABLED_MESSAGE,
                     requestedLimit,
                     0,
-                    allGroups.size(),
+                    preview.candidates().size(),
                     0,
                     List.of()
             );
@@ -101,7 +117,7 @@ public class DealGroupAiReviewService {
                     MISSING_KEY_MESSAGE,
                     requestedLimit,
                     0,
-                    allGroups.size(),
+                    preview.candidates().size(),
                     0,
                     List.of()
             );
@@ -145,15 +161,41 @@ public class DealGroupAiReviewService {
     }
 
     @Transactional(readOnly = true)
+    public BatchCandidatePreviewResponse previewBatchCandidates(BatchCandidatePreviewRequest request) {
+        int requestedLimit = normalizedBatchLimit(request == null ? null : request.limit());
+        boolean skipAlreadyReviewed = request == null || request.skipAlreadyReviewed() == null || request.skipAlreadyReviewed();
+        boolean onlyPromising = request == null || request.onlyPromising() == null || request.onlyPromising();
+        UnifiedPriority minPriority = request == null || request.minPriority() == null ? UnifiedPriority.MEDIUM : request.minPriority();
+        List<BatchCandidatePreviewItem> candidates = dealGroupingService.groups(null, null, 200).stream()
+                .map(group -> evaluateBatchCandidate(group, skipAlreadyReviewed, onlyPromising, minPriority))
+                .sorted(Comparator
+                        .comparing(BatchCandidatePreviewItem::included).reversed()
+                        .thenComparing(item -> item.priority() == null ? UnifiedPriority.NONE : item.priority())
+                        .thenComparing(BatchCandidatePreviewItem::title, Comparator.nullsLast(String::compareToIgnoreCase)))
+                .limit(requestedLimit)
+                .toList();
+        long eligibleCount = candidates.stream().filter(BatchCandidatePreviewItem::included).count();
+        return new BatchCandidatePreviewResponse(
+                requestedLimit,
+                eligibleCount,
+                candidates.size() - eligibleCount,
+                candidates
+        );
+    }
+
+    @Transactional(readOnly = true)
     public AiReviewSummaryResponse summary() {
         List<DealGroupAiReviewEntity> reviews = repository.findAll();
+        List<DealGroupAiReviewEntity> latestByGroup = latestByGroup(reviews);
         Map<String, DealGroupingService.DealGroupResponse> groupsByKey = dealGroupingService.groups(null, null, 200).stream()
                 .collect(Collectors.toMap(
                         DealGroupingService.DealGroupResponse::groupKey,
                         Function.identity(),
                         (first, second) -> first
                 ));
-        List<LatestAiReviewSummary> latestReviews = repository.findTop10ByOrderByCreatedAtDesc().stream()
+        List<LatestAiReviewSummary> latestReviews = latestByGroup.stream()
+                .sorted(Comparator.comparing(DealGroupAiReviewEntity::getCreatedAt).reversed())
+                .limit(10)
                 .map(review -> new LatestAiReviewSummary(
                         review.getGroupKey(),
                         Optional.ofNullable(groupsByKey.get(review.getGroupKey()))
@@ -166,18 +208,32 @@ public class DealGroupAiReviewService {
                 ))
                 .toList();
         return new AiReviewSummaryResponse(
+                latestByGroup.size(),
                 reviews.size(),
-                countVerdict(reviews, AiReviewVerdict.GOOD_SIGNAL),
-                countVerdict(reviews, AiReviewVerdict.NOT_TRADABLE),
-                countVerdict(reviews, AiReviewVerdict.PRIVATE_COMPANY),
-                countVerdict(reviews, AiReviewVerdict.FALSE_POSITIVE),
-                countVerdict(reviews, AiReviewVerdict.NEEDS_HUMAN_REVIEW),
-                countVerdict(reviews, AiReviewVerdict.UNKNOWN),
-                countConfidence(reviews, AiReviewConfidence.HIGH),
-                countConfidence(reviews, AiReviewConfidence.MEDIUM),
-                countConfidence(reviews, AiReviewConfidence.LOW),
+                latestByGroup.size(),
+                Math.max(0, reviews.size() - latestByGroup.size()),
+                countVerdict(latestByGroup, AiReviewVerdict.GOOD_SIGNAL),
+                countVerdict(latestByGroup, AiReviewVerdict.NOT_TRADABLE),
+                countVerdict(latestByGroup, AiReviewVerdict.PRIVATE_COMPANY),
+                countVerdict(latestByGroup, AiReviewVerdict.FALSE_POSITIVE),
+                countVerdict(latestByGroup, AiReviewVerdict.NEEDS_HUMAN_REVIEW),
+                countVerdict(latestByGroup, AiReviewVerdict.UNKNOWN),
+                countConfidence(latestByGroup, AiReviewConfidence.HIGH),
+                countConfidence(latestByGroup, AiReviewConfidence.MEDIUM),
+                countConfidence(latestByGroup, AiReviewConfidence.LOW),
                 latestReviews
         );
+    }
+
+    private List<DealGroupAiReviewEntity> latestByGroup(List<DealGroupAiReviewEntity> reviews) {
+        Map<String, DealGroupAiReviewEntity> latest = new LinkedHashMap<>();
+        for (DealGroupAiReviewEntity review : reviews) {
+            DealGroupAiReviewEntity current = latest.get(review.getGroupKey());
+            if (current == null || review.getCreatedAt().isAfter(current.getCreatedAt())) {
+                latest.put(review.getGroupKey(), review);
+            }
+        }
+        return List.copyOf(latest.values());
     }
 
     private DealGroupAiReviewEntity saveReview(
@@ -205,42 +261,85 @@ public class DealGroupAiReviewService {
         return saved;
     }
 
-    private boolean eligibleForBatch(
+    private BatchCandidatePreviewItem evaluateBatchCandidate(
             DealGroupingService.DealGroupResponse group,
             boolean skipAlreadyReviewed,
             boolean onlyPromising,
             UnifiedPriority minPriority
     ) {
         if (group == null) {
-            return false;
+            return new BatchCandidatePreviewItem(null, null, null, null, null, null, false, null, "Group is missing.");
+        }
+        String reasonExcluded = exclusionReason(group, skipAlreadyReviewed, onlyPromising, minPriority);
+        boolean included = reasonExcluded == null;
+        return new BatchCandidatePreviewItem(
+                group.groupKey(),
+                group.title(),
+                group.priority(),
+                group.dealRelevance(),
+                group.tradability(),
+                group.dealTiming(),
+                included,
+                included ? "Strict candidate: public target evidence, tradable, early/mid timing, and useful relevance." : null,
+                reasonExcluded
+        );
+    }
+
+    private String exclusionReason(
+            DealGroupingService.DealGroupResponse group,
+            boolean skipAlreadyReviewed,
+            boolean onlyPromising,
+            UnifiedPriority minPriority
+    ) {
+        if (!priorityAllowed(group.priority(), minPriority)) {
+            return "Priority is below the selected minimum.";
         }
         if (skipAlreadyReviewed && repository.existsByGroupKey(group.groupKey())) {
-            return false;
-        }
-        if (!priorityAllowed(group.priority(), minPriority)) {
-            return false;
+            return "Already has an AI review.";
         }
         if (!onlyPromising) {
-            return true;
+            return null;
         }
-        return (group.reviewStatus() == ManualReviewStatus.PENDING || group.reviewStatus() == ManualReviewStatus.USEFUL)
-                && (group.dealTiming() == DealTiming.EARLY || group.dealTiming() == DealTiming.MID_STAGE || group.dealTiming() == DealTiming.UNKNOWN)
-                && (group.tradability() == Tradability.HIGH || group.tradability() == Tradability.MEDIUM)
-                && (group.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION
-                || group.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE
-                || group.dealRelevance() == DealRelevance.PUBLIC_PUBLIC_MERGER
-                || group.dealRelevance() == DealRelevance.UNKNOWN)
-                && group.dealRelevance() != DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT
-                && group.dealRelevance() != DealRelevance.PRIVATE_COMPANY_ACQUISITION
-                && group.dealRelevance() != DealRelevance.REVERSE_TAKEOVER
-                && group.dealRelevance() != DealRelevance.NOT_TRADABLE
-                && group.dealStage() != DealStage.LITIGATION_OR_LAW_FIRM_UPDATE
-                && group.reviewReason() != ManualReviewReason.FALSE_POSITIVE
-                && group.reviewReason() != ManualReviewReason.PRIVATE_COMPANY
-                && group.reviewReason() != ManualReviewReason.NOT_TRADABLE
-                && group.reviewReason() != ManualReviewReason.LATE_STAGE_UPDATE
-                && group.reviewReason() != ManualReviewReason.LAW_FIRM_OR_SHAREHOLDER_ALERT
-                && warningsAllowBatch(group.warnings());
+        if (group.reviewStatus() != ManualReviewStatus.PENDING && group.reviewStatus() != ManualReviewStatus.USEFUL) {
+            return "Manual review status is not PENDING or USEFUL.";
+        }
+        if (group.tradability() != Tradability.HIGH && group.tradability() != Tradability.MEDIUM) {
+            return "Tradability is not HIGH or MEDIUM.";
+        }
+        if (group.dealTiming() != DealTiming.EARLY && group.dealTiming() != DealTiming.MID_STAGE) {
+            return "Deal timing is not EARLY or MID_STAGE.";
+        }
+        if (group.dealRelevance() != DealRelevance.PUBLIC_CASH_ACQUISITION
+                && group.dealRelevance() != DealRelevance.PUBLIC_TAKE_PRIVATE
+                && group.dealRelevance() != DealRelevance.PUBLIC_PUBLIC_MERGER) {
+            return "Deal relevance is not a strict public-company M&A relevance.";
+        }
+        if (group.dealRelevance() == DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT
+                || group.dealRelevance() == DealRelevance.PRIVATE_COMPANY_ACQUISITION
+                || group.dealRelevance() == DealRelevance.REVERSE_TAKEOVER
+                || group.dealRelevance() == DealRelevance.NOT_TRADABLE) {
+            return "Excluded relevance type.";
+        }
+        if (group.dealStage() == DealStage.LITIGATION_OR_LAW_FIRM_UPDATE
+                || group.dealTiming() == DealTiming.LATE_STAGE
+                || group.dealTiming() == DealTiming.POST_CLOSE
+                || group.dealTiming() == DealTiming.NOISE) {
+            return "Late-stage, post-close, law/noise timing.";
+        }
+        if (group.reviewReason() == ManualReviewReason.FALSE_POSITIVE
+                || group.reviewReason() == ManualReviewReason.PRIVATE_COMPANY
+                || group.reviewReason() == ManualReviewReason.NOT_TRADABLE
+                || group.reviewReason() == ManualReviewReason.LATE_STAGE_UPDATE
+                || group.reviewReason() == ManualReviewReason.LAW_FIRM_OR_SHAREHOLDER_ALERT) {
+            return "Manual review reason marks it as low quality.";
+        }
+        if (isBlank(group.targetTicker()) && isBlank(group.targetCik())) {
+            return "No public target ticker or target CIK.";
+        }
+        if (!warningsAllowBatch(group.warnings())) {
+            return "Warnings indicate law/private/reverse-takeover/not-tradable/noise risk.";
+        }
+        return null;
     }
 
     private boolean priorityAllowed(UnifiedPriority priority, UnifiedPriority minPriority) {
@@ -279,6 +378,10 @@ public class DealGroupAiReviewService {
 
     private long countConfidence(List<DealGroupAiReviewEntity> reviews, AiReviewConfidence confidence) {
         return reviews.stream().filter(review -> review.getConfidence() == confidence).count();
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private String prompt() {
@@ -429,8 +532,40 @@ public class DealGroupAiReviewService {
     ) {
     }
 
+    public record BatchCandidatePreviewRequest(
+            Integer limit,
+            Boolean skipAlreadyReviewed,
+            UnifiedPriority minPriority,
+            Boolean onlyPromising
+    ) {
+    }
+
+    public record BatchCandidatePreviewResponse(
+            int requestedLimit,
+            long eligibleCount,
+            long skippedCount,
+            List<BatchCandidatePreviewItem> candidates
+    ) {
+    }
+
+    public record BatchCandidatePreviewItem(
+            String groupKey,
+            String title,
+            UnifiedPriority priority,
+            DealRelevance dealRelevance,
+            Tradability tradability,
+            DealTiming dealTiming,
+            boolean included,
+            String reasonIncluded,
+            String reasonExcluded
+    ) {
+    }
+
     public record AiReviewSummaryResponse(
             long totalAiReviewed,
+            long totalAiReviewsSaved,
+            long uniqueGroupsReviewed,
+            long duplicateHistoricalReviewsIgnored,
             long goodSignalCount,
             long notTradableCount,
             long privateCompanyCount,

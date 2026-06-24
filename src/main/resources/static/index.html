@@ -1284,10 +1284,12 @@
                     <option value="25">25</option>
                 </select>
             </div>
-            <button id="batchAiReviewButton" type="button">Run AI Review for candidates</button>
+            <button id="previewBatchAiCandidatesButton" type="button">Preview AI candidates</button>
+            <button id="batchAiReviewButton" type="button">Run AI Review for strict candidates</button>
             <a id="exportDealGroupsCsv" class="button-link" href="/api/deal-groups/export.csv">Export Deal Groups CSV</a>
             <span class="muted" id="batchAiReviewStatus">Manual-only. Reviews filtered promising deal groups.</span>
         </div>
+        <div id="batchAiCandidatePreview" class="notice" style="margin-bottom: 12px;">Preview AI candidates before spending OpenAI calls.</div>
         <div class="deal-workspace">
             <div class="deal-main">
                 <div class="notice" style="margin-bottom: 12px;">
@@ -1801,6 +1803,7 @@
         dealGroupDetails: null,
         dealGroupAiReview: null,
         dealGroupAiReviewSummary: null,
+        batchAiCandidatePreview: null,
         batchAiReviewResult: null,
         dealGroupTelegramPreview: null,
         openAiSettings: null,
@@ -1842,6 +1845,7 @@
     const openAiSettingsMessage = document.querySelector("#openAiSettingsMessage");
     const aiSummaryRefreshButton = document.querySelector("#aiSummaryRefreshButton");
     const batchAiLimitSelect = document.querySelector("#batchAiLimitSelect");
+    const previewBatchAiCandidatesButton = document.querySelector("#previewBatchAiCandidatesButton");
     const batchAiReviewButton = document.querySelector("#batchAiReviewButton");
     const batchAiReviewStatus = document.querySelector("#batchAiReviewStatus");
     const errors = document.querySelector("#errors");
@@ -1896,6 +1900,7 @@
     openAiSettingsSaveButton.addEventListener("click", saveOpenAiSettings);
     openAiSettingsClearButton.addEventListener("click", clearOpenAiRuntimeKey);
     aiSummaryRefreshButton.addEventListener("click", loadAiReviewSummary);
+    previewBatchAiCandidatesButton.addEventListener("click", previewBatchAiCandidates);
     batchAiReviewButton.addEventListener("click", runBatchAiReview);
     secCompanyLookupInput.addEventListener("keydown", event => {
         if (event.key === "Enter") {
@@ -2560,8 +2565,11 @@
     function renderAiReviewSummary() {
         const summary = state.dealGroupAiReviewSummary || {};
         const total = summary.totalAiReviewed ?? 0;
-        document.querySelector("#aiReviewSummaryBadge").textContent = `${total} reviewed`;
+        document.querySelector("#aiReviewSummaryBadge").textContent = `${summary.uniqueGroupsReviewed ?? total} groups`;
         const summaryHtml = kvRows([
+            ["Unique groups reviewed", summary.uniqueGroupsReviewed ?? total],
+            ["AI reviews saved", summary.totalAiReviewsSaved ?? total],
+            ["Duplicate history ignored", summary.duplicateHistoricalReviewsIgnored ?? 0],
             ["Good signal", summary.goodSignalCount ?? 0],
             ["Not tradable", summary.notTradableCount ?? 0],
             ["Private company", summary.privateCompanyCount ?? 0],
@@ -2576,7 +2584,9 @@
         const latest = Array.isArray(summary.latestReviews) ? summary.latestReviews : [];
         document.querySelector("#aiReviewSummary").innerHTML = `
             <div class="ai-summary-grid">
-                <div class="ai-summary-cell"><span>Total</span><strong>${escapeText(total)}</strong></div>
+                <div class="ai-summary-cell"><span>Unique groups</span><strong>${escapeText(summary.uniqueGroupsReviewed ?? total)}</strong></div>
+                <div class="ai-summary-cell"><span>Saved reviews</span><strong>${escapeText(summary.totalAiReviewsSaved ?? total)}</strong></div>
+                <div class="ai-summary-cell"><span>Duplicates ignored</span><strong>${escapeText(summary.duplicateHistoricalReviewsIgnored ?? 0)}</strong></div>
                 <div class="ai-summary-cell"><span>Good signal</span><strong>${escapeText(summary.goodSignalCount ?? 0)}</strong></div>
                 <div class="ai-summary-cell"><span>Needs review</span><strong>${escapeText(summary.needsHumanReviewCount ?? 0)}</strong></div>
                 <div class="ai-summary-cell"><span>Not tradable</span><strong>${escapeText(summary.notTradableCount ?? 0)}</strong></div>
@@ -3175,14 +3185,88 @@
         }
     }
 
+    async function previewBatchAiCandidates() {
+        try {
+            setBusy(previewBatchAiCandidatesButton, true, "Previewing");
+            state.batchAiCandidatePreview = await fetchJson(`/api/deal-groups/ai-review/batch-candidates?limit=${encodeURIComponent(batchAiLimitSelect.value || "10")}&skipAlreadyReviewed=true&minPriority=MEDIUM&onlyPromising=true`);
+            renderBatchAiCandidatePreview();
+        } catch (error) {
+            showError("Batch AI candidate preview", error.message);
+        } finally {
+            setBusy(previewBatchAiCandidatesButton, false, "Preview AI candidates");
+        }
+    }
+
+    function renderBatchAiCandidatePreview() {
+        const preview = state.batchAiCandidatePreview;
+        const target = document.querySelector("#batchAiCandidatePreview");
+        if (!preview) {
+            target.innerHTML = "Preview AI candidates before spending OpenAI calls.";
+            return;
+        }
+        const eligible = Number(preview.eligibleCount || 0);
+        const candidates = Array.isArray(preview.candidates) ? preview.candidates : [];
+        if (eligible === 0) {
+            target.innerHTML = `
+                <strong>No promising groups need AI review right now.</strong>
+                <div class="muted">Strict selection skipped ${escapeText(preview.skippedCount || 0)} groups.</div>
+                ${renderBatchPreviewRows(candidates)}
+            `;
+            batchAiReviewStatus.textContent = "No promising groups need AI review right now.";
+            return;
+        }
+        target.innerHTML = `
+            <strong>${escapeText(eligible)} groups eligible for AI review</strong>
+            <div class="muted">Strict selection only includes public/tradable, early or mid-stage Deal Groups with target ticker or CIK.</div>
+            ${renderBatchPreviewRows(candidates)}
+        `;
+        batchAiReviewStatus.textContent = `${eligible} groups eligible for AI review.`;
+    }
+
+    function renderBatchPreviewRows(candidates) {
+        if (!candidates.length) {
+            return "";
+        }
+        return `
+            <div class="table-wrap" style="margin-top: 10px;">
+                <table style="min-width: 720px;">
+                    <thead>
+                    <tr>
+                        <th>Use</th>
+                        <th>Group</th>
+                        <th>Priority</th>
+                        <th>Relevance</th>
+                        <th>Tradability</th>
+                        <th>Timing</th>
+                        <th>Reason</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    ${candidates.slice(0, 10).map(item => `
+                        <tr>
+                            <td>${badge(item.included ? "yes" : "no", item.included ? "ok" : "disabled")}</td>
+                            <td class="title-cell">${escapeText(item.title || item.groupKey || "-")}</td>
+                            <td>${badge(item.priority || "NONE", item.priority || "disabled")}</td>
+                            <td>${badge(item.dealRelevance || "UNKNOWN", item.dealRelevance || "disabled")}</td>
+                            <td>${badge(item.tradability || "UNKNOWN", item.tradability || "disabled")}</td>
+                            <td>${badge(item.dealTiming || "UNKNOWN", item.dealTiming || "disabled")}</td>
+                            <td class="small-cell">${escapeText(item.reasonIncluded || item.reasonExcluded || "-")}</td>
+                        </tr>
+                    `).join("")}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
     async function runBatchAiReview() {
         try {
             setBusy(batchAiReviewButton, true, "Running AI");
-            batchAiReviewStatus.textContent = "Running manual AI review for filtered promising Deal Groups...";
+            batchAiReviewStatus.textContent = "Running manual AI review for strict Deal Group candidates...";
             state.batchAiReviewResult = await postJson("/api/deal-groups/ai-review/batch", {
                 limit: Number(batchAiLimitSelect.value) || 10,
                 skipAlreadyReviewed: true,
-                minPriority: "HIGH",
+                minPriority: "MEDIUM",
                 onlyPromising: true
             });
             const result = state.batchAiReviewResult;
@@ -3197,7 +3281,7 @@
             batchAiReviewStatus.textContent = "Batch AI review did not run.";
             showError("Batch AI review", error.message);
         } finally {
-            setBusy(batchAiReviewButton, false, "Run AI Review for candidates");
+            setBusy(batchAiReviewButton, false, "Run AI Review for strict candidates");
         }
     }
 

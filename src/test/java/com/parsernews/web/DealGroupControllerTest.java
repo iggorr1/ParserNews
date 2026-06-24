@@ -261,6 +261,9 @@ class DealGroupControllerTest {
 
         mockMvc.perform(post("/api/deal-groups/ai-review/batch"))
                 .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/deal-groups/ai-review/batch-candidates"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -294,10 +297,55 @@ class DealGroupControllerTest {
     }
 
     @Test
+    void batchAiReviewPreviewReturnsCandidatesWithoutOpenAiCall() throws Exception {
+        when(dealGroupAiReviewService.previewBatchCandidates(any()))
+                .thenReturn(new DealGroupAiReviewService.BatchCandidatePreviewResponse(
+                        25,
+                        1,
+                        1,
+                        List.of(
+                                new DealGroupAiReviewService.BatchCandidatePreviewItem(
+                                        "target-ticker:APGE",
+                                        "AbbVie to Acquire Apogee",
+                                        SignalInboxController.UnifiedPriority.HIGH,
+                                        com.parsernews.model.DealRelevance.PUBLIC_CASH_ACQUISITION,
+                                        com.parsernews.model.Tradability.HIGH,
+                                        com.parsernews.model.DealTiming.EARLY,
+                                        true,
+                                        "Strict candidate.",
+                                        null
+                                ),
+                                new DealGroupAiReviewService.BatchCandidatePreviewItem(
+                                        "private-target",
+                                        "Private target deal",
+                                        SignalInboxController.UnifiedPriority.HIGH,
+                                        com.parsernews.model.DealRelevance.PRIVATE_COMPANY_ACQUISITION,
+                                        com.parsernews.model.Tradability.NOT_TRADABLE,
+                                        com.parsernews.model.DealTiming.EARLY,
+                                        false,
+                                        null,
+                                        "Tradability is not HIGH or MEDIUM."
+                                )
+                        )
+                ));
+
+        mockMvc.perform(get("/api/deal-groups/ai-review/batch-candidates?limit=25")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.eligibleCount").value(1))
+                .andExpect(jsonPath("$.candidates[0].included").value(true))
+                .andExpect(jsonPath("$.candidates[0].groupKey").value("target-ticker:APGE"))
+                .andExpect(jsonPath("$.candidates[1].included").value(false));
+    }
+
+    @Test
     void aiReviewSummaryEndpointReturnsCounts() throws Exception {
         when(dealGroupAiReviewService.summary())
                 .thenReturn(new DealGroupAiReviewService.AiReviewSummaryResponse(
                         2,
+                        3,
+                        2,
+                        1,
                         1,
                         1,
                         0,
@@ -321,6 +369,9 @@ class DealGroupControllerTest {
                         .with(httpBasic("tester", "secret")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalAiReviewed").value(2))
+                .andExpect(jsonPath("$.totalAiReviewsSaved").value(3))
+                .andExpect(jsonPath("$.uniqueGroupsReviewed").value(2))
+                .andExpect(jsonPath("$.duplicateHistoricalReviewsIgnored").value(1))
                 .andExpect(jsonPath("$.goodSignalCount").value(1))
                 .andExpect(jsonPath("$.latestReviews[0].groupKey").value("target-ticker:APGE"));
     }

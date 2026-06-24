@@ -14,6 +14,7 @@ import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.web.SignalInboxController;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
 import java.util.List;
@@ -268,6 +269,39 @@ class DealGroupAiReviewServiceTest {
     }
 
     @Test
+    void previewSelectionIsStrictAndDoesNotCallOpenAi() {
+        DealGroupingService.DealGroupResponse good = group(
+                "target-ticker:APGE",
+                "AbbVie to Acquire Apogee",
+                "AbbVie Inc.",
+                "Apogee Therapeutics",
+                "ABBV",
+                "APGE",
+                DealRelevance.PUBLIC_CASH_ACQUISITION,
+                Tradability.HIGH
+        );
+        when(dealGroupingService.groups(null, null, 200)).thenReturn(List.of(
+                good,
+                groupWithSignals("private-target", DealRelevance.PRIVATE_COMPANY_ACQUISITION, Tradability.NOT_TRADABLE, DealStage.DEFINITIVE_AGREEMENT, DealTiming.EARLY, ManualReviewStatus.PENDING, null, List.of("private company target")),
+                groupWithSignals("law-alert", DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT, Tradability.NOT_TRADABLE, DealStage.LITIGATION_OR_LAW_FIRM_UPDATE, DealTiming.NOISE, ManualReviewStatus.PENDING, null, List.of("law firm alert")),
+                groupWithSignals("not-tradable", DealRelevance.NOT_TRADABLE, Tradability.NOT_TRADABLE, DealStage.DEFINITIVE_AGREEMENT, DealTiming.EARLY, ManualReviewStatus.PENDING, null, List.of("not tradable")),
+                groupWithSignals("late-stage", DealRelevance.PUBLIC_CASH_ACQUISITION, Tradability.HIGH, DealStage.DEFINITIVE_AGREEMENT, DealTiming.LATE_STAGE, ManualReviewStatus.PENDING, null, List.of()),
+                groupWithSignals("no-public-target", DealRelevance.PUBLIC_CASH_ACQUISITION, Tradability.HIGH, DealStage.DEFINITIVE_AGREEMENT, DealTiming.EARLY, ManualReviewStatus.PENDING, null, List.of(), null, null)
+        ));
+        DealGroupAiReviewService service = service(true, "test-key");
+
+        DealGroupAiReviewService.BatchCandidatePreviewResponse response = service.previewBatchCandidates(new DealGroupAiReviewService.BatchCandidatePreviewRequest(25, true, SignalInboxController.UnifiedPriority.MEDIUM, true));
+
+        assertThat(response.eligibleCount()).isEqualTo(1);
+        assertThat(response.candidates()).filteredOn(DealGroupAiReviewService.BatchCandidatePreviewItem::included)
+                .extracting(DealGroupAiReviewService.BatchCandidatePreviewItem::groupKey)
+                .containsExactly("target-ticker:APGE");
+        assertThat(response.candidates()).filteredOn(item -> !item.included())
+                .allMatch(item -> item.reasonExcluded() != null && !item.reasonExcluded().isBlank());
+        verify(client, never()).reviewDealGroup(any(), any(), any(), any());
+    }
+
+    @Test
     void batchRespectsLimitAndSkipsAlreadyReviewedGroups() {
         when(dealGroupingService.groups(null, null, 200)).thenReturn(List.of(
                 groupWithSignals("already-reviewed", DealRelevance.PUBLIC_CASH_ACQUISITION, Tradability.HIGH, DealStage.DEFINITIVE_AGREEMENT, DealTiming.EARLY, ManualReviewStatus.PENDING, null, List.of()),
@@ -289,7 +323,19 @@ class DealGroupAiReviewServiceTest {
 
     @Test
     void summaryReturnsVerdictAndConfidenceCounts() {
-        DealGroupAiReviewEntity good = new DealGroupAiReviewEntity(
+        DealGroupAiReviewEntity oldGood = new DealGroupAiReviewEntity(
+                "good-group",
+                "gpt-4.1-mini",
+                AiReviewVerdict.NEEDS_HUMAN_REVIEW,
+                AiReviewConfidence.LOW,
+                false,
+                ManualReviewStatus.PENDING,
+                ManualReviewReason.OTHER,
+                "Older review should be ignored.",
+                "",
+                "{}"
+        );
+        DealGroupAiReviewEntity latestGood = new DealGroupAiReviewEntity(
                 "good-group",
                 "gpt-4.1-mini",
                 AiReviewVerdict.GOOD_SIGNAL,
@@ -297,7 +343,7 @@ class DealGroupAiReviewServiceTest {
                 true,
                 ManualReviewStatus.USEFUL,
                 ManualReviewReason.GOOD_SIGNAL,
-                "Good public target signal.",
+                "Latest good public target signal.",
                 "",
                 "{}"
         );
@@ -313,8 +359,10 @@ class DealGroupAiReviewServiceTest {
                 "",
                 "{}"
         );
-        when(repository.findAll()).thenReturn(List.of(good, notTradable));
-        when(repository.findTop10ByOrderByCreatedAtDesc()).thenReturn(List.of(good, notTradable));
+        setCreatedAt(oldGood, "2026-06-20T12:00:00Z");
+        setCreatedAt(latestGood, "2026-06-20T12:05:00Z");
+        setCreatedAt(notTradable, "2026-06-20T12:03:00Z");
+        when(repository.findAll()).thenReturn(List.of(oldGood, latestGood, notTradable));
         when(dealGroupingService.groups(null, null, 200)).thenReturn(List.of(
                 groupWithSignals("good-group", DealRelevance.PUBLIC_CASH_ACQUISITION, Tradability.HIGH, DealStage.DEFINITIVE_AGREEMENT, DealTiming.EARLY, ManualReviewStatus.PENDING, null, List.of()),
                 groupWithSignals("private-group", DealRelevance.PRIVATE_COMPANY_ACQUISITION, Tradability.NOT_TRADABLE, DealStage.DEFINITIVE_AGREEMENT, DealTiming.EARLY, ManualReviewStatus.PENDING, null, List.of())
@@ -323,11 +371,16 @@ class DealGroupAiReviewServiceTest {
         DealGroupAiReviewService.AiReviewSummaryResponse response = service(true, "test-key").summary();
 
         assertThat(response.totalAiReviewed()).isEqualTo(2);
+        assertThat(response.totalAiReviewsSaved()).isEqualTo(3);
+        assertThat(response.uniqueGroupsReviewed()).isEqualTo(2);
+        assertThat(response.duplicateHistoricalReviewsIgnored()).isEqualTo(1);
         assertThat(response.goodSignalCount()).isEqualTo(1);
         assertThat(response.notTradableCount()).isEqualTo(1);
         assertThat(response.highConfidenceCount()).isEqualTo(1);
         assertThat(response.mediumConfidenceCount()).isEqualTo(1);
         assertThat(response.latestReviews()).hasSize(2);
+        assertThat(response.latestReviews()).extracting(DealGroupAiReviewService.LatestAiReviewSummary::groupKey)
+                .containsExactly("good-group", "private-group");
     }
 
     private DealGroupAiReviewService service(boolean enabled, String apiKey) {
@@ -362,6 +415,23 @@ class DealGroupAiReviewServiceTest {
             ManualReviewReason reason,
             List<String> warnings
     ) {
+        return groupWithSignals(groupKey, relevance, tradability, stage, timing, status, reason, warnings,
+                relevance == DealRelevance.PRIVATE_COMPANY_ACQUISITION ? null : "TGT",
+                relevance == DealRelevance.PRIVATE_COMPANY_ACQUISITION ? null : "123456");
+    }
+
+    private DealGroupingService.DealGroupResponse groupWithSignals(
+            String groupKey,
+            DealRelevance relevance,
+            Tradability tradability,
+            DealStage stage,
+            DealTiming timing,
+            ManualReviewStatus status,
+            ManualReviewReason reason,
+            List<String> warnings,
+            String targetTicker,
+            String targetCik
+    ) {
         return new DealGroupingService.DealGroupResponse(
                 groupKey,
                 SignalInboxController.SourceType.RSS_NEWS,
@@ -369,8 +439,8 @@ class DealGroupAiReviewServiceTest {
                 "Test Deal Group " + groupKey,
                 "Buyer Corp.",
                 "Target Corp.",
-                relevance == DealRelevance.PRIVATE_COMPANY_ACQUISITION ? null : "TGT",
-                relevance == DealRelevance.PRIVATE_COMPANY_ACQUISITION ? null : "123456",
+                targetTicker,
+                targetCik,
                 "BUY",
                 "654321",
                 SignalInboxController.UnifiedPriority.HIGH,
@@ -398,6 +468,10 @@ class DealGroupAiReviewServiceTest {
                 warnings,
                 Instant.parse("2026-06-20T12:00:00Z")
         );
+    }
+
+    private void setCreatedAt(DealGroupAiReviewEntity entity, String value) {
+        ReflectionTestUtils.setField(entity, "createdAt", Instant.parse(value));
     }
 
     private DealGroupingService.DealGroupResponse group(

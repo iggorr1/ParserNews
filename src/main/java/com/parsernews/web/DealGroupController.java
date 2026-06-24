@@ -107,6 +107,22 @@ public class DealGroupController {
         return dealGroupAiReviewService.batchReview(request);
     }
 
+    @GetMapping("/api/deal-groups/ai-review/batch-candidates")
+    @Transactional(readOnly = true)
+    public DealGroupAiReviewService.BatchCandidatePreviewResponse batchAiReviewCandidates(
+            @RequestParam(defaultValue = "25") int limit,
+            @RequestParam(defaultValue = "true") boolean skipAlreadyReviewed,
+            @RequestParam(defaultValue = "MEDIUM") UnifiedPriority minPriority,
+            @RequestParam(defaultValue = "true") boolean onlyPromising
+    ) {
+        return dealGroupAiReviewService.previewBatchCandidates(new DealGroupAiReviewService.BatchCandidatePreviewRequest(
+                limit,
+                skipAlreadyReviewed,
+                minPriority,
+                onlyPromising
+        ));
+    }
+
     @GetMapping(value = "/api/deal-groups/export.csv", produces = "text/csv")
     @Transactional(readOnly = true)
     public ResponseEntity<String> exportDealGroupsCsv(
