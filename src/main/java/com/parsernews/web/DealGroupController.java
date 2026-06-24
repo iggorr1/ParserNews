@@ -93,6 +93,20 @@ public class DealGroupController {
         );
     }
 
+    @GetMapping("/api/deal-groups/ai-review/summary")
+    @Transactional(readOnly = true)
+    public DealGroupAiReviewService.AiReviewSummaryResponse aiReviewSummary() {
+        return dealGroupAiReviewService.summary();
+    }
+
+    @PostMapping("/api/deal-groups/ai-review/batch")
+    @Transactional
+    public DealGroupAiReviewService.BatchAiReviewResponse batchAiReview(
+            @RequestBody(required = false) DealGroupAiReviewService.BatchAiReviewRequest request
+    ) {
+        return dealGroupAiReviewService.batchReview(request);
+    }
+
     @GetMapping(value = "/api/deal-groups/export.csv", produces = "text/csv")
     @Transactional(readOnly = true)
     public ResponseEntity<String> exportDealGroupsCsv(

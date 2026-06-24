@@ -6,19 +6,20 @@
     <title>ParserNews Dashboard</title>
     <style>
         :root {
-            --bg: #f4f6f8;
+            --bg: #f5f7fa;
             --panel: #ffffff;
-            --text: #1f2933;
-            --muted: #667085;
-            --line: #d8dee7;
-            --ok: #12715b;
-            --warn: #9a5b00;
-            --danger: #a63333;
-            --info: #2459a6;
-            --soft-ok: #e6f4ef;
-            --soft-warn: #fff2d8;
-            --soft-danger: #fde8e8;
-            --soft-info: #e8f0fe;
+            --text: #121820;
+            --muted: #697586;
+            --line: #dde4ee;
+            --ok: #0f6b55;
+            --warn: #8a5a00;
+            --danger: #a43d3d;
+            --info: #265f9f;
+            --soft-ok: #e9f6f1;
+            --soft-warn: #fff4dc;
+            --soft-danger: #fdecec;
+            --soft-info: #eaf2fb;
+            --shadow: 0 18px 50px rgba(18, 24, 32, 0.08);
         }
 
         * {
@@ -27,17 +28,20 @@
 
         body {
             margin: 0;
-            background: var(--bg);
+            background:
+                    radial-gradient(circle at top left, rgba(38, 95, 159, 0.08), transparent 32rem),
+                    linear-gradient(180deg, #ffffff 0%, var(--bg) 22rem);
             color: var(--text);
-            font-family: Arial, Helvetica, sans-serif;
+            font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif;
             font-size: 14px;
             line-height: 1.45;
         }
 
         header {
-            background: var(--panel);
-            border-bottom: 1px solid var(--line);
-            padding: 18px 24px;
+            background: rgba(255, 255, 255, 0.82);
+            border-bottom: 1px solid rgba(221, 228, 238, 0.75);
+            padding: 22px 28px;
+            backdrop-filter: blur(18px);
         }
 
         h1 {
@@ -63,7 +67,7 @@
         }
 
         main {
-            padding: 18px 24px 28px;
+            padding: 20px 28px 32px;
         }
 
         .topbar {
@@ -142,7 +146,8 @@
         }
 
         button,
-        .button {
+        .button,
+        .button-link {
             min-height: 34px;
             border: 1px solid var(--line);
             border-radius: 6px;
@@ -158,10 +163,20 @@
             gap: 6px;
         }
 
+        .button-link {
+            width: fit-content;
+            color: var(--text);
+        }
+
         button.primary {
-            border-color: #155d4e;
-            background: #16735f;
+            border-color: #0f6b55;
+            background: #121820;
             color: #ffffff;
+        }
+
+        button.subtle,
+        .button.subtle {
+            background: #f7f9fc;
         }
 
         button:disabled {
@@ -185,15 +200,16 @@
 
         .panel {
             background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 8px;
-            padding: 14px;
+            border: 1px solid rgba(221, 228, 238, 0.88);
+            border-radius: 12px;
+            padding: 16px;
             min-width: 0;
+            box-shadow: 0 1px 2px rgba(18, 24, 32, 0.03);
         }
 
         .action-center {
-            border-color: #b8d8cf;
-            background: linear-gradient(180deg, #ffffff 0%, #f5fbf9 100%);
+            border-color: rgba(15, 107, 85, 0.22);
+            background: linear-gradient(135deg, #ffffff 0%, #f7fbfa 100%);
             margin-bottom: 16px;
         }
 
@@ -287,13 +303,224 @@
             display: inline-flex;
             align-items: center;
             border-radius: 999px;
-            padding: 3px 8px;
+            padding: 4px 9px;
             font-size: 12px;
             font-weight: 700;
             border: 1px solid var(--line);
             background: #f8fafc;
             color: var(--muted);
             white-space: nowrap;
+        }
+
+        .section-kicker {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .deal-workspace {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(360px, 430px);
+            gap: 16px;
+            align-items: start;
+        }
+
+        .deal-main {
+            min-width: 0;
+        }
+
+        .deal-side-panel {
+            position: sticky;
+            top: 16px;
+            display: grid;
+            gap: 12px;
+            max-height: calc(100vh - 32px);
+            overflow: auto;
+        }
+
+        .deal-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .deal-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 14px;
+            padding: 14px;
+            border: 1px solid rgba(221, 228, 238, 0.86);
+            border-radius: 10px;
+            background: #ffffff;
+            cursor: pointer;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+        }
+
+        .deal-row:hover,
+        .deal-row.selected {
+            border-color: rgba(18, 24, 32, 0.22);
+            box-shadow: var(--shadow);
+            transform: translateY(-1px);
+        }
+
+        .deal-row-title {
+            font-size: 15px;
+            font-weight: 760;
+            margin-bottom: 7px;
+        }
+
+        .deal-row-meta,
+        .deal-row-footer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            align-items: center;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .deal-row-side {
+            display: grid;
+            gap: 8px;
+            justify-items: end;
+            align-content: start;
+        }
+
+        .side-card {
+            border: 1px solid rgba(221, 228, 238, 0.88);
+            border-radius: 12px;
+            background: #ffffff;
+            padding: 14px;
+        }
+
+        .side-card.highlight {
+            background: linear-gradient(180deg, #ffffff 0%, #f9fbfe 100%);
+        }
+
+        .side-card-title {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .side-card-title strong {
+            font-size: 14px;
+        }
+
+        .detail-title {
+            font-size: 17px;
+            font-weight: 760;
+            margin: 8px 0 10px;
+        }
+
+        .mini-actions {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .mini-actions button {
+            min-height: 32px;
+            padding: 6px 8px;
+        }
+
+        .ai-card {
+            background: linear-gradient(135deg, #111827 0%, #1f3a5f 100%);
+            color: #ffffff;
+            border-color: rgba(255, 255, 255, 0.14);
+        }
+
+        .ai-card .muted,
+        .ai-card .small-cell,
+        .ai-card .kv span {
+            color: rgba(255, 255, 255, 0.72);
+        }
+
+        .ai-card input {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.22);
+            color: #ffffff;
+        }
+
+        .ai-card button {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.22);
+            color: #ffffff;
+        }
+
+        .settings-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(18, 24, 32, 0.28);
+            backdrop-filter: blur(6px);
+            display: grid;
+            justify-items: end;
+        }
+
+        .settings-overlay[hidden] {
+            display: none;
+        }
+
+        .settings-drawer {
+            width: min(720px, 100%);
+            height: 100%;
+            overflow: auto;
+            background: #f8fafc;
+            border-left: 1px solid rgba(221, 228, 238, 0.95);
+            box-shadow: -24px 0 70px rgba(18, 24, 32, 0.18);
+            padding: 22px;
+        }
+
+        .settings-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        .settings-card {
+            border: 1px solid rgba(221, 228, 238, 0.95);
+            border-radius: 14px;
+            background: #ffffff;
+            padding: 16px;
+        }
+
+        .settings-card.ai-card {
+            border-color: rgba(255, 255, 255, 0.14);
+        }
+
+        .ai-summary-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .ai-summary-cell {
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 8px;
+            min-width: 0;
+        }
+
+        .ai-summary-cell span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .ai-summary-cell strong {
+            display: block;
+            font-size: 18px;
+        }
+
+        .advanced-stack {
+            display: grid;
+            gap: 14px;
+            margin-top: 12px;
         }
 
         .badge.ok,
@@ -682,6 +909,15 @@
             .span-7 {
                 grid-column: span 6;
             }
+
+            .deal-workspace {
+                grid-template-columns: 1fr;
+            }
+
+            .deal-side-panel {
+                position: static;
+                max-height: none;
+            }
         }
 
         @media (max-width: 760px) {
@@ -734,10 +970,113 @@
             <button id="refreshButton" type="button">Refresh dashboard</button>
             <button id="scanButton" class="primary" type="button">Run manual scan</button>
             <button id="dryRunButton" type="button">Run alert dry-run</button>
+            <button id="settingsButton" type="button">Integrations</button>
             <a class="button" href="/api/report.csv">Report CSV</a>
             <a class="button" href="/api/mismatches.csv">Mismatches</a>
         </div>
     </section>
+
+    <div id="integrationsDrawer" class="settings-overlay" hidden>
+        <aside class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="integrationsTitle">
+            <div class="panel-head">
+                <div>
+                    <div class="section-kicker">Settings</div>
+                    <h2 id="integrationsTitle">Integrations</h2>
+                    <div class="muted">Manual-only controls for AI, Telegram, scheduler visibility, and safety.</div>
+                </div>
+                <button id="settingsCloseButton" type="button">Close</button>
+            </div>
+            <div class="settings-grid">
+                <section class="settings-card ai-card">
+                    <div class="panel-head">
+                        <div>
+                            <div class="section-kicker">AI Assistant</div>
+                            <h2>OpenAI AI Review</h2>
+                            <div class="muted">Manual-only Deal Group review. No auto-run, no Telegram send, no trading action.</div>
+                        </div>
+                        <span class="badge disabled" id="openAiSettingsBadge">disabled</span>
+                    </div>
+                    <div class="small-cell">
+                        API key is sent to the backend and stored only in memory for this app process. It is not saved to git, browser storage, .env, or the database.
+                    </div>
+                    <div class="kv" id="openAiSettingsStatus" style="margin-top: 12px;"></div>
+                    <div class="filters" style="grid-template-columns: 1fr 1fr; margin-top: 12px;">
+                        <label class="toggle">
+                            <input type="checkbox" id="openAiEnabledInput">
+                            Enable OpenAI AI Review
+                        </label>
+                        <div class="control">
+                            <label for="openAiApiKeyInput">OpenAI API key</label>
+                            <input id="openAiApiKeyInput" type="password" autocomplete="off" placeholder="OpenAI API key">
+                        </div>
+                        <div class="control">
+                            <label for="openAiModelInput">Model</label>
+                            <input id="openAiModelInput" placeholder="gpt-4.1-mini">
+                        </div>
+                        <div class="control">
+                            <label for="openAiMaxInputCharsInput">Max input chars</label>
+                            <input id="openAiMaxInputCharsInput" type="number" min="1000" step="500" placeholder="12000">
+                        </div>
+                    </div>
+                    <div class="actions compact-actions">
+                        <button id="openAiSettingsSaveButton" type="button">Save AI settings</button>
+                        <button id="openAiSettingsClearButton" type="button">Clear runtime key</button>
+                        <span class="muted" id="openAiSettingsMessage"></span>
+                    </div>
+                </section>
+                <section class="settings-card">
+                    <div class="panel-head">
+                        <div>
+                            <div class="section-kicker">AI Assistant</div>
+                            <h2>AI Summary</h2>
+                            <div class="muted">Saved manual AI reviews for Deal Groups.</div>
+                        </div>
+                        <button id="aiSummaryRefreshButton" type="button">Refresh summary</button>
+                    </div>
+                    <div id="aiReviewSummary" class="muted">AI summary has not loaded yet.</div>
+                </section>
+                <section class="settings-card">
+                    <div class="panel-head">
+                        <div>
+                            <div class="section-kicker">Telegram</div>
+                            <h2>Manual Telegram</h2>
+                            <div class="muted">Telegram stays manual-only. No automatic dispatch is enabled from this panel.</div>
+                        </div>
+                        <span class="badge disabled" id="telegramSettingsBadge">disabled</span>
+                    </div>
+                    <div id="telegramSettingsStatus" class="kv"></div>
+                </section>
+                <section class="settings-card">
+                    <div class="panel-head">
+                        <div>
+                            <div class="section-kicker">Scheduler</div>
+                            <h2>Schedulers</h2>
+                            <div class="muted">RSS auto scan and optional Full Refresh scheduler status.</div>
+                        </div>
+                        <span class="badge disabled" id="schedulerSettingsBadge">manual</span>
+                    </div>
+                    <div id="schedulerSettingsStatus" class="kv"></div>
+                </section>
+                <section class="settings-card">
+                    <div class="panel-head">
+                        <div>
+                            <div class="section-kicker">Safety</div>
+                            <h2>Safety Defaults</h2>
+                            <div class="muted">ParserNews remains a research and review tool.</div>
+                        </div>
+                        <span class="badge ok">safe mode</span>
+                    </div>
+                    <div class="badge-row">
+                        <span class="badge disabled">no trading</span>
+                        <span class="badge disabled">no auto Telegram</span>
+                        <span class="badge disabled">AI manual-only</span>
+                        <span class="badge disabled">secrets server-side</span>
+                    </div>
+                    <div class="kv" id="safetySettingsStatus"></div>
+                </section>
+            </div>
+        </aside>
+    </div>
 
     <details class="panel preview-details">
         <summary class="preview-header">
@@ -913,7 +1252,7 @@
             <div>
                 <div class="workflow-label">Primary workflow</div>
                 <h2>Deal Groups</h2>
-                <div class="muted">Grouped deal-level view that links related RSS and SEC evidence without hiding original records.</div>
+                <div class="muted">Click a deal to review evidence, AI analysis, Telegram preview, and manual feedback in one place.</div>
             </div>
             <span class="badge" id="dealGroupCount">0</span>
         </div>
@@ -937,51 +1276,79 @@
                     <option>IGNORED</option>
                 </select>
             </div>
-            <a id="exportDealGroupsCsv" class="button-link" href="/api/deal-groups/export.csv">Export Deal Groups CSV</a>
-        </div>
-        <div class="notice" style="margin-bottom: 12px;">
-            <div class="panel-head" style="margin-bottom: 8px;">
-                <div>
-                    <strong>Deal Group Quality</strong>
-                    <div class="muted">Manual feedback and classification mix for grouped signals.</div>
-                </div>
-                <span class="badge" id="dealGroupQualityBadge">0 groups</span>
+            <div class="control">
+                <label for="batchAiLimitSelect">AI batch limit</label>
+                <select id="batchAiLimitSelect">
+                    <option value="5">5</option>
+                    <option value="10" selected>10</option>
+                    <option value="25">25</option>
+                </select>
             </div>
-            <div id="dealGroupQuality" class="kv"></div>
-            <div id="dealGroupNoisyReasons" class="chip-list" style="margin-top: 8px;"></div>
+            <button id="batchAiReviewButton" type="button">Run AI Review for candidates</button>
+            <a id="exportDealGroupsCsv" class="button-link" href="/api/deal-groups/export.csv">Export Deal Groups CSV</a>
+            <span class="muted" id="batchAiReviewStatus">Manual-only. Reviews filtered promising deal groups.</span>
         </div>
-        <div class="table-wrap" style="margin-bottom: 12px;">
-            <table>
-                <thead>
-                <tr>
-                    <th>Deal</th>
-                    <th>Buyer / Target</th>
-                    <th>Priority</th>
-                    <th>Strategy</th>
-                    <th>Evidence</th>
-                    <th>Review</th>
-                    <th>Actions</th>
-                </tr>
-                </thead>
-                <tbody id="dealGroups"></tbody>
-            </table>
+        <div class="deal-workspace">
+            <div class="deal-main">
+                <div class="notice" style="margin-bottom: 12px;">
+                    <div class="panel-head" style="margin-bottom: 8px;">
+                        <div>
+                            <strong>AI Review Summary</strong>
+                            <div class="muted">Manual OpenAI reviews already saved for Deal Groups.</div>
+                        </div>
+                        <span class="badge disabled" id="aiReviewSummaryBadge">0 reviewed</span>
+                    </div>
+                    <div id="aiReviewSummaryInline" class="kv"></div>
+                </div>
+                <div class="notice" style="margin-bottom: 12px;">
+                    <div class="panel-head" style="margin-bottom: 8px;">
+                        <div>
+                            <strong>Deal Group Quality</strong>
+                            <div class="muted">Manual feedback and classification mix for grouped signals.</div>
+                        </div>
+                        <span class="badge" id="dealGroupQualityBadge">0 groups</span>
+                    </div>
+                    <div id="dealGroupQuality" class="kv"></div>
+                    <div id="dealGroupNoisyReasons" class="chip-list" style="margin-top: 8px;"></div>
+                </div>
+                <div id="dealGroups" class="deal-list"></div>
+            </div>
+            <aside class="deal-side-panel">
+                <section class="side-card highlight" id="dealGroupDetailsPanel">
+                    <div class="side-card-title">
+                        <strong>Deal evidence</strong>
+                        <span class="badge disabled" id="dealGroupDetailsStatus">not loaded</span>
+                    </div>
+                    <div id="dealGroupDetails" class="muted">Select a deal group to inspect related RSS and SEC evidence.</div>
+                </section>
+                <section class="side-card" id="dealGroupAiReviewPanel">
+                    <div class="side-card-title">
+                        <strong>AI Review</strong>
+                        <span class="badge disabled" id="dealGroupAiReviewStatus">disabled</span>
+                    </div>
+                    <div id="dealGroupAiReview" class="muted">Select AI Review on a deal group to run optional OpenAI analysis.</div>
+                </section>
+                <section class="side-card" id="dealGroupTelegramPanel">
+                    <div class="side-card-title">
+                        <strong>Telegram</strong>
+                        <span class="badge disabled" id="dealGroupTelegramStatus">not loaded</span>
+                    </div>
+                    <div id="dealGroupTelegramPreview" class="muted">Preview or manually send a selected deal group. Telegram remains disabled unless configured.</div>
+                </section>
+            </aside>
         </div>
-        <details class="preview-details" id="dealGroupDetailsPanel">
-            <summary class="preview-header">
-                <span>Deal Group Evidence</span>
-                <span class="badge disabled" id="dealGroupDetailsStatus">not loaded</span>
-            </summary>
-            <div id="dealGroupDetails" class="notice">Select Details on a deal group to inspect related RSS and SEC evidence.</div>
-        </details>
-        <details class="preview-details" id="dealGroupAiReviewPanel">
-            <summary class="preview-header">
-                <span>AI Review</span>
-                <span class="badge disabled" id="dealGroupAiReviewStatus">disabled</span>
-            </summary>
-            <div id="dealGroupAiReview" class="notice">Select AI Review on a deal group to run optional OpenAI analysis.</div>
-        </details>
     </section>
 
+    <details class="panel review-quality">
+        <summary class="section-summary panel-head">
+            <div>
+                <div class="section-kicker">Advanced tools</div>
+                <h2>Settings, raw feeds, and diagnostics</h2>
+                <div class="muted">Secondary views remain available, but Deal Groups are the daily workspace.</div>
+            </div>
+            <span class="badge disabled">collapsed</span>
+        </summary>
+        <div class="advanced-stack">
     <details class="panel review-quality">
         <summary class="section-summary panel-head">
             <div>
@@ -1050,41 +1417,6 @@
             </summary>
             <div id="signalDetails" class="notice">Select Details on a signal to inspect evidence, warnings, review state, and Telegram preview actions.</div>
         </details>
-    </details>
-
-    <details class="panel review-quality">
-        <summary class="section-summary panel-head">
-            <div>
-                <h2>OpenAI AI Review Settings</h2>
-                <div class="muted">Advanced tools. Manual-only Deal Group review; no auto-run and no Telegram send.</div>
-            </div>
-            <span class="badge disabled" id="openAiSettingsBadge">disabled</span>
-        </summary>
-        <div class="notice">
-            API key is sent to the backend and stored only in memory for this app process. It is not saved to git, browser storage, .env, or the database.
-        </div>
-        <div class="kv" id="openAiSettingsStatus" style="margin-top: 12px;"></div>
-        <div class="filters" style="margin-top: 12px;">
-            <label class="toggle">
-                <input type="checkbox" id="openAiEnabledInput">
-                Enable OpenAI AI Review
-            </label>
-            <div class="control">
-                <label for="openAiApiKeyInput">OpenAI API key</label>
-                <input id="openAiApiKeyInput" type="password" autocomplete="off" placeholder="OpenAI API key">
-            </div>
-            <div class="control">
-                <label for="openAiModelInput">Model</label>
-                <input id="openAiModelInput" placeholder="gpt-4.1-mini">
-            </div>
-            <div class="control">
-                <label for="openAiMaxInputCharsInput">Max input chars</label>
-                <input id="openAiMaxInputCharsInput" type="number" min="1000" step="500" placeholder="12000">
-            </div>
-            <button id="openAiSettingsSaveButton" type="button">Save AI settings</button>
-            <button id="openAiSettingsClearButton" type="button">Clear runtime key</button>
-            <span class="muted" id="openAiSettingsMessage"></span>
-        </div>
     </details>
 
     <details class="panel source-quality">
@@ -1444,6 +1776,8 @@
             </section>
         </details>
     </section>
+        </div>
+    </details>
 </main>
 
 <script>
@@ -1466,15 +1800,22 @@
         dealGroupStats: null,
         dealGroupDetails: null,
         dealGroupAiReview: null,
+        dealGroupAiReviewSummary: null,
+        batchAiReviewResult: null,
+        dealGroupTelegramPreview: null,
         openAiSettings: null,
         telegramPreview: null,
         signalDetails: null,
         fullRefreshResult: null,
         selectedPreviewId: null,
+        selectedDealGroupKey: null,
         autoRefreshTimer: null
     };
 
     const refreshButton = document.querySelector("#refreshButton");
+    const settingsButton = document.querySelector("#settingsButton");
+    const settingsCloseButton = document.querySelector("#settingsCloseButton");
+    const integrationsDrawer = document.querySelector("#integrationsDrawer");
     const scanButton = document.querySelector("#scanButton");
     const scanButtonTop = document.querySelector("#scanButtonTop");
     const dryRunButton = document.querySelector("#dryRunButton");
@@ -1499,6 +1840,10 @@
     const openAiSettingsSaveButton = document.querySelector("#openAiSettingsSaveButton");
     const openAiSettingsClearButton = document.querySelector("#openAiSettingsClearButton");
     const openAiSettingsMessage = document.querySelector("#openAiSettingsMessage");
+    const aiSummaryRefreshButton = document.querySelector("#aiSummaryRefreshButton");
+    const batchAiLimitSelect = document.querySelector("#batchAiLimitSelect");
+    const batchAiReviewButton = document.querySelector("#batchAiReviewButton");
+    const batchAiReviewStatus = document.querySelector("#batchAiReviewStatus");
     const errors = document.querySelector("#errors");
     const searchInput = document.querySelector("#searchInput");
     const strengthFilter = document.querySelector("#strengthFilter");
@@ -1531,6 +1876,13 @@
     const exportDealGroupsCsv = document.querySelector("#exportDealGroupsCsv");
 
     refreshButton.addEventListener("click", loadDashboard);
+    settingsButton.addEventListener("click", openIntegrationsDrawer);
+    settingsCloseButton.addEventListener("click", closeIntegrationsDrawer);
+    integrationsDrawer.addEventListener("click", event => {
+        if (event.target === integrationsDrawer) {
+            closeIntegrationsDrawer();
+        }
+    });
     scanButton.addEventListener("click", runManualScan);
     scanButtonTop.addEventListener("click", runManualScan);
     dryRunButton.addEventListener("click", runDryRun);
@@ -1543,6 +1895,8 @@
     secCompanyLookupButton.addEventListener("click", searchSecCompanyLookup);
     openAiSettingsSaveButton.addEventListener("click", saveOpenAiSettings);
     openAiSettingsClearButton.addEventListener("click", clearOpenAiRuntimeKey);
+    aiSummaryRefreshButton.addEventListener("click", loadAiReviewSummary);
+    batchAiReviewButton.addEventListener("click", runBatchAiReview);
     secCompanyLookupInput.addEventListener("keydown", event => {
         if (event.key === "Enter") {
             event.preventDefault();
@@ -1593,7 +1947,8 @@
             fetchJson("/api/deal-groups?limit=100"),
             fetchJson("/api/deal-groups/stats"),
             fetchJson("/api/admin/scheduler-status"),
-            fetchJson("/api/admin/openai-settings")
+            fetchJson("/api/admin/openai-settings"),
+            fetchJson("/api/deal-groups/ai-review/summary")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -1611,6 +1966,11 @@
         assignResult(results[13], "dealGroupStats", null, "Deal group stats");
         assignResult(results[14], "schedulerStatus", null, "Scheduler status");
         assignResult(results[15], "openAiSettings", null, "OpenAI settings");
+        assignResult(results[16], "dealGroupAiReviewSummary", null, "AI review summary");
+        if (!state.selectedDealGroupKey && state.dealGroups.length > 0) {
+            state.selectedDealGroupKey = state.dealGroups[0].groupKey;
+            state.dealGroupDetails = state.dealGroups[0];
+        }
         updateSourceFilter();
         lastUpdated.textContent = new Date().toLocaleString();
         render();
@@ -1653,8 +2013,17 @@
             ]);
             state.dealGroups = groups;
             state.dealGroupStats = stats;
+            if (state.selectedDealGroupKey && !groups.some(group => group.groupKey === state.selectedDealGroupKey)) {
+                state.selectedDealGroupKey = null;
+                state.dealGroupDetails = null;
+            }
+            if (!state.selectedDealGroupKey && groups.length > 0) {
+                state.selectedDealGroupKey = groups[0].groupKey;
+                state.dealGroupDetails = groups[0];
+            }
             renderDealGroups();
             renderDealGroupQuality();
+            renderDealGroupDetails();
         } catch (error) {
             showError("Deal groups", error.message);
         }
@@ -1945,10 +2314,11 @@
 
     async function loadDealGroupDetails(groupKey) {
         try {
+            state.selectedDealGroupKey = groupKey;
             state.dealGroupDetails = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}`);
             renderDealGroupDetails();
+            renderDealGroups();
             document.querySelector("#dealGroupDetailsPanel").open = true;
-            document.querySelector("#dealGroupDetailsPanel").scrollIntoView({behavior: "smooth", block: "start"});
         } catch (error) {
             showError("Deal group details", error.message);
         }
@@ -1979,7 +2349,7 @@
     async function previewDealGroupTelegram(groupKey) {
         try {
             const preview = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/telegram-preview`);
-            state.telegramPreview = {
+            state.dealGroupTelegramPreview = {
                 sourceType: "DEAL_GROUP",
                 id: preview.groupKey,
                 title: preview.title,
@@ -1989,9 +2359,7 @@
                 sendAllowed: false,
                 reason: "Deal group preview only. No Telegram message was sent."
             };
-            renderTelegramPreview();
-            document.querySelector("#telegramPreviewPanel").open = true;
-            document.querySelector("#telegramPreviewPanel").scrollIntoView({behavior: "smooth", block: "start"});
+            renderDealGroupTelegramPreview();
         } catch (error) {
             showError("Deal group Telegram preview", error.message);
         }
@@ -2001,7 +2369,7 @@
         try {
             const preview = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/telegram-preview`);
             const result = await postJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/send-telegram`);
-            state.telegramPreview = {
+            state.dealGroupTelegramPreview = {
                 sourceType: "DEAL_GROUP",
                 id: groupKey,
                 title: preview.title,
@@ -2013,9 +2381,7 @@
                 reason: result.message,
                 error: result.error
             };
-            renderTelegramPreview();
-            document.querySelector("#telegramPreviewPanel").open = true;
-            document.querySelector("#telegramPreviewPanel").scrollIntoView({behavior: "smooth", block: "start"});
+            renderDealGroupTelegramPreview();
         } catch (error) {
             showError("Deal group Telegram send", error.message);
         }
@@ -2094,7 +2460,10 @@
         renderDealGroups();
         renderDealGroupDetails();
         renderDealGroupAiReview();
+        renderAiReviewSummary();
+        renderDealGroupTelegramPreview();
         renderOpenAiSettings();
+        renderIntegrationSettings();
         renderSignalInbox();
         renderTelegramPreview();
         renderSignalDetails();
@@ -2186,6 +2555,46 @@
         document.querySelector("#dealGroupNoisyReasons").innerHTML = noisyReasons.length
             ? noisyReasons.map(([reason, count]) => `<span class="chip risk">${escapeText(reason)}: ${escapeText(count)}</span>`).join("")
             : `<span class="muted">No noisy group review reasons yet.</span>`;
+    }
+
+    function renderAiReviewSummary() {
+        const summary = state.dealGroupAiReviewSummary || {};
+        const total = summary.totalAiReviewed ?? 0;
+        document.querySelector("#aiReviewSummaryBadge").textContent = `${total} reviewed`;
+        const summaryHtml = kvRows([
+            ["Good signal", summary.goodSignalCount ?? 0],
+            ["Not tradable", summary.notTradableCount ?? 0],
+            ["Private company", summary.privateCompanyCount ?? 0],
+            ["False positive", summary.falsePositiveCount ?? 0],
+            ["Needs human review", summary.needsHumanReviewCount ?? 0],
+            ["Unknown", summary.unknownCount ?? 0],
+            ["High confidence", summary.highConfidenceCount ?? 0],
+            ["Medium confidence", summary.mediumConfidenceCount ?? 0],
+            ["Low confidence", summary.lowConfidenceCount ?? 0]
+        ]);
+        document.querySelector("#aiReviewSummaryInline").innerHTML = summaryHtml;
+        const latest = Array.isArray(summary.latestReviews) ? summary.latestReviews : [];
+        document.querySelector("#aiReviewSummary").innerHTML = `
+            <div class="ai-summary-grid">
+                <div class="ai-summary-cell"><span>Total</span><strong>${escapeText(total)}</strong></div>
+                <div class="ai-summary-cell"><span>Good signal</span><strong>${escapeText(summary.goodSignalCount ?? 0)}</strong></div>
+                <div class="ai-summary-cell"><span>Needs review</span><strong>${escapeText(summary.needsHumanReviewCount ?? 0)}</strong></div>
+                <div class="ai-summary-cell"><span>Not tradable</span><strong>${escapeText(summary.notTradableCount ?? 0)}</strong></div>
+                <div class="ai-summary-cell"><span>Private company</span><strong>${escapeText(summary.privateCompanyCount ?? 0)}</strong></div>
+                <div class="ai-summary-cell"><span>High confidence</span><strong>${escapeText(summary.highConfidenceCount ?? 0)}</strong></div>
+            </div>
+            <div style="margin-top: 12px;">
+                <strong>Latest AI-reviewed groups</strong>
+                ${latest.length ? latest.map(review => `
+                    <div class="small-cell" style="margin-top: 8px;">
+                        ${badge(review.verdict || "UNKNOWN", review.verdict === "GOOD_SIGNAL" ? "ok" : review.verdict === "NEEDS_HUMAN_REVIEW" ? "warn" : "disabled")}
+                        ${badge(review.confidence || "LOW", review.confidence || "disabled")}
+                        ${escapeText(review.title || review.groupKey || "-")}
+                        <div class="muted">${escapeText(review.reason || "")}</div>
+                    </div>
+                `).join("") : `<div class="muted" style="margin-top: 8px;">No AI reviews saved yet.</div>`}
+            </div>
+        `;
     }
 
     function renderSecWatchlist() {
@@ -2512,35 +2921,72 @@
         const target = document.querySelector("#dealGroups");
         document.querySelector("#dealGroupCount").textContent = String(state.dealGroups.length);
         if (!state.dealGroups.length) {
-            target.innerHTML = `<tr><td colspan="7" class="muted">No deal groups match current filters.</td></tr>`;
+            target.innerHTML = `<div class="notice">No deal groups match current filters.</div>`;
             return;
         }
         target.innerHTML = state.dealGroups.slice(0, 50).map(group => `
-            <tr>
-                <td class="title-cell">
-                    ${escapeText(group.title || "-")}
-                    <div class="small-cell">${escapeText(group.groupKey || "")}</div>
-                </td>
-                <td>
-                    <div><strong>Buyer:</strong> ${escapeText(group.buyerCompany || "Unknown")} ${group.buyerTicker ? badge(group.buyerTicker, "neutral") : ""}</div>
-                    <div><strong>Target:</strong> ${escapeText(group.targetCompany || "Unknown")} ${group.targetTicker ? badge(group.targetTicker, "ok") : ""}</div>
-                    ${group.targetCik ? `<div class="small-cell">Target CIK: ${escapeText(group.targetCik)}</div>` : ""}
-                </td>
-                <td>${badge(group.priority || "NONE", group.priority || "disabled")}</td>
-                <td>
-                    ${group.dealRelevance ? badge(group.dealRelevance, group.tradability || "disabled") : badge("UNKNOWN", "disabled")}
-                    <div class="small-cell">${escapeText(group.tradability || "UNKNOWN")} / ${escapeText(group.dealTiming || "UNKNOWN")}</div>
-                </td>
-                <td>
-                    ${badge(`${(group.relatedSignals || []).length} signals`, (group.relatedSignals || []).length > 1 ? "ok" : "neutral")}
-                    <div class="small-cell">${escapeText((group.relatedSignals || []).map(signal => signal.sourceType).join(" + "))}</div>
-                </td>
-                <td>
+            <article class="deal-row ${state.selectedDealGroupKey === group.groupKey ? "selected" : ""}" data-deal-group-key="${escapeAttr(group.groupKey)}">
+                <div>
+                    <div class="deal-row-title">${escapeText(group.title || "-")}</div>
+                    <div class="deal-row-meta">
+                        <span>Buyer: ${escapeText(group.buyerCompany || "Unknown")}</span>
+                        ${group.buyerTicker ? badge(group.buyerTicker, "neutral") : ""}
+                        <span>Target: ${escapeText(group.targetCompany || "Unknown")}</span>
+                        ${group.targetTicker ? badge(group.targetTicker, "ok") : ""}
+                    </div>
+                    <div class="deal-row-footer" style="margin-top: 10px;">
+                        ${group.dealRelevance ? badge(group.dealRelevance, group.tradability || "disabled") : badge("UNKNOWN", "disabled")}
+                        ${badge(group.tradability || "UNKNOWN", group.tradability || "disabled")}
+                        ${badge(group.dealTiming || "UNKNOWN", group.dealTiming || "disabled")}
+                        ${badge(`${(group.relatedSignals || []).length} evidence`, (group.relatedSignals || []).length > 1 ? "ok" : "disabled")}
+                    </div>
+                </div>
+                <div class="deal-row-side">
+                    ${badge(group.priority || "NONE", group.priority || "disabled")}
                     ${badge(group.reviewStatus || "PENDING", group.reviewStatus === "USEFUL" ? "ok" : group.reviewStatus === "IGNORED" ? "disabled" : "warn")}
-                    <div class="small-cell">${escapeText(group.reviewReason || "")}</div>
-                    ${group.groupReviewStored ? `<div class="small-cell">group review</div>` : `<div class="small-cell muted">derived</div>`}
-                </td>
-                <td>
+                    <span class="small-cell">${escapeText(formatDate(group.sortInstant))}</span>
+                </div>
+            </article>
+        `).join("");
+    }
+
+    function renderDealGroupDetails() {
+        const status = document.querySelector("#dealGroupDetailsStatus");
+        const target = document.querySelector("#dealGroupDetails");
+        const group = state.dealGroupDetails;
+        if (!group) {
+            status.className = "badge disabled";
+            status.textContent = "not loaded";
+            target.innerHTML = "Select a deal group to inspect related RSS and SEC evidence.";
+            return;
+        }
+        status.className = `badge ${group.priority || "disabled"}`;
+        status.textContent = group.priority || "UNKNOWN";
+        target.innerHTML = `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(group.primarySignalSourceType || "UNKNOWN", group.primarySignalSourceType || "disabled")}
+                ${badge(group.priority || "NONE", group.priority || "disabled")}
+                ${group.dealRelevance ? badge(group.dealRelevance, group.tradability || "disabled") : ""}
+                ${group.dealStage ? badge(group.dealStage, group.dealTiming || "disabled") : ""}
+            </div>
+            <div class="detail-title">${escapeText(group.title || "-")}</div>
+            <div class="kv" style="margin-top: 8px;">${kvRows([
+                ["Buyer", group.buyerCompany],
+                ["Buyer ticker / CIK", [group.buyerTicker, group.buyerCik].filter(Boolean).join(" / ")],
+                ["Target", group.targetCompany],
+                ["Target ticker / CIK", [group.targetTicker, group.targetCik].filter(Boolean).join(" / ")],
+                ["Review", [group.reviewStatus, group.reviewReason].filter(Boolean).join(" / ")],
+                ["Review note", group.reviewNote],
+                ["Review source", group.groupReviewStored ? "Deal group review" : "Primary signal"]
+            ])}</div>
+            ${chipList("Warnings", group.warnings, "risk")}
+            <div class="insight" style="margin-top: 12px;">
+                <div class="side-card-title">
+                    <strong>Manual review</strong>
+                    ${badge(group.reviewStatus || "PENDING", group.reviewStatus === "USEFUL" ? "ok" : group.reviewStatus === "IGNORED" ? "disabled" : "warn")}
+                </div>
+                <div class="control">
+                    <label>Review reason</label>
                     <select data-deal-group-review-reason="${escapeAttr(group.groupKey)}">
                         <option value="">Reason</option>
                         <option ${group.reviewReason === "GOOD_SIGNAL" ? "selected" : ""}>GOOD_SIGNAL</option>
@@ -2553,57 +2999,24 @@
                         <option ${group.reviewReason === "DUPLICATE_OR_UPDATE" ? "selected" : ""}>DUPLICATE_OR_UPDATE</option>
                         <option ${group.reviewReason === "OTHER" ? "selected" : ""}>OTHER</option>
                     </select>
-                    <input data-deal-group-review-note="${escapeAttr(group.groupKey)}" placeholder="Note" value="${escapeAttr(group.reviewNote || "")}">
-                    <div class="actions compact-actions">
-                        <button type="button" data-deal-group-key="${escapeAttr(group.groupKey)}">Details</button>
-                        <button type="button" data-deal-group-review-action="USEFUL" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Mark useful</button>
-                        <button type="button" data-deal-group-review-action="IGNORED" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Ignore</button>
-                        <button type="button" data-deal-group-review-action="PENDING" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Reset</button>
-                        <button type="button" data-deal-group-telegram-key="${escapeAttr(group.groupKey)}">Telegram Preview</button>
-                        <button type="button" data-deal-group-telegram-send-key="${escapeAttr(group.groupKey)}">Send Telegram</button>
-                        <button type="button" data-deal-group-ai-review-key="${escapeAttr(group.groupKey)}">AI Review</button>
-                    </div>
-                </td>
-            </tr>
-        `).join("");
-    }
-
-    function renderDealGroupDetails() {
-        const status = document.querySelector("#dealGroupDetailsStatus");
-        const target = document.querySelector("#dealGroupDetails");
-        const group = state.dealGroupDetails;
-        if (!group) {
-            status.className = "badge disabled";
-            status.textContent = "not loaded";
-            target.innerHTML = "Select Details on a deal group to inspect related RSS and SEC evidence.";
-            return;
-        }
-        status.className = `badge ${group.priority || "disabled"}`;
-        status.textContent = group.priority || "UNKNOWN";
-        target.innerHTML = `
-            <div class="badge-row" style="margin-bottom: 8px;">
-                ${badge(group.primarySignalSourceType || "UNKNOWN", group.primarySignalSourceType || "disabled")}
-                ${badge(group.priority || "NONE", group.priority || "disabled")}
-                ${group.dealRelevance ? badge(group.dealRelevance, group.tradability || "disabled") : ""}
-                ${group.dealStage ? badge(group.dealStage, group.dealTiming || "disabled") : ""}
+                </div>
+                <div class="control" style="margin-top: 8px;">
+                    <label>Note</label>
+                    <input data-deal-group-review-note="${escapeAttr(group.groupKey)}" placeholder="Optional review note" value="${escapeAttr(group.reviewNote || "")}">
+                </div>
+                <div class="mini-actions" style="margin-top: 10px;">
+                    <button type="button" data-deal-group-review-action="USEFUL" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Useful</button>
+                    <button type="button" data-deal-group-review-action="IGNORED" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Ignore</button>
+                    <button type="button" data-deal-group-review-action="PENDING" data-deal-group-review-key="${escapeAttr(group.groupKey)}">Reset</button>
+                </div>
             </div>
-            <strong>${escapeText(group.title || "-")}</strong>
-            <div class="kv" style="margin-top: 8px;">${kvRows([
-                ["Buyer", group.buyerCompany],
-                ["Buyer ticker / CIK", [group.buyerTicker, group.buyerCik].filter(Boolean).join(" / ")],
-                ["Target", group.targetCompany],
-                ["Target ticker / CIK", [group.targetTicker, group.targetCik].filter(Boolean).join(" / ")],
-                ["Review", [group.reviewStatus, group.reviewReason].filter(Boolean).join(" / ")],
-                ["Review note", group.reviewNote],
-                ["Review source", group.groupReviewStored ? "Deal group review" : "Primary signal"]
-            ])}</div>
-            ${chipList("Warnings", group.warnings, "risk")}
-            <div class="actions compact-actions" style="margin-top: 10px;">
+            <div class="actions compact-actions" style="margin-top: 12px;">
                 <button type="button" data-deal-group-telegram-key="${escapeAttr(group.groupKey)}">Telegram Preview</button>
+                <button type="button" data-deal-group-telegram-send-key="${escapeAttr(group.groupKey)}">Send Telegram</button>
                 <button type="button" data-deal-group-ai-review-key="${escapeAttr(group.groupKey)}">AI Review</button>
             </div>
             <div class="table-wrap" style="margin-top: 10px;">
-                <table>
+                <table style="min-width: 620px;">
                     <thead>
                     <tr>
                         <th>Type</th>
@@ -2682,6 +3095,30 @@
         `;
     }
 
+    function renderDealGroupTelegramPreview() {
+        const status = document.querySelector("#dealGroupTelegramStatus");
+        const target = document.querySelector("#dealGroupTelegramPreview");
+        const preview = state.dealGroupTelegramPreview;
+        if (!preview) {
+            status.className = "badge disabled";
+            status.textContent = "not loaded";
+            target.innerHTML = "Preview or manually send a selected deal group. Telegram remains disabled unless configured.";
+            return;
+        }
+        status.className = `badge ${preview.sent ? "ok" : "disabled"}`;
+        status.textContent = preview.sent ? "sent" : "preview";
+        target.innerHTML = `
+            <div class="badge-row" style="margin-bottom: 8px;">
+                ${badge(preview.telegramEnabled ? "Telegram enabled" : "Telegram disabled", preview.telegramEnabled ? "ok" : "disabled")}
+                ${badge(preview.telegramConfigured ? "configured" : "not configured", preview.telegramConfigured ? "ok" : "disabled")}
+                ${preview.sent ? badge("sent", "ok") : ""}
+            </div>
+            ${preview.reason || preview.message ? `<div class="small-cell">${escapeText(preview.reason || preview.message)}</div>` : ""}
+            ${preview.error ? `<div class="small-cell danger-text">${escapeText(preview.error)}</div>` : ""}
+            <pre style="margin-top: 10px;">${escapeText(preview.messageText || preview.message || "No Telegram preview message.")}</pre>
+        `;
+    }
+
     async function saveOpenAiSettings() {
         try {
             setBusy(openAiSettingsSaveButton, true, "Saving");
@@ -2716,6 +3153,54 @@
         }
     }
 
+    function openIntegrationsDrawer() {
+        integrationsDrawer.hidden = false;
+        renderIntegrationSettings();
+        renderAiReviewSummary();
+    }
+
+    function closeIntegrationsDrawer() {
+        integrationsDrawer.hidden = true;
+    }
+
+    async function loadAiReviewSummary() {
+        try {
+            setBusy(aiSummaryRefreshButton, true, "Refreshing");
+            state.dealGroupAiReviewSummary = await fetchJson("/api/deal-groups/ai-review/summary");
+            renderAiReviewSummary();
+        } catch (error) {
+            showError("AI summary", error.message);
+        } finally {
+            setBusy(aiSummaryRefreshButton, false, "Refresh summary");
+        }
+    }
+
+    async function runBatchAiReview() {
+        try {
+            setBusy(batchAiReviewButton, true, "Running AI");
+            batchAiReviewStatus.textContent = "Running manual AI review for filtered promising Deal Groups...";
+            state.batchAiReviewResult = await postJson("/api/deal-groups/ai-review/batch", {
+                limit: Number(batchAiLimitSelect.value) || 10,
+                skipAlreadyReviewed: true,
+                minPriority: "HIGH",
+                onlyPromising: true
+            });
+            const result = state.batchAiReviewResult;
+            batchAiReviewStatus.textContent = `${result.message || "Batch AI review finished."} Reviewed: ${result.reviewedCount || 0}, skipped: ${result.skippedCount || 0}, failed: ${result.failedCount || 0}.`;
+            state.dealGroupAiReviewSummary = await fetchJson("/api/deal-groups/ai-review/summary");
+            renderAiReviewSummary();
+            if (state.selectedDealGroupKey) {
+                state.dealGroupAiReview = await fetchJson(`/api/deal-groups/${encodeURIComponent(state.selectedDealGroupKey)}/ai-review/latest`);
+                renderDealGroupAiReview();
+            }
+        } catch (error) {
+            batchAiReviewStatus.textContent = "Batch AI review did not run.";
+            showError("Batch AI review", error.message);
+        } finally {
+            setBusy(batchAiReviewButton, false, "Run AI Review for candidates");
+        }
+    }
+
     function renderOpenAiSettings() {
         const settings = state.openAiSettings || {};
         const badgeTarget = document.querySelector("#openAiSettingsBadge");
@@ -2739,6 +3224,43 @@
             openAiSettingsMessage.textContent = settings.message || "";
         }
     }
+
+    function renderIntegrationSettings() {
+        const scheduler = state.schedulerStatus || {};
+        const telegramEnabled = Boolean(scheduler.telegramEnabled || (state.status && state.status.telegramEnabled));
+        const dispatchEnabled = Boolean(scheduler.dispatchEnabled || (state.status && state.status.alertDispatchEnabled));
+        const telegramBadge = document.querySelector("#telegramSettingsBadge");
+        telegramBadge.textContent = telegramEnabled ? "enabled" : "disabled";
+        telegramBadge.className = `badge ${telegramEnabled ? "warn" : "disabled"}`;
+        document.querySelector("#telegramSettingsStatus").innerHTML = kvRows([
+            ["Enabled", telegramEnabled ? "Yes" : "No"],
+            ["Configured", telegramEnabled ? "Check server env/runtime config" : "No external Telegram send by default"],
+            ["Dispatch", dispatchEnabled ? "Enabled" : "Disabled"],
+            ["Mode", "Manual preview/send only"]
+        ]);
+
+        const fullRefreshEnabled = Boolean(scheduler.fullRefreshSchedulerEnabled);
+        const schedulerBadge = document.querySelector("#schedulerSettingsBadge");
+        schedulerBadge.textContent = fullRefreshEnabled ? "scheduled" : "manual-only";
+        schedulerBadge.className = `badge ${fullRefreshEnabled ? "ok" : "disabled"}`;
+        document.querySelector("#schedulerSettingsStatus").innerHTML = kvRows([
+            ["RSS auto scan", scheduler.rssMonitoringEnabled ? "Enabled" : "Disabled"],
+            ["Scheduled Full Refresh", fullRefreshEnabled ? "Enabled" : "Disabled"],
+            ["Full Refresh running", scheduler.fullRefreshSchedulerRunning ? "Yes" : "No"],
+            ["Last Full Refresh", formatDate(scheduler.lastScheduledFullRefreshFinishedAt)],
+            ["Next expected", formatDate(scheduler.nextExpectedFullRefreshAt)],
+            ["Fixed delay", scheduler.fullRefreshFixedDelayMs ? `${scheduler.fullRefreshFixedDelayMs} ms` : "-"]
+        ]);
+
+        document.querySelector("#safetySettingsStatus").innerHTML = kvRows([
+            ["Trading integration", "Disabled / not implemented"],
+            ["Telegram auto-send", "Disabled"],
+            ["Alert dispatch", dispatchEnabled ? "Enabled by config" : "Disabled"],
+            ["AI Review", "Manual button only"],
+            ["Secret handling", "Server-side only; masked responses"]
+        ]);
+    }
+
 
     function renderSignalInbox() {
         const target = document.querySelector("#signalInbox");
@@ -3587,9 +4109,19 @@
     });
 
     document.querySelector("#dealGroupDetails").addEventListener("click", event => {
+        const reviewButton = event.target.closest("[data-deal-group-review-action]");
+        if (reviewButton) {
+            updateDealGroupReview(reviewButton.dataset.dealGroupReviewKey, reviewButton.dataset.dealGroupReviewAction);
+            return;
+        }
         const telegramButton = event.target.closest("[data-deal-group-telegram-key]");
         if (telegramButton) {
             previewDealGroupTelegram(telegramButton.dataset.dealGroupTelegramKey);
+            return;
+        }
+        const telegramSendButton = event.target.closest("[data-deal-group-telegram-send-key]");
+        if (telegramSendButton) {
+            sendDealGroupTelegram(telegramSendButton.dataset.dealGroupTelegramSendKey);
             return;
         }
         const aiReviewButton = event.target.closest("[data-deal-group-ai-review-key]");
@@ -3629,13 +4161,6 @@
         const telegramPreviewButton = event.target.closest("[data-telegram-preview-source]");
         if (telegramPreviewButton) {
             previewSignalTelegram(telegramPreviewButton.dataset.telegramPreviewSource, telegramPreviewButton.dataset.telegramPreviewId);
-        }
-    });
-
-    document.querySelector("#dealGroupDetails").addEventListener("click", event => {
-        const telegramButton = event.target.closest("[data-deal-group-telegram-key]");
-        if (telegramButton) {
-            previewDealGroupTelegram(telegramButton.dataset.dealGroupTelegramKey);
         }
     });
 

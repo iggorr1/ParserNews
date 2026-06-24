@@ -1,5 +1,9 @@
 package com.parsernews.service;
 
+import com.parsernews.model.DealRelevance;
+import com.parsernews.model.DealStage;
+import com.parsernews.model.DealTiming;
+import com.parsernews.model.Tradability;
 import com.parsernews.persistence.AiReviewConfidence;
 import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.DealGroupAiReviewEntity;
@@ -7,12 +11,17 @@ import com.parsernews.persistence.DealGroupAiReviewRepository;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.web.SignalInboxController.SourceType;
+import com.parsernews.web.SignalInboxController.UnifiedPriority;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 public class DealGroupAiReviewService {
@@ -55,6 +64,126 @@ public class DealGroupAiReviewService {
         }
         DealGroupingService.DealGroupResponse group = dealGroupingService.group(groupKey)
                 .orElseThrow(() -> new IllegalArgumentException("Deal group not found: " + groupKey));
+        DealGroupAiReviewEntity saved = saveReview(group, settings);
+        return response(true, true, "AI review completed and saved.", saved);
+    }
+
+    @Transactional
+    public BatchAiReviewResponse batchReview(BatchAiReviewRequest request) {
+        OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings = settingsService.effectiveSettings();
+        int requestedLimit = normalizedBatchLimit(request == null ? null : request.limit());
+        boolean skipAlreadyReviewed = request == null || request.skipAlreadyReviewed() == null || request.skipAlreadyReviewed();
+        boolean onlyPromising = request == null || request.onlyPromising() == null || request.onlyPromising();
+        UnifiedPriority minPriority = request == null || request.minPriority() == null ? UnifiedPriority.HIGH : request.minPriority();
+        List<DealGroupingService.DealGroupResponse> allGroups = dealGroupingService.groups(null, null, 200);
+        List<DealGroupingService.DealGroupResponse> eligibleGroups = allGroups.stream()
+                .filter(group -> eligibleForBatch(group, skipAlreadyReviewed, onlyPromising, minPriority))
+                .limit(requestedLimit)
+                .toList();
+        int skippedByFilter = Math.max(0, allGroups.size() - eligibleGroups.size());
+
+        if (!settings.enabled()) {
+            return new BatchAiReviewResponse(
+                    false,
+                    settings.configured(),
+                    DISABLED_MESSAGE,
+                    requestedLimit,
+                    0,
+                    allGroups.size(),
+                    0,
+                    List.of()
+            );
+        }
+        if (!settings.configured()) {
+            return new BatchAiReviewResponse(
+                    true,
+                    false,
+                    MISSING_KEY_MESSAGE,
+                    requestedLimit,
+                    0,
+                    allGroups.size(),
+                    0,
+                    List.of()
+            );
+        }
+
+        List<BatchAiReviewResult> results = new ArrayList<>();
+        int failedCount = 0;
+        for (DealGroupingService.DealGroupResponse group : eligibleGroups) {
+            try {
+                DealGroupAiReviewEntity saved = saveReview(group, settings);
+                results.add(new BatchAiReviewResult(
+                        group.groupKey(),
+                        group.title(),
+                        saved.getVerdict(),
+                        saved.getConfidence(),
+                        saved.getReason(),
+                        null
+                ));
+            } catch (RuntimeException exception) {
+                failedCount++;
+                results.add(new BatchAiReviewResult(
+                        group.groupKey(),
+                        group.title(),
+                        null,
+                        null,
+                        null,
+                        exception.getMessage()
+                ));
+            }
+        }
+        return new BatchAiReviewResponse(
+                true,
+                true,
+                "Batch AI review finished.",
+                requestedLimit,
+                results.size() - failedCount,
+                skippedByFilter,
+                failedCount,
+                results
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public AiReviewSummaryResponse summary() {
+        List<DealGroupAiReviewEntity> reviews = repository.findAll();
+        Map<String, DealGroupingService.DealGroupResponse> groupsByKey = dealGroupingService.groups(null, null, 200).stream()
+                .collect(Collectors.toMap(
+                        DealGroupingService.DealGroupResponse::groupKey,
+                        Function.identity(),
+                        (first, second) -> first
+                ));
+        List<LatestAiReviewSummary> latestReviews = repository.findTop10ByOrderByCreatedAtDesc().stream()
+                .map(review -> new LatestAiReviewSummary(
+                        review.getGroupKey(),
+                        Optional.ofNullable(groupsByKey.get(review.getGroupKey()))
+                                .map(DealGroupingService.DealGroupResponse::title)
+                                .orElse(review.getGroupKey()),
+                        review.getVerdict(),
+                        review.getConfidence(),
+                        review.getCreatedAt(),
+                        review.getReason()
+                ))
+                .toList();
+        return new AiReviewSummaryResponse(
+                reviews.size(),
+                countVerdict(reviews, AiReviewVerdict.GOOD_SIGNAL),
+                countVerdict(reviews, AiReviewVerdict.NOT_TRADABLE),
+                countVerdict(reviews, AiReviewVerdict.PRIVATE_COMPANY),
+                countVerdict(reviews, AiReviewVerdict.FALSE_POSITIVE),
+                countVerdict(reviews, AiReviewVerdict.NEEDS_HUMAN_REVIEW),
+                countVerdict(reviews, AiReviewVerdict.UNKNOWN),
+                countConfidence(reviews, AiReviewConfidence.HIGH),
+                countConfidence(reviews, AiReviewConfidence.MEDIUM),
+                countConfidence(reviews, AiReviewConfidence.LOW),
+                latestReviews
+        );
+    }
+
+    private DealGroupAiReviewEntity saveReview(
+            DealGroupingService.DealGroupResponse group,
+            OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings
+    ) {
         OpenAiAnalysisClient.AiReviewResult result = openAiAnalysisClient.reviewDealGroup(
                 settings.model(),
                 settings.apiKey(),
@@ -73,7 +202,83 @@ public class DealGroupAiReviewService {
                 String.join("; ", result.riskFlags() == null ? List.of() : result.riskFlags()),
                 result.rawJson()
         ));
-        return response(true, true, "AI review completed and saved.", saved);
+        return saved;
+    }
+
+    private boolean eligibleForBatch(
+            DealGroupingService.DealGroupResponse group,
+            boolean skipAlreadyReviewed,
+            boolean onlyPromising,
+            UnifiedPriority minPriority
+    ) {
+        if (group == null) {
+            return false;
+        }
+        if (skipAlreadyReviewed && repository.existsByGroupKey(group.groupKey())) {
+            return false;
+        }
+        if (!priorityAllowed(group.priority(), minPriority)) {
+            return false;
+        }
+        if (!onlyPromising) {
+            return true;
+        }
+        return (group.reviewStatus() == ManualReviewStatus.PENDING || group.reviewStatus() == ManualReviewStatus.USEFUL)
+                && (group.dealTiming() == DealTiming.EARLY || group.dealTiming() == DealTiming.MID_STAGE || group.dealTiming() == DealTiming.UNKNOWN)
+                && (group.tradability() == Tradability.HIGH || group.tradability() == Tradability.MEDIUM)
+                && (group.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION
+                || group.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE
+                || group.dealRelevance() == DealRelevance.PUBLIC_PUBLIC_MERGER
+                || group.dealRelevance() == DealRelevance.UNKNOWN)
+                && group.dealRelevance() != DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT
+                && group.dealRelevance() != DealRelevance.PRIVATE_COMPANY_ACQUISITION
+                && group.dealRelevance() != DealRelevance.REVERSE_TAKEOVER
+                && group.dealRelevance() != DealRelevance.NOT_TRADABLE
+                && group.dealStage() != DealStage.LITIGATION_OR_LAW_FIRM_UPDATE
+                && group.reviewReason() != ManualReviewReason.FALSE_POSITIVE
+                && group.reviewReason() != ManualReviewReason.PRIVATE_COMPANY
+                && group.reviewReason() != ManualReviewReason.NOT_TRADABLE
+                && group.reviewReason() != ManualReviewReason.LATE_STAGE_UPDATE
+                && group.reviewReason() != ManualReviewReason.LAW_FIRM_OR_SHAREHOLDER_ALERT
+                && warningsAllowBatch(group.warnings());
+    }
+
+    private boolean priorityAllowed(UnifiedPriority priority, UnifiedPriority minPriority) {
+        if (priority == null || minPriority == null) {
+            return false;
+        }
+        if (minPriority == UnifiedPriority.HIGH) {
+            return priority == UnifiedPriority.HIGH;
+        }
+        if (minPriority == UnifiedPriority.MEDIUM) {
+            return priority == UnifiedPriority.HIGH || priority == UnifiedPriority.MEDIUM;
+        }
+        return true;
+    }
+
+    private boolean warningsAllowBatch(List<String> warnings) {
+        String joined = String.join(" ", warnings == null ? List.of() : warnings).toLowerCase();
+        return !joined.contains("law firm")
+                && !joined.contains("shareholder alert")
+                && !joined.contains("private company")
+                && !joined.contains("reverse takeover")
+                && !joined.contains("not tradable")
+                && !joined.contains("noise");
+    }
+
+    private int normalizedBatchLimit(Integer limit) {
+        if (limit == null) {
+            return 10;
+        }
+        return Math.max(1, Math.min(limit, 25));
+    }
+
+    private long countVerdict(List<DealGroupAiReviewEntity> reviews, AiReviewVerdict verdict) {
+        return reviews.stream().filter(review -> review.getVerdict() == verdict).count();
+    }
+
+    private long countConfidence(List<DealGroupAiReviewEntity> reviews, AiReviewConfidence confidence) {
+        return reviews.stream().filter(review -> review.getConfidence() == confidence).count();
     }
 
     private String prompt() {
@@ -192,5 +397,60 @@ public class DealGroupAiReviewService {
                     null
             );
         }
+    }
+
+    public record BatchAiReviewRequest(
+            Integer limit,
+            Boolean skipAlreadyReviewed,
+            UnifiedPriority minPriority,
+            Boolean onlyPromising
+    ) {
+    }
+
+    public record BatchAiReviewResponse(
+            boolean enabled,
+            boolean configured,
+            String message,
+            int requestedLimit,
+            int reviewedCount,
+            int skippedCount,
+            int failedCount,
+            List<BatchAiReviewResult> results
+    ) {
+    }
+
+    public record BatchAiReviewResult(
+            String groupKey,
+            String title,
+            AiReviewVerdict verdict,
+            AiReviewConfidence confidence,
+            String reason,
+            String error
+    ) {
+    }
+
+    public record AiReviewSummaryResponse(
+            long totalAiReviewed,
+            long goodSignalCount,
+            long notTradableCount,
+            long privateCompanyCount,
+            long falsePositiveCount,
+            long needsHumanReviewCount,
+            long unknownCount,
+            long highConfidenceCount,
+            long mediumConfidenceCount,
+            long lowConfidenceCount,
+            List<LatestAiReviewSummary> latestReviews
+    ) {
+    }
+
+    public record LatestAiReviewSummary(
+            String groupKey,
+            String title,
+            AiReviewVerdict verdict,
+            AiReviewConfidence confidence,
+            Instant createdAt,
+            String reason
+    ) {
     }
 }

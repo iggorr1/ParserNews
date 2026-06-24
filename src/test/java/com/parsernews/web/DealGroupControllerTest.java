@@ -2,6 +2,8 @@ package com.parsernews.web;
 
 import com.parsernews.config.SecurityConfig;
 import com.parsernews.config.TelegramAlertSettings;
+import com.parsernews.persistence.AiReviewConfidence;
+import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.service.AlertNotifier;
@@ -253,6 +255,74 @@ class DealGroupControllerTest {
 
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/ai-review"))
                 .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(get("/api/deal-groups/ai-review/summary"))
+                .andExpect(status().isUnauthorized());
+
+        mockMvc.perform(post("/api/deal-groups/ai-review/batch"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void batchAiReviewEndpointReturnsSafeResponse() throws Exception {
+        when(dealGroupAiReviewService.batchReview(any()))
+                .thenReturn(new DealGroupAiReviewService.BatchAiReviewResponse(
+                        false,
+                        false,
+                        "OpenAI AI Review is disabled.",
+                        10,
+                        0,
+                        0,
+                        0,
+                        List.of()
+                ));
+
+        mockMvc.perform(post("/api/deal-groups/ai-review/batch")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "limit": 10,
+                                  "skipAlreadyReviewed": true,
+                                  "minPriority": "HIGH",
+                                  "onlyPromising": true
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.message").value("OpenAI AI Review is disabled."));
+    }
+
+    @Test
+    void aiReviewSummaryEndpointReturnsCounts() throws Exception {
+        when(dealGroupAiReviewService.summary())
+                .thenReturn(new DealGroupAiReviewService.AiReviewSummaryResponse(
+                        2,
+                        1,
+                        1,
+                        0,
+                        0,
+                        0,
+                        0,
+                        1,
+                        1,
+                        0,
+                        List.of(new DealGroupAiReviewService.LatestAiReviewSummary(
+                                "target-ticker:APGE",
+                                "AbbVie to Acquire Apogee",
+                                AiReviewVerdict.GOOD_SIGNAL,
+                                AiReviewConfidence.HIGH,
+                                Instant.parse("2026-06-20T12:00:00Z"),
+                                "Useful signal."
+                        ))
+                ));
+
+        mockMvc.perform(get("/api/deal-groups/ai-review/summary")
+                        .with(httpBasic("tester", "secret")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalAiReviewed").value(2))
+                .andExpect(jsonPath("$.goodSignalCount").value(1))
+                .andExpect(jsonPath("$.latestReviews[0].groupKey").value("target-ticker:APGE"));
     }
 
     @Test
