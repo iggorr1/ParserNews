@@ -1,6 +1,5 @@
 package com.parsernews.web;
 
-import com.parsernews.config.TelegramAlertSettings;
 import com.parsernews.model.DealRelevance;
 import com.parsernews.model.DealStage;
 import com.parsernews.model.DealTiming;
@@ -12,6 +11,7 @@ import com.parsernews.service.AlertNotifier;
 import com.parsernews.service.DealGroupAiReviewService;
 import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
+import com.parsernews.service.TelegramRuntimeSettingsService;
 import com.parsernews.web.SignalInboxController.UnifiedPriority;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -39,20 +39,20 @@ public class DealGroupController {
     private final DealGroupReviewService dealGroupReviewService;
     private final DealGroupAiReviewService dealGroupAiReviewService;
     private final AlertNotifier alertNotifier;
-    private final TelegramAlertSettings telegramAlertSettings;
+    private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
 
     public DealGroupController(
             DealGroupingService dealGroupingService,
             DealGroupReviewService dealGroupReviewService,
             DealGroupAiReviewService dealGroupAiReviewService,
             AlertNotifier alertNotifier,
-            TelegramAlertSettings telegramAlertSettings
+            TelegramRuntimeSettingsService telegramRuntimeSettingsService
     ) {
         this.dealGroupingService = dealGroupingService;
         this.dealGroupReviewService = dealGroupReviewService;
         this.dealGroupAiReviewService = dealGroupAiReviewService;
         this.alertNotifier = alertNotifier;
-        this.telegramAlertSettings = telegramAlertSettings;
+        this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
     }
 
     @GetMapping("/api/deal-groups")
@@ -218,15 +218,13 @@ public class DealGroupController {
     }
 
     private TelegramReadiness telegramReadiness() {
-        boolean enabled = telegramAlertSettings.enabled();
-        boolean configured = !isBlank(telegramAlertSettings.botToken()) && !isBlank(telegramAlertSettings.chatId());
-        if (!enabled) {
-            return new TelegramReadiness(false, configured, false, "Telegram is disabled; no external message will be sent.");
-        }
-        if (!configured) {
-            return new TelegramReadiness(true, false, false, "Telegram is enabled but bot token or chat id is missing.");
-        }
-        return new TelegramReadiness(true, true, true, null);
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = telegramRuntimeSettingsService.effectiveSettings();
+        return new TelegramReadiness(
+                settings.enabled(),
+                settings.configured(),
+                settings.sendAllowed(),
+                settings.sendAllowed() ? null : settings.message()
+        );
     }
 
     private List<DealGroupingService.DealGroupResponse> allGroupsForStats() {

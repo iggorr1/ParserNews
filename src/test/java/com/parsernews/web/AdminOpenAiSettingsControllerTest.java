@@ -60,9 +60,9 @@ class AdminOpenAiSettingsControllerTest {
         when(settingsService.effectiveSettings()).thenReturn(settings(
                 true,
                 true,
-                "sk-secret-full-key-1234abcd",
+                "test-openai-secret-full-key-1234abcd",
                 OpenAiRuntimeSettingsService.KeySource.RUNTIME,
-                "sk-...abcd"
+                "tes...abcd"
         ));
 
         mockMvc.perform(get("/api/admin/openai-settings").with(httpBasic("tester", "secret")))
@@ -70,19 +70,19 @@ class AdminOpenAiSettingsControllerTest {
                 .andExpect(jsonPath("$.enabled").value(true))
                 .andExpect(jsonPath("$.configured").value(true))
                 .andExpect(jsonPath("$.keySource").value("RUNTIME"))
-                .andExpect(jsonPath("$.keyMasked").value("sk-...abcd"))
-                .andExpect(content().string(not(containsString("sk-secret-full-key-1234abcd"))));
+                .andExpect(jsonPath("$.keyMasked").value("tes...abcd"))
+                .andExpect(content().string(not(containsString("test-openai-secret-full-key-1234abcd"))));
     }
 
     @Test
     void putWithKeyEnablesRuntimeSettings() throws Exception {
-        when(settingsService.update(true, "sk-runtime-full-key-1234abcd", "gpt-4.1-mini", 12000))
+        when(settingsService.update(true, "test-runtime-openai-key-1234abcd", "gpt-4.1-mini", 12000))
                 .thenReturn(settings(
                         true,
                         true,
-                        "sk-runtime-full-key-1234abcd",
+                        "test-runtime-openai-key-1234abcd",
                         OpenAiRuntimeSettingsService.KeySource.RUNTIME,
-                        "sk-...abcd"
+                        "tes...abcd"
                 ));
 
         mockMvc.perform(put("/api/admin/openai-settings")
@@ -91,7 +91,7 @@ class AdminOpenAiSettingsControllerTest {
                         .content("""
                                 {
                                   "enabled": true,
-                                  "apiKey": "sk-runtime-full-key-1234abcd",
+                                  "apiKey": "test-runtime-openai-key-1234abcd",
                                   "model": "gpt-4.1-mini",
                                   "maxInputChars": 12000
                                 }
@@ -100,8 +100,8 @@ class AdminOpenAiSettingsControllerTest {
                 .andExpect(jsonPath("$.enabled").value(true))
                 .andExpect(jsonPath("$.configured").value(true))
                 .andExpect(jsonPath("$.keySource").value("RUNTIME"))
-                .andExpect(jsonPath("$.keyMasked").value("sk-...abcd"))
-                .andExpect(content().string(not(containsString("sk-runtime-full-key-1234abcd"))));
+                .andExpect(jsonPath("$.keyMasked").value("tes...abcd"))
+                .andExpect(content().string(not(containsString("test-runtime-openai-key-1234abcd"))));
     }
 
     @Test

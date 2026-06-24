@@ -95,8 +95,11 @@ HTTP Basic Auth protects the dashboard and API by default.
 
 Credentials come from:
 
-- `PARSERNEWS_AUTH_USERNAME`
-- `PARSERNEWS_AUTH_PASSWORD`
+- `APP_ADMIN_USERNAME`
+- `APP_ADMIN_PASSWORD`
+
+The older `PARSERNEWS_AUTH_USERNAME` / `PARSERNEWS_AUTH_PASSWORD` names still
+work as fallback.
 
 Local H2 defaults are `admin` / `admin`. Docker Compose sets `admin` /
 `change-me`. Change the password before exposing the app outside localhost or a
@@ -138,7 +141,7 @@ Stored event API lives in:
 - Deterministic candidate scoring with score, strength, and reason.
 - Alert eligibility and queue foundation at `GET /api/alerts/candidates`.
 - Alert message preview and dry-run at `GET /api/alerts/candidates/{id}/preview` and `POST /api/alerts/dry-run`.
-- Telegram notifier foundation is disabled by default and guarded by `alerts.telegram.enabled`.
+- Telegram notifier foundation is disabled by default, guarded by safe env/config, and can be temporarily configured from the dashboard with backend memory-only runtime settings.
 - Alert dispatch scheduler and manual dispatch are disabled by default and guarded by `alerts.dispatch.enabled`.
 - Operational status summary at `GET /api/status`.
 - Local/admin candidate backfill at `POST /api/admin/recompute-candidates`.

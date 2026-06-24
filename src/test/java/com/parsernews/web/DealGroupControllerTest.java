@@ -1,7 +1,6 @@
 package com.parsernews.web;
 
 import com.parsernews.config.SecurityConfig;
-import com.parsernews.config.TelegramAlertSettings;
 import com.parsernews.persistence.AiReviewConfidence;
 import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.ManualReviewReason;
@@ -12,6 +11,7 @@ import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
+import com.parsernews.service.TelegramRuntimeSettingsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -59,7 +59,7 @@ class DealGroupControllerTest {
     private AlertNotifier alertNotifier;
 
     @MockitoBean
-    private TelegramAlertSettings telegramAlertSettings;
+    private TelegramRuntimeSettingsService telegramRuntimeSettingsService;
 
     @MockitoBean
     private NewsScannerService newsScannerService;
@@ -69,9 +69,17 @@ class DealGroupControllerTest {
 
     @org.junit.jupiter.api.BeforeEach
     void setUp() {
-        when(telegramAlertSettings.enabled()).thenReturn(false);
-        when(telegramAlertSettings.botToken()).thenReturn("");
-        when(telegramAlertSettings.chatId()).thenReturn("");
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                false,
+                false,
+                "",
+                "",
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                null,
+                null,
+                "Telegram is disabled; no external messages will be sent."
+        ));
     }
 
     @Test
@@ -176,7 +184,7 @@ class DealGroupControllerTest {
                 .andExpect(jsonPath("$.sent").value(false))
                 .andExpect(jsonPath("$.telegramEnabled").value(false))
                 .andExpect(jsonPath("$.telegramConfigured").value(false))
-                .andExpect(jsonPath("$.message").value("Telegram is disabled; no external message will be sent."));
+                .andExpect(jsonPath("$.message").value("Telegram is disabled; no external messages will be sent."));
 
         verify(alertNotifier, never()).send(any());
     }
@@ -184,7 +192,17 @@ class DealGroupControllerTest {
     @Test
     void sendTelegramWhenConfigMissingReturnsSafeResponse() throws Exception {
         DealGroupingService.DealGroupResponse group = group();
-        when(telegramAlertSettings.enabled()).thenReturn(true);
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                true,
+                false,
+                "",
+                "",
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                null,
+                null,
+                "Telegram is enabled but bot token or chat id is missing."
+        ));
         when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
 
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/send-telegram")
@@ -201,9 +219,17 @@ class DealGroupControllerTest {
     @Test
     void sendTelegramWithMockedNotifierCanSucceed() throws Exception {
         DealGroupingService.DealGroupResponse group = group();
-        when(telegramAlertSettings.enabled()).thenReturn(true);
-        when(telegramAlertSettings.botToken()).thenReturn("token");
-        when(telegramAlertSettings.chatId()).thenReturn("chat");
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                true,
+                true,
+                "token",
+                "chat",
+                TelegramRuntimeSettingsService.SecretSource.RUNTIME,
+                TelegramRuntimeSettingsService.SecretSource.RUNTIME,
+                "****",
+                "****",
+                "Telegram is enabled using runtime token and runtime chat id."
+        ));
         when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
         when(dealGroupingService.formatTelegramPreview(group)).thenReturn("DEAL GROUP SIGNAL");
         when(alertNotifier.send("DEAL GROUP SIGNAL"))

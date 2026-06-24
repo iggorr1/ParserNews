@@ -9,7 +9,7 @@ class OpenAiRuntimeSettingsServiceTest {
     @Test
     void envFallbackWorksWhenRuntimeSettingsAreAbsent() {
         OpenAiRuntimeSettingsService service = new OpenAiRuntimeSettingsService(
-                new OpenAiAnalysisSettings(true, "sk-env-1234567890abcd", "gpt-4.1-mini", 12000)
+                new OpenAiAnalysisSettings(true, "test-env-openai-key-1234567890abcd", "gpt-4.1-mini", 12000)
         );
 
         OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings = service.effectiveSettings();
@@ -17,28 +17,28 @@ class OpenAiRuntimeSettingsServiceTest {
         assertThat(settings.enabled()).isTrue();
         assertThat(settings.configured()).isTrue();
         assertThat(settings.keySource()).isEqualTo(OpenAiRuntimeSettingsService.KeySource.ENV);
-        assertThat(settings.apiKey()).isEqualTo("sk-env-1234567890abcd");
-        assertThat(settings.keyMasked()).isEqualTo("sk-...abcd");
+        assertThat(settings.apiKey()).isEqualTo("test-env-openai-key-1234567890abcd");
+        assertThat(settings.keyMasked()).isEqualTo("tes...abcd");
     }
 
     @Test
     void runtimeKeyOverridesEnvKeyAndIsMasked() {
         OpenAiRuntimeSettingsService service = new OpenAiRuntimeSettingsService(
-                new OpenAiAnalysisSettings(true, "sk-env-1234567890abcd", "gpt-4.1-mini", 12000)
+                new OpenAiAnalysisSettings(true, "test-env-openai-key-1234567890abcd", "gpt-4.1-mini", 12000)
         );
 
         OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings = service.update(
                 true,
-                "sk-runtime-0987654321wxyz",
+                "test-runtime-openai-key-0987654321wxyz",
                 "gpt-4.1-mini",
                 9000
         );
 
         assertThat(settings.enabled()).isTrue();
         assertThat(settings.configured()).isTrue();
-        assertThat(settings.apiKey()).isEqualTo("sk-runtime-0987654321wxyz");
+        assertThat(settings.apiKey()).isEqualTo("test-runtime-openai-key-0987654321wxyz");
         assertThat(settings.keySource()).isEqualTo(OpenAiRuntimeSettingsService.KeySource.RUNTIME);
-        assertThat(settings.keyMasked()).isEqualTo("sk-...wxyz");
+        assertThat(settings.keyMasked()).isEqualTo("tes...wxyz");
         assertThat(settings.keyMasked()).doesNotContain("0987654321");
         assertThat(settings.maxInputChars()).isEqualTo(9000);
     }
@@ -46,16 +46,16 @@ class OpenAiRuntimeSettingsServiceTest {
     @Test
     void disablingClearsRuntimeKeyAndStopsEffectiveOpenAi() {
         OpenAiRuntimeSettingsService service = new OpenAiRuntimeSettingsService(
-                new OpenAiAnalysisSettings(true, "sk-env-1234567890abcd", "gpt-4.1-mini", 12000)
+                new OpenAiAnalysisSettings(true, "test-env-openai-key-1234567890abcd", "gpt-4.1-mini", 12000)
         );
-        service.update(true, "sk-runtime-0987654321wxyz", null, null);
+        service.update(true, "test-runtime-openai-key-0987654321wxyz", null, null);
 
         OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings = service.update(false, null, null, null);
 
         assertThat(settings.enabled()).isFalse();
         assertThat(settings.configured()).isTrue();
         assertThat(settings.keySource()).isEqualTo(OpenAiRuntimeSettingsService.KeySource.ENV);
-        assertThat(settings.apiKey()).isEqualTo("sk-env-1234567890abcd");
+        assertThat(settings.apiKey()).isEqualTo("test-env-openai-key-1234567890abcd");
     }
 
     @Test
@@ -63,7 +63,7 @@ class OpenAiRuntimeSettingsServiceTest {
         OpenAiRuntimeSettingsService service = new OpenAiRuntimeSettingsService(
                 new OpenAiAnalysisSettings(false, "", "gpt-4.1-mini", 12000)
         );
-        service.update(true, "sk-runtime-0987654321wxyz", null, null);
+        service.update(true, "test-runtime-openai-key-0987654321wxyz", null, null);
 
         OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings = service.clearRuntimeKeyAndDisable();
 

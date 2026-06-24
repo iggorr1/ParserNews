@@ -20,7 +20,7 @@ import com.parsernews.service.DealStageDetectionService;
 import com.parsernews.service.DealTermsExtractionService;
 import com.parsernews.service.AlertNotifier;
 import com.parsernews.service.SignalTelegramMessageFormatter;
-import com.parsernews.config.TelegramAlertSettings;
+import com.parsernews.service.TelegramRuntimeSettingsService;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,7 +47,7 @@ public class SignalInboxController {
     private final DealStageDetectionService dealStageDetectionService;
     private final SignalTelegramMessageFormatter signalTelegramMessageFormatter;
     private final AlertNotifier alertNotifier;
-    private final TelegramAlertSettings telegramAlertSettings;
+    private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
 
     public SignalInboxController(
             DetectedEventRepository eventRepository,
@@ -58,7 +58,7 @@ public class SignalInboxController {
             DealStageDetectionService dealStageDetectionService,
             SignalTelegramMessageFormatter signalTelegramMessageFormatter,
             AlertNotifier alertNotifier,
-            TelegramAlertSettings telegramAlertSettings
+            TelegramRuntimeSettingsService telegramRuntimeSettingsService
     ) {
         this.eventRepository = eventRepository;
         this.secFilingRepository = secFilingRepository;
@@ -68,7 +68,7 @@ public class SignalInboxController {
         this.dealStageDetectionService = dealStageDetectionService;
         this.signalTelegramMessageFormatter = signalTelegramMessageFormatter;
         this.alertNotifier = alertNotifier;
-        this.telegramAlertSettings = telegramAlertSettings;
+        this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
     }
 
     @GetMapping("/api/signals")
@@ -235,15 +235,13 @@ public class SignalInboxController {
     }
 
     private TelegramReadiness telegramReadiness() {
-        boolean enabled = telegramAlertSettings.enabled();
-        boolean configured = !isBlank(telegramAlertSettings.botToken()) && !isBlank(telegramAlertSettings.chatId());
-        if (!enabled) {
-            return new TelegramReadiness(false, configured, false, "Telegram is disabled; no external message will be sent.");
-        }
-        if (!configured) {
-            return new TelegramReadiness(true, false, false, "Telegram is enabled but bot token or chat id is missing.");
-        }
-        return new TelegramReadiness(true, true, true, null);
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = telegramRuntimeSettingsService.effectiveSettings();
+        return new TelegramReadiness(
+                settings.enabled(),
+                settings.configured(),
+                settings.sendAllowed(),
+                settings.sendAllowed() ? null : settings.message()
+        );
     }
 
     private UnifiedSignalResponse fromSecFiling(SecFilingEntity filing) {

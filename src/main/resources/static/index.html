@@ -1092,6 +1092,28 @@
                         <span class="badge disabled" id="telegramSettingsBadge">disabled</span>
                     </div>
                     <div id="telegramSettingsStatus" class="kv"></div>
+                    <div class="small-cell" style="margin-top: 12px;">
+                        Token and chat id are sent to the backend and stored only in memory for this app process. They are not saved to git, browser storage, .env, or the database.
+                    </div>
+                    <div class="filters" style="grid-template-columns: 1fr 1fr; margin-top: 12px;">
+                        <label class="toggle">
+                            <input type="checkbox" id="telegramEnabledInput">
+                            Enable manual Telegram send
+                        </label>
+                        <div class="control">
+                            <label for="telegramBotTokenInput">Bot token</label>
+                            <input id="telegramBotTokenInput" type="password" autocomplete="off" placeholder="Telegram bot token">
+                        </div>
+                        <div class="control">
+                            <label for="telegramChatIdInput">Chat id</label>
+                            <input id="telegramChatIdInput" type="password" autocomplete="off" placeholder="Telegram chat id">
+                        </div>
+                    </div>
+                    <div class="actions compact-actions">
+                        <button id="telegramSettingsSaveButton" type="button">Save Telegram settings</button>
+                        <button id="telegramSettingsClearButton" type="button">Clear runtime Telegram</button>
+                        <span class="muted" id="telegramSettingsMessage"></span>
+                    </div>
                 </section>
                 <section class="settings-card">
                     <div class="panel-head">
@@ -1854,6 +1876,7 @@
         batchAiReviewResult: null,
         dealGroupTelegramPreview: null,
         openAiSettings: null,
+        telegramSettings: null,
         telegramPreview: null,
         signalDetails: null,
         fullRefreshResult: null,
@@ -1890,6 +1913,12 @@
     const openAiSettingsSaveButton = document.querySelector("#openAiSettingsSaveButton");
     const openAiSettingsClearButton = document.querySelector("#openAiSettingsClearButton");
     const openAiSettingsMessage = document.querySelector("#openAiSettingsMessage");
+    const telegramEnabledInput = document.querySelector("#telegramEnabledInput");
+    const telegramBotTokenInput = document.querySelector("#telegramBotTokenInput");
+    const telegramChatIdInput = document.querySelector("#telegramChatIdInput");
+    const telegramSettingsSaveButton = document.querySelector("#telegramSettingsSaveButton");
+    const telegramSettingsClearButton = document.querySelector("#telegramSettingsClearButton");
+    const telegramSettingsMessage = document.querySelector("#telegramSettingsMessage");
     const aiSummaryRefreshButton = document.querySelector("#aiSummaryRefreshButton");
     const batchAiLimitSelect = document.querySelector("#batchAiLimitSelect");
     const previewBatchAiCandidatesButton = document.querySelector("#previewBatchAiCandidatesButton");
@@ -1946,6 +1975,8 @@
     secCompanyLookupButton.addEventListener("click", searchSecCompanyLookup);
     openAiSettingsSaveButton.addEventListener("click", saveOpenAiSettings);
     openAiSettingsClearButton.addEventListener("click", clearOpenAiRuntimeKey);
+    telegramSettingsSaveButton.addEventListener("click", saveTelegramSettings);
+    telegramSettingsClearButton.addEventListener("click", clearTelegramRuntimeSettings);
     aiSummaryRefreshButton.addEventListener("click", loadAiReviewSummary);
     previewBatchAiCandidatesButton.addEventListener("click", previewBatchAiCandidates);
     batchAiReviewButton.addEventListener("click", runBatchAiReview);
@@ -2000,7 +2031,8 @@
             fetchJson("/api/deal-groups/stats"),
             fetchJson("/api/admin/scheduler-status"),
             fetchJson("/api/admin/openai-settings"),
-            fetchJson("/api/deal-groups/ai-review/summary")
+            fetchJson("/api/deal-groups/ai-review/summary"),
+            fetchJson("/api/admin/telegram-settings")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -2019,6 +2051,7 @@
         assignResult(results[14], "schedulerStatus", null, "Scheduler status");
         assignResult(results[15], "openAiSettings", null, "OpenAI settings");
         assignResult(results[16], "dealGroupAiReviewSummary", null, "AI review summary");
+        assignResult(results[17], "telegramSettings", null, "Telegram settings");
         if (!state.selectedDealGroupKey && state.dealGroups.length > 0) {
             state.selectedDealGroupKey = state.dealGroups[0].groupKey;
             state.dealGroupDetails = state.dealGroups[0];
@@ -3210,6 +3243,42 @@
         }
     }
 
+    async function saveTelegramSettings() {
+        try {
+            setBusy(telegramSettingsSaveButton, true, "Saving");
+            const botToken = telegramBotTokenInput.value.trim();
+            const chatId = telegramChatIdInput.value.trim();
+            state.telegramSettings = await putJson("/api/admin/telegram-settings", {
+                enabled: telegramEnabledInput.checked,
+                botToken: botToken || null,
+                chatId: chatId || null
+            });
+            telegramBotTokenInput.value = "";
+            telegramChatIdInput.value = "";
+            renderIntegrationSettings();
+            telegramSettingsMessage.textContent = state.telegramSettings.message || "Telegram settings saved.";
+        } catch (error) {
+            showError("Telegram settings", error.message);
+        } finally {
+            setBusy(telegramSettingsSaveButton, false, "Save Telegram settings");
+        }
+    }
+
+    async function clearTelegramRuntimeSettings() {
+        try {
+            setBusy(telegramSettingsClearButton, true, "Clearing");
+            state.telegramSettings = await deleteJson("/api/admin/telegram-settings/runtime");
+            telegramBotTokenInput.value = "";
+            telegramChatIdInput.value = "";
+            renderIntegrationSettings();
+            telegramSettingsMessage.textContent = state.telegramSettings.message || "Runtime Telegram settings cleared.";
+        } catch (error) {
+            showError("Telegram settings", error.message);
+        } finally {
+            setBusy(telegramSettingsClearButton, false, "Clear runtime Telegram");
+        }
+    }
+
     function openIntegrationsDrawer() {
         integrationsDrawer.hidden = false;
         renderIntegrationSettings();
@@ -3358,17 +3427,28 @@
 
     function renderIntegrationSettings() {
         const scheduler = state.schedulerStatus || {};
-        const telegramEnabled = Boolean(scheduler.telegramEnabled || (state.status && state.status.telegramEnabled));
+        const telegramSettings = state.telegramSettings || {};
+        const telegramEnabled = Boolean(telegramSettings.enabled || scheduler.telegramEnabled || (state.status && state.status.telegramEnabled));
+        const telegramConfigured = Boolean(telegramSettings.configured || (state.status && state.status.telegramConfigured));
         const dispatchEnabled = Boolean(scheduler.dispatchEnabled || (state.status && state.status.alertDispatchEnabled));
         const telegramBadge = document.querySelector("#telegramSettingsBadge");
-        telegramBadge.textContent = telegramEnabled ? "enabled" : "disabled";
-        telegramBadge.className = `badge ${telegramEnabled ? "warn" : "disabled"}`;
+        telegramBadge.textContent = telegramEnabled ? telegramConfigured ? "configured" : "missing config" : "disabled";
+        telegramBadge.className = `badge ${telegramEnabled && telegramConfigured ? "ok" : telegramEnabled ? "warn" : "disabled"}`;
+        telegramEnabledInput.checked = telegramEnabled;
         document.querySelector("#telegramSettingsStatus").innerHTML = kvRows([
             ["Enabled", telegramEnabled ? "Yes" : "No"],
-            ["Configured", telegramEnabled ? "Check server env/runtime config" : "No external Telegram send by default"],
+            ["Configured", telegramConfigured ? "Yes" : "No"],
+            ["Token source", telegramSettings.tokenSource || "NONE"],
+            ["Token", telegramSettings.tokenMasked || "not configured"],
+            ["Chat id source", telegramSettings.chatIdSource || "NONE"],
+            ["Chat id", telegramSettings.chatIdMasked || "not configured"],
             ["Dispatch", dispatchEnabled ? "Enabled" : "Disabled"],
-            ["Mode", "Manual preview/send only"]
+            ["Mode", "Manual preview/send only"],
+            ["Status", telegramSettings.message || "Telegram settings not loaded."]
         ]);
+        if (!telegramSettingsMessage.textContent) {
+            telegramSettingsMessage.textContent = telegramSettings.message || "";
+        }
 
         const fullRefreshEnabled = Boolean(scheduler.fullRefreshSchedulerEnabled);
         const schedulerBadge = document.querySelector("#schedulerSettingsBadge");

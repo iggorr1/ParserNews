@@ -1,7 +1,6 @@
 package com.parsernews.web;
 
 import com.parsernews.config.SecurityConfig;
-import com.parsernews.config.TelegramAlertSettings;
 import com.parsernews.model.DealConfidence;
 import com.parsernews.model.DealRelevance;
 import com.parsernews.model.DealStage;
@@ -33,6 +32,7 @@ import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
 import com.parsernews.service.AlertNotifier;
 import com.parsernews.service.SignalTelegramMessageFormatter;
+import com.parsernews.service.TelegramRuntimeSettingsService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -92,7 +92,7 @@ class SignalInboxControllerTest {
     private AlertNotifier alertNotifier;
 
     @MockitoBean
-    private TelegramAlertSettings telegramAlertSettings;
+    private TelegramRuntimeSettingsService telegramRuntimeSettingsService;
 
     @MockitoBean
     private NewsScannerService newsScannerService;
@@ -136,9 +136,17 @@ class SignalInboxControllerTest {
         ));
         when(signalTelegramMessageFormatter.formatRss(any())).thenReturn("RSS telegram message");
         when(signalTelegramMessageFormatter.formatSec(any())).thenReturn("SEC telegram message");
-        when(telegramAlertSettings.enabled()).thenReturn(false);
-        when(telegramAlertSettings.botToken()).thenReturn("");
-        when(telegramAlertSettings.chatId()).thenReturn("");
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                false,
+                false,
+                "",
+                "",
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                null,
+                null,
+                "Telegram is disabled; no external messages will be sent."
+        ));
     }
 
     @Test
@@ -303,14 +311,24 @@ class SignalInboxControllerTest {
                 .andExpect(jsonPath("$.sent").value(false))
                 .andExpect(jsonPath("$.telegramEnabled").value(false))
                 .andExpect(jsonPath("$.telegramConfigured").value(false))
-                .andExpect(jsonPath("$.message").value("Telegram is disabled; no external message will be sent."));
+                .andExpect(jsonPath("$.message").value("Telegram is disabled; no external messages will be sent."));
 
         verify(alertNotifier, never()).send(any());
     }
 
     @Test
     void sendTelegramWhenConfigMissingDoesNotSend() throws Exception {
-        when(telegramAlertSettings.enabled()).thenReturn(true);
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                true,
+                false,
+                "",
+                "",
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                null,
+                null,
+                "Telegram is enabled but bot token or chat id is missing."
+        ));
         when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
 
         mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram")
@@ -326,9 +344,17 @@ class SignalInboxControllerTest {
 
     @Test
     void sendTelegramWithMockedNotifierCanSucceed() throws Exception {
-        when(telegramAlertSettings.enabled()).thenReturn(true);
-        when(telegramAlertSettings.botToken()).thenReturn("token");
-        when(telegramAlertSettings.chatId()).thenReturn("chat");
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                true,
+                true,
+                "token",
+                "chat",
+                TelegramRuntimeSettingsService.SecretSource.RUNTIME,
+                TelegramRuntimeSettingsService.SecretSource.RUNTIME,
+                "****",
+                "****",
+                "Telegram is enabled using runtime token and runtime chat id."
+        ));
         when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
         when(alertNotifier.send("RSS telegram message"))
                 .thenReturn(AlertNotifier.AlertNotificationResult.sent("SENT", "Telegram alert message was sent."));

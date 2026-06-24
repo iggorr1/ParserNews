@@ -9,31 +9,34 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class AlertNotifierContextTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-            .withUserConfiguration(NoOpAlertNotifier.class, TelegramAlertNotifier.class);
+            .withUserConfiguration(TelegramAlertNotifier.class)
+            .withBean(TelegramAlertSettings.class, () -> new TelegramAlertSettings(false, "", ""))
+            .withBean(TelegramRuntimeSettingsService.class, () -> new TelegramRuntimeSettingsService(new TelegramAlertSettings(false, "", "")))
+            .withBean(RestClient.Builder.class, RestClient::builder);
 
     @Test
-    void defaultConfigCreatesNoOpNotifier() {
+    void defaultConfigCreatesSafeTelegramNotifier() {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(AlertNotifier.class);
-            assertThat(context.getBean(AlertNotifier.class)).isInstanceOf(NoOpAlertNotifier.class);
+            assertThat(context.getBean(AlertNotifier.class)).isInstanceOf(TelegramAlertNotifier.class);
         });
     }
 
     @Test
-    void telegramDisabledCreatesNoOpNotifier() {
+    void telegramDisabledNotifierReturnsNoExternalSend() {
         contextRunner
                 .withPropertyValues("alerts.telegram.enabled=false")
                 .run(context -> {
                     assertThat(context).hasSingleBean(AlertNotifier.class);
-                    assertThat(context.getBean(AlertNotifier.class)).isInstanceOf(NoOpAlertNotifier.class);
+                    AlertNotifier.AlertNotificationResult result = context.getBean(AlertNotifier.class).send("test");
+                    assertThat(result.sent()).isFalse();
+                    assertThat(result.status()).isEqualTo("DISABLED");
                 });
     }
 
     @Test
     void telegramEnabledCreatesTelegramNotifierOnly() {
         contextRunner
-                .withBean(TelegramAlertSettings.class, () -> new TelegramAlertSettings(true, "token", "chat"))
-                .withBean(RestClient.Builder.class, RestClient::builder)
                 .withPropertyValues("alerts.telegram.enabled=true")
                 .run(context -> {
                     assertThat(context).hasSingleBean(AlertNotifier.class);

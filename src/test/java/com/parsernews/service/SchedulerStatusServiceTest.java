@@ -55,7 +55,7 @@ class SchedulerStatusServiceTest {
                 rssMonitoringEnabled,
                 scheduler,
                 scanRunRepository,
-                new TelegramAlertSettings(false, "", ""),
+                new TelegramRuntimeSettingsService(new TelegramAlertSettings(false, "", "")),
                 new AlertDispatchSettings(false, 300000, 5)
         );
     }

@@ -17,6 +17,7 @@ public class ReviewPacketService {
     private final StatusService statusService;
     private final SchedulerStatusService schedulerStatusService;
     private final OpenAiRuntimeSettingsService openAiRuntimeSettingsService;
+    private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
     private final DealGroupingService dealGroupingService;
     private final DealGroupAiReviewService dealGroupAiReviewService;
     private final ScanRunRepository scanRunRepository;
@@ -25,6 +26,7 @@ public class ReviewPacketService {
             StatusService statusService,
             SchedulerStatusService schedulerStatusService,
             OpenAiRuntimeSettingsService openAiRuntimeSettingsService,
+            TelegramRuntimeSettingsService telegramRuntimeSettingsService,
             DealGroupingService dealGroupingService,
             DealGroupAiReviewService dealGroupAiReviewService,
             ScanRunRepository scanRunRepository
@@ -32,6 +34,7 @@ public class ReviewPacketService {
         this.statusService = statusService;
         this.schedulerStatusService = schedulerStatusService;
         this.openAiRuntimeSettingsService = openAiRuntimeSettingsService;
+        this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
         this.dealGroupingService = dealGroupingService;
         this.dealGroupAiReviewService = dealGroupAiReviewService;
         this.scanRunRepository = scanRunRepository;
@@ -42,6 +45,7 @@ public class ReviewPacketService {
         StatusService.StatusResponse appStatus = statusService.status();
         SchedulerStatusService.SchedulerStatusResponse schedulerStatus = schedulerStatusService.status();
         OpenAiRuntimeSettingsService.EffectiveOpenAiSettings openAiStatus = openAiRuntimeSettingsService.effectiveSettings();
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings telegramStatus = telegramRuntimeSettingsService.effectiveSettings();
         List<DealGroupingService.DealGroupResponse> topDealGroups = dealGroupingService.groups(null, null, 30);
         DealGroupController.DealGroupStatsResponse dealGroupStats = dealGroupStats();
         DealGroupAiReviewService.AiReviewSummaryResponse aiSummary = dealGroupAiReviewService.summary();
@@ -63,11 +67,7 @@ public class ReviewPacketService {
                 appStatus,
                 schedulerStatus,
                 safeOpenAiStatus(openAiStatus),
-                new TelegramStatus(
-                        appStatus.config().telegramEnabled(),
-                        appStatus.config().telegramConfigured(),
-                        appStatus.config().alertDispatchEnabled()
-                ),
+                safeTelegramStatus(telegramStatus, appStatus.config().alertDispatchEnabled()),
                 dealGroupStats,
                 aiSummary,
                 batchPreview,
@@ -135,6 +135,19 @@ public class ReviewPacketService {
                 settings.keyMasked(),
                 settings.model(),
                 settings.maxInputChars(),
+                settings.message()
+        );
+    }
+
+    private TelegramStatus safeTelegramStatus(TelegramRuntimeSettingsService.EffectiveTelegramSettings settings, boolean dispatchEnabled) {
+        return new TelegramStatus(
+                settings.enabled(),
+                settings.configured(),
+                settings.tokenSource(),
+                settings.chatIdSource(),
+                settings.tokenMasked(),
+                settings.chatIdMasked(),
+                dispatchEnabled,
                 settings.message()
         );
     }
@@ -248,7 +261,12 @@ public class ReviewPacketService {
         builder.append("## Telegram Status\n\n");
         line(builder, "enabled", status.enabled());
         line(builder, "configured", status.configured());
+        line(builder, "tokenSource", status.tokenSource());
+        line(builder, "tokenMasked", status.tokenMasked());
+        line(builder, "chatIdSource", status.chatIdSource());
+        line(builder, "chatIdMasked", status.chatIdMasked());
         line(builder, "dispatchEnabled", status.dispatchEnabled());
+        line(builder, "message", status.message());
         builder.append("\n");
     }
 
@@ -453,7 +471,12 @@ public class ReviewPacketService {
     public record TelegramStatus(
             boolean enabled,
             boolean configured,
-            boolean dispatchEnabled
+            TelegramRuntimeSettingsService.SecretSource tokenSource,
+            TelegramRuntimeSettingsService.SecretSource chatIdSource,
+            String tokenMasked,
+            String chatIdMasked,
+            boolean dispatchEnabled,
+            String message
     ) {
     }
 

@@ -1,7 +1,6 @@
 package com.parsernews.service;
 
 import com.parsernews.config.AlertDispatchSettings;
-import com.parsernews.config.TelegramAlertSettings;
 import com.parsernews.persistence.ScanRunEntity;
 import com.parsernews.persistence.ScanRunRepository;
 import com.parsernews.persistence.ScanRunStatus;
@@ -18,26 +17,27 @@ public class SchedulerStatusService {
     private final boolean rssMonitoringEnabled;
     private final ScheduledFullRefreshScheduler scheduledFullRefreshScheduler;
     private final ScanRunRepository scanRunRepository;
-    private final TelegramAlertSettings telegramAlertSettings;
+    private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
     private final AlertDispatchSettings alertDispatchSettings;
 
     public SchedulerStatusService(
             @Value("${scanner.monitoring.enabled:false}") boolean rssMonitoringEnabled,
             ScheduledFullRefreshScheduler scheduledFullRefreshScheduler,
             ScanRunRepository scanRunRepository,
-            TelegramAlertSettings telegramAlertSettings,
+            TelegramRuntimeSettingsService telegramRuntimeSettingsService,
             AlertDispatchSettings alertDispatchSettings
     ) {
         this.rssMonitoringEnabled = rssMonitoringEnabled;
         this.scheduledFullRefreshScheduler = scheduledFullRefreshScheduler;
         this.scanRunRepository = scanRunRepository;
-        this.telegramAlertSettings = telegramAlertSettings;
+        this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
         this.alertDispatchSettings = alertDispatchSettings;
     }
 
     @Transactional(readOnly = true)
     public SchedulerStatusResponse status() {
         ScheduledFullRefreshScheduler.State state = scheduledFullRefreshScheduler.state();
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings telegramSettings = telegramRuntimeSettingsService.effectiveSettings();
         return new SchedulerStatusResponse(
                 rssMonitoringEnabled,
                 scanRunRepository.findTopByTriggerTypeOrderByStartedAtDesc(ScanRunTriggerType.SCHEDULED)
@@ -53,7 +53,7 @@ public class SchedulerStatusService {
                 "SCHEDULED_FULL_REFRESH",
                 state.fixedDelayMs(),
                 state.nextExpectedRunAt(),
-                telegramAlertSettings.enabled(),
+                telegramSettings.enabled(),
                 alertDispatchSettings.enabled(),
                 schedulerMessage(state)
         );

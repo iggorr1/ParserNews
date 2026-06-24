@@ -1,7 +1,6 @@
 package com.parsernews.service;
 
 import com.parsernews.config.AlertDispatchSettings;
-import com.parsernews.config.TelegramAlertSettings;
 import com.parsernews.persistence.CandidateStrength;
 import com.parsernews.persistence.DetectedEventRepository;
 import com.parsernews.persistence.NewsArticleRepository;
@@ -19,7 +18,7 @@ import java.time.Instant;
 public class StatusService {
     private final boolean scannerMonitoringEnabled;
     private final AlertDispatchSettings alertDispatchSettings;
-    private final TelegramAlertSettings telegramAlertSettings;
+    private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
     private final ScanRunRepository scanRunRepository;
     private final NewsArticleRepository articleRepository;
     private final DetectedEventRepository eventRepository;
@@ -27,14 +26,14 @@ public class StatusService {
     public StatusService(
             @Value("${scanner.monitoring.enabled:false}") boolean scannerMonitoringEnabled,
             AlertDispatchSettings alertDispatchSettings,
-            TelegramAlertSettings telegramAlertSettings,
+            TelegramRuntimeSettingsService telegramRuntimeSettingsService,
             ScanRunRepository scanRunRepository,
             NewsArticleRepository articleRepository,
             DetectedEventRepository eventRepository
     ) {
         this.scannerMonitoringEnabled = scannerMonitoringEnabled;
         this.alertDispatchSettings = alertDispatchSettings;
-        this.telegramAlertSettings = telegramAlertSettings;
+        this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
         this.scanRunRepository = scanRunRepository;
         this.articleRepository = articleRepository;
         this.eventRepository = eventRepository;
@@ -45,13 +44,14 @@ public class StatusService {
         ScanRunSummary latestScan = scanRunRepository.findTopByOrderByStartedAtDesc()
                 .map(ScanRunSummary::from)
                 .orElse(null);
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings telegramSettings = telegramRuntimeSettingsService.effectiveSettings();
         return new StatusResponse(
                 health(latestScan),
                 new ConfigSummary(
                         scannerMonitoringEnabled,
                         alertDispatchSettings.enabled(),
-                        telegramAlertSettings.enabled(),
-                        telegramConfigured()
+                        telegramSettings.enabled(),
+                        telegramSettings.configured()
                 ),
                 latestScan,
                 new ArticleEventStats(
@@ -76,14 +76,6 @@ public class StatusService {
             return HealthStatus.WARN;
         }
         return HealthStatus.OK;
-    }
-
-    private boolean telegramConfigured() {
-        return !isBlank(telegramAlertSettings.botToken()) && !isBlank(telegramAlertSettings.chatId());
-    }
-
-    private boolean isBlank(String value) {
-        return value == null || value.isBlank();
     }
 
     public enum HealthStatus {

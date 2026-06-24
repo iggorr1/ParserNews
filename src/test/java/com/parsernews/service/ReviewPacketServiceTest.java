@@ -27,6 +27,7 @@ class ReviewPacketServiceTest {
         StatusService statusService = mock(StatusService.class);
         SchedulerStatusService schedulerStatusService = mock(SchedulerStatusService.class);
         OpenAiRuntimeSettingsService openAiRuntimeSettingsService = mock(OpenAiRuntimeSettingsService.class);
+        TelegramRuntimeSettingsService telegramRuntimeSettingsService = mock(TelegramRuntimeSettingsService.class);
         DealGroupingService dealGroupingService = mock(DealGroupingService.class);
         DealGroupAiReviewService dealGroupAiReviewService = mock(DealGroupAiReviewService.class);
         ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
@@ -36,12 +37,23 @@ class ReviewPacketServiceTest {
         when(openAiRuntimeSettingsService.effectiveSettings()).thenReturn(new OpenAiRuntimeSettingsService.EffectiveOpenAiSettings(
                 true,
                 true,
-                "sk-raw-secret-value-123456",
+                "raw-openai-secret-value-123456",
                 "gpt-4.1-mini",
                 12000,
                 OpenAiRuntimeSettingsService.KeySource.RUNTIME,
-                "sk-...3456",
+                "****3456",
                 "OpenAI AI Review is enabled using runtime key."
+        ));
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                true,
+                true,
+                "123456:raw-telegram-token",
+                "987654321",
+                TelegramRuntimeSettingsService.SecretSource.RUNTIME,
+                TelegramRuntimeSettingsService.SecretSource.RUNTIME,
+                "123...oken",
+                "987...4321",
+                "Telegram is enabled using runtime token and runtime chat id."
         ));
         when(dealGroupingService.groups(null, null, 30)).thenReturn(List.of(group()));
         when(dealGroupingService.groups(null, null, 200)).thenReturn(List.of(group()));
@@ -54,6 +66,7 @@ class ReviewPacketServiceTest {
                 statusService,
                 schedulerStatusService,
                 openAiRuntimeSettingsService,
+                telegramRuntimeSettingsService,
                 dealGroupingService,
                 dealGroupAiReviewService,
                 scanRunRepository
@@ -72,8 +85,12 @@ class ReviewPacketServiceTest {
                 .contains("## Batch AI Candidates Preview")
                 .contains("## Top Deal Groups")
                 .contains("AbbVie to Acquire Apogee")
-                .contains("sk-...3456")
-                .doesNotContain("sk-raw-secret-value-123456");
+                .contains("****3456")
+                .contains("123...oken")
+                .contains("987...4321")
+                .doesNotContain("raw-openai-secret-value-123456")
+                .doesNotContain("123456:raw-telegram-token")
+                .doesNotContain("987654321");
     }
 
     private StatusService.StatusResponse status() {

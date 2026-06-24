@@ -1,7 +1,5 @@
 package com.parsernews.service;
 
-import com.parsernews.config.TelegramAlertSettings;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
@@ -9,22 +7,28 @@ import org.springframework.web.client.RestClientException;
 import java.util.Map;
 
 @Service
-@ConditionalOnProperty(prefix = "alerts.telegram", name = "enabled", havingValue = "true")
 public class TelegramAlertNotifier implements AlertNotifier {
-    private final TelegramAlertSettings settings;
+    private final TelegramRuntimeSettingsService settingsService;
     private final RestClient restClient;
 
-    public TelegramAlertNotifier(TelegramAlertSettings settings, RestClient.Builder restClientBuilder) {
-        this.settings = settings;
+    public TelegramAlertNotifier(TelegramRuntimeSettingsService settingsService, RestClient.Builder restClientBuilder) {
+        this.settingsService = settingsService;
         this.restClient = restClientBuilder.baseUrl("https://api.telegram.org").build();
     }
 
     @Override
     public AlertNotificationResult send(String message) {
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
+        if (!settings.enabled()) {
+            return AlertNotificationResult.notSent(
+                    "DISABLED",
+                    "Telegram is disabled; no external message was sent."
+            );
+        }
         if (isBlank(settings.botToken()) || isBlank(settings.chatId())) {
             return AlertNotificationResult.notSent(
                     "CONFIG_MISSING",
-                    "Telegram alerts are enabled but bot token or chat id is missing."
+                    "Telegram is enabled but bot token or chat id is missing."
             );
         }
         try {

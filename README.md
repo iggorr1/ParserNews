@@ -57,9 +57,12 @@ The dashboard and API are protected by HTTP Basic Auth:
 Credentials are configured with environment variables:
 
 ```text
-PARSERNEWS_AUTH_USERNAME
-PARSERNEWS_AUTH_PASSWORD
+APP_ADMIN_USERNAME
+APP_ADMIN_PASSWORD
 ```
+
+The older `PARSERNEWS_AUTH_USERNAME` / `PARSERNEWS_AUTH_PASSWORD` names still
+work as fallback, but new local and Docker setup should use `APP_ADMIN_*`.
 
 Local H2 development defaults are:
 
@@ -74,6 +77,10 @@ Docker Compose sets:
 username: admin
 password: change-me
 ```
+
+These are local defaults only. Set `APP_ADMIN_PASSWORD` before exposing the app
+outside localhost or a private network. The password is never returned by any
+API or review packet.
 
 Change the password before exposing the app outside localhost, Tailscale, or a
 private network. Do not commit real passwords.
@@ -794,15 +801,30 @@ parsernews.telegram.enabled=false
 parsernews.telegram.bot-token=
 parsernews.telegram.chat-id=
 
-PARSERNEWS_TELEGRAM_ENABLED=false
-PARSERNEWS_TELEGRAM_BOT_TOKEN=
-PARSERNEWS_TELEGRAM_CHAT_ID=
+TELEGRAM_ENABLED=false
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
 ```
 
-Telegram is disabled by default. Do not commit real tokens or chat ids. Use
-environment-specific local configuration if real manual sending is tested later.
-The older internal `alerts.telegram.*` properties are still wired through these
-safe parsernews settings for compatibility.
+Telegram is disabled by default and remains manual-only. Do not commit real
+tokens or chat ids. The dashboard can temporarily enable Telegram and accept a
+bot token/chat id for local testing; those runtime values are kept only in
+backend memory, are not saved to `.env`, browser storage, git, or the database,
+and disappear after restart.
+
+Environment configuration still works as fallback. API responses and review
+packets expose only source/configured flags and masked values such as
+`123...abcd`; full token and chat id values are never returned. The older
+`PARSERNEWS_TELEGRAM_*` and internal `alerts.telegram.*` properties still work
+as compatibility fallbacks.
+
+Runtime settings endpoints:
+
+```text
+GET /api/admin/telegram-settings
+PUT /api/admin/telegram-settings
+DELETE /api/admin/telegram-settings/runtime
+```
 
 ### Alert Dispatch
 

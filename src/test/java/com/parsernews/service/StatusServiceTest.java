@@ -117,7 +117,7 @@ class StatusServiceTest {
         return new StatusService(
                 monitoringEnabled,
                 new AlertDispatchSettings(dispatchEnabled, 300000, 5),
-                new TelegramAlertSettings(telegramEnabled, botToken, chatId),
+                new TelegramRuntimeSettingsService(new TelegramAlertSettings(telegramEnabled, botToken, chatId)),
                 scanRunRepository,
                 articleRepository,
                 eventRepository

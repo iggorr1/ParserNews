@@ -3,15 +3,15 @@ services:
     image: postgres:16-alpine
     container_name: parsernews-postgres
     environment:
-      POSTGRES_DB: parsernews
-      POSTGRES_USER: parsernews
-      POSTGRES_PASSWORD: parsernews
+      POSTGRES_DB: ${POSTGRES_DB:-parsernews}
+      POSTGRES_USER: ${POSTGRES_USER:-parsernews}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-parsernews}
     ports:
       - "5432:5432"
     volumes:
       - parsernews-postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U parsernews -d parsernews"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-parsernews} -d ${POSTGRES_DB:-parsernews}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -27,12 +27,12 @@ services:
       - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: live,postgres
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/parsernews
-      SPRING_DATASOURCE_USERNAME: parsernews
-      SPRING_DATASOURCE_PASSWORD: parsernews
-      PARSERNEWS_TELEGRAM_ENABLED: "false"
-      PARSERNEWS_TELEGRAM_BOT_TOKEN: ""
-      PARSERNEWS_TELEGRAM_CHAT_ID: ""
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-parsernews}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-parsernews}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-parsernews}
+      TELEGRAM_ENABLED: ${TELEGRAM_ENABLED:-false}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       ALERTS_DISPATCH_ENABLED: "false"
       FULL_REFRESH_SCHEDULER_ENABLED: ${FULL_REFRESH_SCHEDULER_ENABLED:-false}
       FULL_REFRESH_SCHEDULER_INITIAL_DELAY_MS: ${FULL_REFRESH_SCHEDULER_INITIAL_DELAY_MS:-120000}
@@ -41,9 +41,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
       OPENAI_ANALYSIS_MAX_INPUT_CHARS: ${OPENAI_ANALYSIS_MAX_INPUT_CHARS:-12000}
-      PARSERNEWS_AUTH_ENABLED: "true"
-      PARSERNEWS_AUTH_USERNAME: admin
-      PARSERNEWS_AUTH_PASSWORD: change-me
+      PARSERNEWS_AUTH_ENABLED: ${PARSERNEWS_AUTH_ENABLED:-true}
+      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:-change-me}
       SEC_SCANNER_ENABLED: ${SEC_SCANNER_ENABLED:-false}
       SEC_SCANNER_WATCHLIST: ${SEC_SCANNER_WATCHLIST:-}
       SEC_SCANNER_MAX_FILINGS_PER_CIK: ${SEC_SCANNER_MAX_FILINGS_PER_CIK:-20}
