@@ -1447,6 +1447,10 @@
                     data-source-preview-name="PRNewswire Private Placement"
                     data-source-preview-url="https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/private-placement-list.rss">PRNewswire Private Placement</button>
         </div>
+        <div class="actions compact-actions" id="sourcePreviewExports" style="margin-bottom: 12px;" hidden>
+            <button id="sourcePreviewExportJsonButton" type="button">Export JSON</button>
+            <button id="sourcePreviewExportCsvButton" type="button">Export CSV</button>
+        </div>
         <div id="sourcePreviewResult" class="notice">Choose a feed and run preview. The production scanner and database will not be changed.</div>
     </section>
 
@@ -1953,6 +1957,9 @@
     const sourcePreviewMaxItemsInput = document.querySelector("#sourcePreviewMaxItemsInput");
     const sourcePreviewButton = document.querySelector("#sourcePreviewButton");
     const sourcePreviewQuickFill = document.querySelector("#sourcePreviewQuickFill");
+    const sourcePreviewExports = document.querySelector("#sourcePreviewExports");
+    const sourcePreviewExportJsonButton = document.querySelector("#sourcePreviewExportJsonButton");
+    const sourcePreviewExportCsvButton = document.querySelector("#sourcePreviewExportCsvButton");
     const openAiEnabledInput = document.querySelector("#openAiEnabledInput");
     const openAiApiKeyInput = document.querySelector("#openAiApiKeyInput");
     const openAiModelInput = document.querySelector("#openAiModelInput");
@@ -2022,6 +2029,8 @@
     secCompanyLookupButton.addEventListener("click", searchSecCompanyLookup);
     sourcePreviewButton.addEventListener("click", runSourcePreview);
     sourcePreviewQuickFill.addEventListener("click", fillSourcePreview);
+    sourcePreviewExportJsonButton.addEventListener("click", exportSourcePreviewJson);
+    sourcePreviewExportCsvButton.addEventListener("click", exportSourcePreviewCsv);
     openAiSettingsSaveButton.addEventListener("click", saveOpenAiSettings);
     openAiSettingsClearButton.addEventListener("click", clearOpenAiRuntimeKey);
     telegramSettingsSaveButton.addEventListener("click", saveTelegramSettings);
@@ -2663,6 +2672,7 @@
         if (state.sourcePreviewError) {
             status.className = "badge error";
             status.textContent = "error";
+            sourcePreviewExports.hidden = true;
             target.innerHTML = `<div class="danger-text">Preview failed: ${escapeText(state.sourcePreviewError)}</div>`;
             return;
         }
@@ -2670,11 +2680,13 @@
         if (!result) {
             status.className = "badge disabled";
             status.textContent = "idle";
+            sourcePreviewExports.hidden = true;
             target.innerHTML = "Choose a feed and run preview. The production scanner and database will not be changed.";
             return;
         }
         status.className = `badge ${escapeAttr(result.recommendation || "NEEDS_REVIEW")}`;
         status.textContent = result.recommendation || "NEEDS_REVIEW";
+        sourcePreviewExports.hidden = false;
         const items = Array.isArray(result.previewItems) ? result.previewItems : [];
         target.innerHTML = `
             <div class="kv" style="margin-bottom: 12px;">
@@ -4346,6 +4358,98 @@
             reviewStatus: dealGroupReviewFilter.value,
             limit: "500"
         });
+    }
+
+    function exportSourcePreviewJson() {
+        if (!state.sourcePreview) {
+            return;
+        }
+        downloadText(
+                `${sourcePreviewFilename()}.json`,
+                "application/json;charset=utf-8",
+                JSON.stringify(state.sourcePreview, null, 2)
+        );
+    }
+
+    function exportSourcePreviewCsv() {
+        if (!state.sourcePreview) {
+            return;
+        }
+        downloadText(
+                `${sourcePreviewFilename()}.csv`,
+                "text/csv;charset=utf-8",
+                sourcePreviewCsv(state.sourcePreview)
+        );
+    }
+
+    function sourcePreviewCsv(result) {
+        const columns = [
+            "sourceName",
+            "sourceUrl",
+            "recommendation",
+            "title",
+            "url",
+            "publishedAt",
+            "priority",
+            "dealRelevance",
+            "tradability",
+            "dealStage",
+            "dealTiming",
+            "alertEligible"
+        ];
+        const rows = (Array.isArray(result.previewItems) ? result.previewItems : []).map(item => [
+            result.sourceName,
+            result.url,
+            result.recommendation,
+            item.title,
+            item.url,
+            item.publishedAt,
+            item.priority,
+            item.dealRelevance,
+            item.tradability,
+            item.dealStage,
+            item.dealTiming,
+            item.alertEligible
+        ]);
+        return [columns, ...rows]
+                .map(row => row.map(csvCell).join(","))
+                .join("\r\n");
+    }
+
+    function csvCell(value) {
+        if (value === null || value === undefined) {
+            return "";
+        }
+        const text = String(value);
+        return `"${text.replaceAll('"', '""')}"`;
+    }
+
+    function sourcePreviewFilename() {
+        const source = state.sourcePreview?.sourceName || sourcePreviewNameInput.value || "source-preview";
+        const slug = source.toLowerCase()
+                .replace(/[^a-z0-9]+/g, "-")
+                .replace(/^-+|-+$/g, "")
+                .slice(0, 60) || "source-preview";
+        return `source-preview-${slug}-${timestampForFilename()}`;
+    }
+
+    function timestampForFilename() {
+        return new Date().toISOString()
+                .slice(0, 19)
+                .replace("T", "-")
+                .replaceAll(":", "-");
+    }
+
+    function downloadText(filename, mimeType, text) {
+        const blob = new Blob([text], {type: mimeType});
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
     }
 
     function exportUrl(path, params) {
