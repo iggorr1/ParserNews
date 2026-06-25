@@ -92,6 +92,9 @@ public class AlertEligibilityService {
         if (!isTrustedHost(event.getArticle().getUrl())) {
             return new AlertEligibility(false, "Source host is not trusted for alert queueing.");
         }
+        if (!hasPublicTargetEvidence(event)) {
+            return new AlertEligibility(false, "No public target ticker or CIK was resolved for this RSS candidate.");
+        }
 
         CandidateReviewInsightService.ReviewInsight reviewInsight = reviewInsightService.insight(event.getArticle(), event);
         DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(event.getArticle(), event, reviewInsight);
@@ -113,9 +116,10 @@ public class AlertEligibilityService {
             return withStrategy(false, "Review verdict is LIKELY_NOISE.", relevanceInsight, stageInsight);
         }
         if (relevanceInsight.dealRelevance() != DealRelevance.PUBLIC_TAKE_PRIVATE
-                && relevanceInsight.dealRelevance() != DealRelevance.PUBLIC_CASH_ACQUISITION) {
+                && relevanceInsight.dealRelevance() != DealRelevance.PUBLIC_CASH_ACQUISITION
+                && relevanceInsight.dealRelevance() != DealRelevance.PUBLIC_PUBLIC_MERGER) {
             String reason = "Deal relevance is " + relevanceInsight.dealRelevance()
-                    + ", not a public cash/take-private alert.";
+                    + ", not a public target strategy alert.";
             if (!relevanceInsight.relevanceWarnings().isEmpty()) {
                 reason += " Warnings: " + String.join(", ", relevanceInsight.relevanceWarnings()) + ".";
             }
@@ -123,6 +127,9 @@ public class AlertEligibilityService {
         }
         if (relevanceInsight.tradability() != Tradability.HIGH && relevanceInsight.tradability() != Tradability.MEDIUM) {
             return withStrategy(false, "Tradability is " + relevanceInsight.tradability() + ".", relevanceInsight, stageInsight);
+        }
+        if (stageInsight.dealTiming() != DealTiming.EARLY && stageInsight.dealTiming() != DealTiming.MID_STAGE) {
+            return withStrategy(false, "Deal timing is " + stageInsight.dealTiming() + ".", relevanceInsight, stageInsight);
         }
         if (stageInsight.dealTiming() == DealTiming.LATE_STAGE
                 || stageInsight.dealTiming() == DealTiming.POST_CLOSE
@@ -136,7 +143,15 @@ public class AlertEligibilityService {
                 || stageInsight.dealStage() == DealStage.LITIGATION_OR_LAW_FIRM_UPDATE) {
             return withStrategy(false, "Deal stage is " + stageInsight.dealStage() + ".", relevanceInsight, stageInsight);
         }
-        return withStrategy(true, "Strategy-eligible public cash/take-private candidate.", relevanceInsight, stageInsight);
+        return withStrategy(true, "Strategy-eligible public target candidate.", relevanceInsight, stageInsight);
+    }
+
+    private boolean hasPublicTargetEvidence(DetectedEventEntity event) {
+        return event.getTargetTicker() != null
+                && !event.getTargetTicker().isBlank()
+                && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())
+                || event.getTargetCik() != null
+                && !event.getTargetCik().isBlank();
     }
 
     private AlertEligibility withStrategy(

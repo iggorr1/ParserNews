@@ -314,6 +314,131 @@ class KnownMaClassificationRegressionTest {
     }
 
     @Test
+    void evolveRoyaltyProjectAcquisitionIsNotPublicCashAcquisition() {
+        DetectedEventEntity event = event(
+                44L,
+                "Evolve Royalties Enters Into Definitive Agreement in Connection with Previously Announced Acquisition of a Royalty on the Sunnyside Project",
+                "Evolve Royalties announced a definitive agreement for the acquisition of a royalty on the Sunnyside Project. "
+                        + "The transaction is a project royalty acquisition, not a public target company offer.",
+                "https://www.globenewswire.com/news-release/evolve-royalty.html",
+                "EVLV",
+                "Sunnyside Project royalty",
+                "Evolve Royalties",
+                CandidateStrength.HIGH,
+                "definitive agreement|acquisition"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PUBLIC_CASH_ACQUISITION);
+        assertThat(classification.relevance.tradability()).isNotEqualTo(Tradability.HIGH);
+        assertThat(classification.relevance.relevanceWarnings()).contains("asset/non-company acquisition");
+        assertThat(eligibility.eligible()).isFalse();
+        assertThat(isStrictCandidate(classification)).isFalse();
+    }
+
+    @Test
+    void merckBioTechnePublicTargetDoesNotBecomePrivateCompanyAcquisition() {
+        DetectedEventEntity event = event(
+                45L,
+                "Merck KGaA Agrees to Acquire Bio-Techne Corporation",
+                "Merck KGaA announced an agreement to acquire Bio-Techne Corporation (NASDAQ: TECH). Terms were not disclosed.",
+                "https://www.prnewswire.com/news-releases/merck-biotechne.html",
+                "TECH",
+                "Bio-Techne Corporation",
+                "Merck KGaA",
+                CandidateStrength.HIGH,
+                "agreement to acquire"
+        );
+        event.updateCompanyEnrichment(
+                "TECH",
+                "842023",
+                true,
+                CompanyMatchConfidence.EXACT_TICKER,
+                null,
+                null,
+                false,
+                CompanyMatchConfidence.NONE,
+                null
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PRIVATE_COMPANY_ACQUISITION);
+        assertThat(classification.relevance.tradability()).isIn(Tradability.MEDIUM, Tradability.HIGH);
+        assertThat(classification.relevance.relevancePositiveSignals()).contains("public target signal");
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void trillerSpaceXPositionIsStrategicAssetNotPublicTargetDeal() {
+        DetectedEventEntity event = event(
+                46L,
+                "Triller Announces Agreement to Acquire Significant SpaceX Position as Strategic Treasury Asset",
+                "Triller entered into an agreement to acquire a significant SpaceX position as a strategic treasury asset.",
+                "https://www.prnewswire.com/news-releases/triller-spacex-position.html",
+                "ILLR",
+                "SpaceX position",
+                "Triller",
+                CandidateStrength.HIGH,
+                "agreement to acquire"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
+        assertThat(classification.relevance.tradability()).isEqualTo(Tradability.NOT_TRADABLE);
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void form83DisclosureIsNotAlertableMaSignal() {
+        DetectedEventEntity event = event(
+                47L,
+                "Form 8.3 - Opening Position Disclosure",
+                "Form 8.3 dealing disclosure and opening position disclosure under the takeover code.",
+                "https://www.prnewswire.com/news-releases/form-83-disclosure.html",
+                "UNKNOWN",
+                "UNKNOWN",
+                null,
+                CandidateStrength.LOW,
+                ""
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.NOT_TRADABLE);
+        assertThat(classification.relevance.tradability()).isEqualTo(Tradability.NOT_TRADABLE);
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void typoHareholderAlertIsLawFirmNoise() {
+        DetectedEventEntity event = event(
+                48L,
+                "$HAREHOLDER ALERT: The M&A Class Action Firm Investigates Proposed Transaction",
+                "The law firm announces an investigation and class action review for shareholders.",
+                "https://www.prnewswire.com/news-releases/hareholder-alert.html",
+                "TEST",
+                "Test Company",
+                null,
+                CandidateStrength.HIGH,
+                "proposed transaction"
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.reviewInsight.reviewVerdict()).isEqualTo(ReviewVerdict.LAW_FIRM_ALERT);
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT);
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
     void mdaBlueCanyonPublicBuyerPrivateTargetStaysNotTradable() {
         DetectedEventEntity event = event(
                 5L,
@@ -381,6 +506,16 @@ class KnownMaClassificationRegressionTest {
         DealRelevanceService.RelevanceInsight relevance = dealRelevanceService.assess(event.getArticle(), event, reviewInsight, terms);
         DealStageDetectionService.StageInsight stage = dealStageDetectionService.detect(event.getArticle(), event, terms, reviewInsight, relevance);
         return new Classification(reviewInsight, terms, relevance, stage);
+    }
+
+    private boolean isStrictCandidate(Classification classification) {
+        return (classification.relevance.tradability() == Tradability.HIGH
+                || classification.relevance.tradability() == Tradability.MEDIUM)
+                && (classification.relevance.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION
+                || classification.relevance.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE
+                || classification.relevance.dealRelevance() == DealRelevance.PUBLIC_PUBLIC_MERGER)
+                && (classification.stage.dealTiming() == DealTiming.EARLY
+                || classification.stage.dealTiming() == DealTiming.MID_STAGE);
     }
 
     private DealGroupingService groupingService(List<DetectedEventEntity> events, List<SecFilingEntity> filings) {

@@ -33,7 +33,8 @@ public class DealRelevanceService {
 
         boolean lawFirm = reviewInsight != null
                 && reviewInsight.reviewVerdict() == ReviewVerdict.LAW_FIRM_ALERT
-                || containsAny(lower, "shareholder alert", "stockholder alert", "law firm", "class action");
+                || containsAny(lower, "shareholder alert", "hareholder alert", "stockholder alert",
+                "law firm", "class action", "m&a class action");
         if (NewsTextPatterns.isRoundupAggregator(article.getHeadline(), article.getArticleText())) {
             warnings.add(NewsTextPatterns.ROUNDUP_AGGREGATOR_WARNING);
             return new RelevanceInsight(
@@ -64,6 +65,18 @@ public class DealRelevanceService {
                     positives
             );
         }
+        if (isAssetOrNonCompanyAcquisition(lower, dealTerms)) {
+            warnings.add("asset/non-company acquisition");
+            warnings.add("no public target signal");
+            warnings.add("not directly tradable via target shares");
+            return new RelevanceInsight(
+                    DealRelevance.NOT_TRADABLE,
+                    Tradability.NOT_TRADABLE,
+                    "Looks like an acquisition of an asset, royalty, project, portfolio, position, or business line rather than a public-company target.",
+                    warnings,
+                    positives
+            );
+        }
 
         boolean publicBuyer = hasPublicBuyerSignal(event, lower);
         boolean privateTargetSignal = hasPrivateTargetSignal(dealTerms, lower);
@@ -76,9 +89,9 @@ public class DealRelevanceService {
         boolean publicPublicMerger = publicTarget && (publicBuyer
                 || containsAny(lower, "public-public", "combined company", "surviving entity", "stock-for-stock"));
         boolean privateCompanySignal = privateTargetSignal
-                || containsAny(lower, "portfolio company", "privately held", "private company",
+                || (!publicTarget && containsAny(lower, "portfolio company", "privately held", "private company",
                 "subsidiary", "business unit", "terms were not disclosed", "terms undisclosed",
-                "acquired from");
+                "acquired from"));
 
         if (!publicTarget) {
             warnings.add("target ticker missing");
@@ -168,6 +181,16 @@ public class DealRelevanceService {
                     positives
             );
         }
+        if (publicTarget && cash && dealTerms.offerPrice() != null) {
+            positives.add("public cash acquisition signal");
+            return new RelevanceInsight(
+                    DealRelevance.PUBLIC_CASH_ACQUISITION,
+                    Tradability.HIGH,
+                    "Public target with cash/fixed-price acquisition terms.",
+                    warnings,
+                    positives
+            );
+        }
         if (publicPublicMerger && stock) {
             warnings.add("not take-private");
             warnings.add("public-public merger");
@@ -210,6 +233,15 @@ public class DealRelevanceService {
                     positives
             );
         }
+        if (publicTarget) {
+            return new RelevanceInsight(
+                    DealRelevance.UNKNOWN,
+                    Tradability.MEDIUM,
+                    "Public target signal found, but deterministic deal terms are not clear enough for a cash/take-private classification.",
+                    warnings,
+                    positives
+            );
+        }
         return new RelevanceInsight(
                 DealRelevance.UNKNOWN,
                 Tradability.UNKNOWN,
@@ -240,6 +272,11 @@ public class DealRelevanceService {
                 && event.getTargetMatchConfidence() != CompanyMatchConfidence.PARTIAL_NAME) {
             return true;
         }
+        if (event != null && event.getTargetCik() != null && !event.getTargetCik().isBlank()
+                && (event.getBuyerCik() == null || !event.getTargetCik().equalsIgnoreCase(event.getBuyerCik()))
+                && event.getTargetMatchConfidence() != CompanyMatchConfidence.PARTIAL_NAME) {
+            return true;
+        }
         if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())
                 && !publicBuyer) {
             return true;
@@ -256,10 +293,16 @@ public class DealRelevanceService {
                 || containsAny(lower,
                 "registered direct offering",
                 "private placement",
+                "non-brokered private placement",
                 "at-the-market offering",
                 "atm offering",
                 "public offering",
                 "follow-on offering",
+                "safe investment",
+                "strategic investment",
+                "dividend",
+                "earnings release",
+                "investor conference call",
                 "senior notes tender offer",
                 "tender offer for senior notes",
                 "tender offer for notes",
@@ -268,7 +311,11 @@ public class DealRelevanceService {
                 "share redemption",
                 "redemption deadline",
                 "extension vote",
-                "extension meeting");
+                "extension meeting",
+                "form 8.3",
+                "form 8.5",
+                "dealing disclosure",
+                "opening position disclosure");
     }
 
     private boolean hasPrivateTargetSignal(DealTermsExtractionService.DealTerms dealTerms, String lower) {
@@ -279,8 +326,54 @@ public class DealRelevanceService {
                 || target.endsWith("llc")
                 || containsAny(target, "subsidiary", "business unit", "portfolio company")
                 || containsAny(lower, "private company", "portfolio company",
-                "terms were not disclosed", "terms undisclosed", "acquired from",
                 "subsidiary", "business unit");
+    }
+
+    private boolean isAssetOrNonCompanyAcquisition(String lower, DealTermsExtractionService.DealTerms dealTerms) {
+        String target = dealTerms == null || dealTerms.targetCompany() == null
+                ? ""
+                : dealTerms.targetCompany().toLowerCase(Locale.ROOT);
+        return containsAny(lower,
+                "acquisition of a royalty",
+                "acquisition of royalty",
+                "royalty acquisition",
+                "royalty on",
+                "royalty interest",
+                "acquisition of a project",
+                "acquisition of project",
+                "mining project",
+                "strategic treasury asset",
+                "treasury asset",
+                "significant spacex position",
+                "position in spacex",
+                "stake in spacex",
+                "acquisition of assets",
+                "asset acquisition",
+                "acquire assets",
+                "acquires assets",
+                "portfolio of assets",
+                "loan portfolio",
+                "book of business",
+                "solar assets",
+                "operating assets",
+                "hotel assets",
+                "hotel property",
+                "acquisition of a property",
+                "acquire property")
+                || containsAny(target,
+                "royalty",
+                "project",
+                "assets",
+                "asset",
+                "position",
+                "stake",
+                "portfolio",
+                "property",
+                "hotel",
+                "book of business",
+                "loan portfolio",
+                "solar assets",
+                "operating assets");
     }
 
     private boolean hasPublicBuyerSignal(DetectedEventEntity event, String lower) {

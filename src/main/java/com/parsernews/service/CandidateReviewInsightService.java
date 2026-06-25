@@ -30,10 +30,12 @@ public class CandidateReviewInsightService {
 
     private static final List<SignalRule> LAW_FIRM_RULES = List.of(
             new SignalRule("shareholder alert", "shareholder alert"),
+            new SignalRule("hareholder alert", "shareholder alert"),
             new SignalRule("stockholder alert", "shareholder alert"),
             new SignalRule("law firm", "law firm investigation"),
             new SignalRule("investigation", "law firm investigation"),
             new SignalRule("investigates", "law firm investigation"),
+            new SignalRule("m&a class action", "class action"),
             new SignalRule("class action", "class action")
     );
 
@@ -41,13 +43,35 @@ public class CandidateReviewInsightService {
             new SignalRule("public offering", "public offering"),
             new SignalRule("registered direct offering", "registered direct offering"),
             new SignalRule("private placement", "private placement"),
+            new SignalRule("non-brokered private placement", "private placement"),
+            new SignalRule("safe investment", "financing/strategic investment"),
+            new SignalRule("strategic investment", "financing/strategic investment"),
+            new SignalRule("senior notes", "debt tender offer"),
+            new SignalRule("tender offer for notes", "debt tender offer"),
+            new SignalRule("dividend", "ordinary corporate update"),
+            new SignalRule("earnings release", "ordinary corporate update"),
+            new SignalRule("investor conference call", "ordinary corporate update"),
             new SignalRule("debt tender offer", "debt tender offer")
     );
 
     private static final List<SignalRule> NOISE_RULES = List.of(
             new SignalRule("asset acquisition", "asset acquisition"),
             new SignalRule("acquisition of assets", "asset acquisition"),
+            new SignalRule("acquisition of a royalty", "asset acquisition"),
+            new SignalRule("royalty on", "asset acquisition"),
+            new SignalRule("acquisition of a project", "asset acquisition"),
+            new SignalRule("treasury asset", "asset acquisition"),
+            new SignalRule("position in", "asset acquisition"),
+            new SignalRule("stake in", "asset acquisition"),
+            new SignalRule("loan portfolio", "asset acquisition"),
+            new SignalRule("book of business", "asset acquisition"),
+            new SignalRule("solar assets", "asset acquisition"),
+            new SignalRule("operating assets", "asset acquisition"),
             new SignalRule("sale of assets", "sale of assets"),
+            new SignalRule("form 8.3", "position/dealing disclosure"),
+            new SignalRule("form 8.5", "position/dealing disclosure"),
+            new SignalRule("dealing disclosure", "position/dealing disclosure"),
+            new SignalRule("opening position disclosure", "position/dealing disclosure"),
             new SignalRule("joint venture", "joint venture"),
             new SignalRule("reverse stock split", "reverse stock split")
     );
@@ -89,7 +113,8 @@ public class CandidateReviewInsightService {
             verdict = ReviewVerdict.LIKELY_NOISE;
         } else if (containsAny(riskFlags, "shareholder alert", "law firm investigation", "class action")) {
             verdict = ReviewVerdict.LAW_FIRM_ALERT;
-        } else if (containsAny(riskFlags, "public offering", "registered direct offering", "private placement", "debt tender offer")) {
+        } else if (containsAny(riskFlags, "public offering", "registered direct offering", "private placement",
+                "debt tender offer", "financing/strategic investment", "ordinary corporate update")) {
             verdict = ReviewVerdict.FINANCING_OR_OFFERING;
         } else if (strength == CandidateStrength.HIGH && !positiveSignals.isEmpty() && riskFlags.isEmpty()) {
             verdict = ReviewVerdict.LIKELY_DEAL;
