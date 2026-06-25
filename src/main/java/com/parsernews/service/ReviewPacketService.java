@@ -20,6 +20,7 @@ public class ReviewPacketService {
     private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
     private final DealGroupingService dealGroupingService;
     private final DealGroupAiReviewService dealGroupAiReviewService;
+    private final SourceEvaluationPreviewService sourceEvaluationPreviewService;
     private final ScanRunRepository scanRunRepository;
 
     public ReviewPacketService(
@@ -29,6 +30,7 @@ public class ReviewPacketService {
             TelegramRuntimeSettingsService telegramRuntimeSettingsService,
             DealGroupingService dealGroupingService,
             DealGroupAiReviewService dealGroupAiReviewService,
+            SourceEvaluationPreviewService sourceEvaluationPreviewService,
             ScanRunRepository scanRunRepository
     ) {
         this.statusService = statusService;
@@ -37,6 +39,7 @@ public class ReviewPacketService {
         this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
         this.dealGroupingService = dealGroupingService;
         this.dealGroupAiReviewService = dealGroupAiReviewService;
+        this.sourceEvaluationPreviewService = sourceEvaluationPreviewService;
         this.scanRunRepository = scanRunRepository;
     }
 
@@ -49,6 +52,7 @@ public class ReviewPacketService {
         List<DealGroupingService.DealGroupResponse> topDealGroups = dealGroupingService.groups(null, null, 30);
         DealGroupController.DealGroupStatsResponse dealGroupStats = dealGroupStats();
         DealGroupAiReviewService.AiReviewSummaryResponse aiSummary = dealGroupAiReviewService.summary();
+        SourceQualityAudit sourceQualityAudit = sourceQualityAudit();
         DealGroupAiReviewService.BatchCandidatePreviewResponse batchPreview = dealGroupAiReviewService.previewBatchCandidates(
                 new DealGroupAiReviewService.BatchCandidatePreviewRequest(
                         25,
@@ -70,6 +74,7 @@ public class ReviewPacketService {
                 safeTelegramStatus(telegramStatus, appStatus.config().alertDispatchEnabled()),
                 dealGroupStats,
                 aiSummary,
+                sourceQualityAudit,
                 batchPreview,
                 topDealGroups,
                 recentScanRuns,
@@ -106,6 +111,42 @@ public class ReviewPacketService {
                 enumBreakdown(groups.stream().map(group -> group.dealTiming() == null ? null : group.dealTiming().name()).toList()),
                 enumBreakdown(groups.stream().map(group -> group.priority() == null ? null : group.priority().name()).toList())
         );
+    }
+
+    private SourceQualityAudit sourceQualityAudit() {
+        try {
+            SourceEvaluationPreviewService.ConfiguredSourceEvaluationResponse response =
+                    sourceEvaluationPreviewService.previewConfigured(
+                            new SourceEvaluationPreviewService.ConfiguredSourceEvaluationRequest(20)
+                    );
+            List<SourceEvaluationPreviewService.SourceEvaluationSummary> sources = response.results();
+            return new SourceQualityAudit(
+                    response.sourceCount(),
+                    sources.stream().filter(source -> source.recommendation() == SourceEvaluationPreviewService.Recommendation.KEEP).count(),
+                    sources.stream().filter(source -> source.recommendation() == SourceEvaluationPreviewService.Recommendation.NEEDS_REVIEW).count(),
+                    sources.stream().filter(source -> source.recommendation() == SourceEvaluationPreviewService.Recommendation.DISABLE).count(),
+                    sources.stream().mapToLong(SourceEvaluationPreviewService.SourceEvaluationSummary::strictCandidateCount).sum(),
+                    sources
+            );
+        } catch (RuntimeException exception) {
+            return new SourceQualityAudit(
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                    List.of(new SourceEvaluationPreviewService.SourceEvaluationSummary(
+                            "Source Quality Audit",
+                            "-",
+                            0,
+                            0,
+                            0,
+                            0,
+                            SourceEvaluationPreviewService.Recommendation.DISABLE,
+                            List.of("Source audit failed: " + exception.getMessage())
+                    ))
+            );
+        }
     }
 
     private boolean isAlertLikeGroup(DealGroupingService.DealGroupResponse group) {
@@ -188,6 +229,7 @@ public class ReviewPacketService {
         appendTelegram(builder, packet.telegramStatus());
         appendDealGroupStats(builder, packet.dealGroupStats());
         appendAiSummary(builder, packet.aiReviewSummary());
+        appendSourceQualityAudit(builder, packet.sourceQualityAudit());
         appendBatchPreview(builder, packet.batchAiCandidatesPreview());
         appendTopDealGroups(builder, packet.topDealGroups());
         appendScanRuns(builder, packet.recentScanRuns());
@@ -222,6 +264,38 @@ public class ReviewPacketService {
         line(builder, "lowCandidates", status.articleEvents().lowCandidateCount());
         line(builder, "alertEligible", status.alerts().alertEligibleCount());
         line(builder, "alertQueued", status.alerts().alreadyQueuedCount());
+        builder.append("\n");
+    }
+
+    private void appendSourceQualityAudit(StringBuilder builder, SourceQualityAudit audit) {
+        builder.append("## Source Quality Audit\n\n");
+        line(builder, "totalConfiguredSources", audit.totalConfiguredSources());
+        line(builder, "KEEP", audit.keepCount());
+        line(builder, "NEEDS_REVIEW", audit.needsReviewCount());
+        line(builder, "DISABLE", audit.disableCount());
+        line(builder, "strictCandidateCountTotal", audit.strictCandidateCountTotal());
+        builder.append("\n");
+        builder.append("| sourceName | fetched | candidates | strict | noise | recommendation | errors |\n");
+        builder.append("|---|---:|---:|---:|---:|---|---:|\n");
+        if (audit.sources().isEmpty()) {
+            builder.append("| none | 0 | 0 | 0 | 0 | NEEDS_REVIEW | 0 |\n");
+        } else {
+            audit.sources().forEach(source -> builder.append("| ")
+                    .append(tableCell(source.sourceName()))
+                    .append(" | ")
+                    .append(source.fetchedCount())
+                    .append(" | ")
+                    .append(source.candidateCount())
+                    .append(" | ")
+                    .append(source.strictCandidateCount())
+                    .append(" | ")
+                    .append(source.noiseCount())
+                    .append(" | ")
+                    .append(source.recommendation())
+                    .append(" | ")
+                    .append(source.errors() == null ? 0 : source.errors().size())
+                    .append(" |\n"));
+        }
         builder.append("\n");
     }
 
@@ -442,6 +516,10 @@ public class ReviewPacketService {
                 .trim();
     }
 
+    private String tableCell(Object value) {
+        return clean(value).replace("|", "\\|");
+    }
+
     public record ReviewPacket(
             Instant generatedAt,
             StatusService.StatusResponse appStatus,
@@ -450,10 +528,21 @@ public class ReviewPacketService {
             TelegramStatus telegramStatus,
             DealGroupController.DealGroupStatsResponse dealGroupStats,
             DealGroupAiReviewService.AiReviewSummaryResponse aiReviewSummary,
+            SourceQualityAudit sourceQualityAudit,
             DealGroupAiReviewService.BatchCandidatePreviewResponse batchAiCandidatesPreview,
             List<DealGroupingService.DealGroupResponse> topDealGroups,
             List<ScanRunSummary> recentScanRuns,
             List<String> knownWarnings
+    ) {
+    }
+
+    public record SourceQualityAudit(
+            int totalConfiguredSources,
+            long keepCount,
+            long needsReviewCount,
+            long disableCount,
+            long strictCandidateCountTotal,
+            List<SourceEvaluationPreviewService.SourceEvaluationSummary> sources
     ) {
     }
 

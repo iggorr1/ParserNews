@@ -30,6 +30,7 @@ class ReviewPacketServiceTest {
         TelegramRuntimeSettingsService telegramRuntimeSettingsService = mock(TelegramRuntimeSettingsService.class);
         DealGroupingService dealGroupingService = mock(DealGroupingService.class);
         DealGroupAiReviewService dealGroupAiReviewService = mock(DealGroupAiReviewService.class);
+        SourceEvaluationPreviewService sourceEvaluationPreviewService = mock(SourceEvaluationPreviewService.class);
         ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
 
         when(statusService.status()).thenReturn(status());
@@ -60,6 +61,8 @@ class ReviewPacketServiceTest {
         when(dealGroupAiReviewService.summary()).thenReturn(aiSummary());
         when(dealGroupAiReviewService.previewBatchCandidates(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(batchPreview());
+        when(sourceEvaluationPreviewService.previewConfigured(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(sourceAuditPreview());
         when(scanRunRepository.findTop100ByOrderByStartedAtDesc()).thenReturn(List.of());
 
         ReviewPacketService service = new ReviewPacketService(
@@ -69,10 +72,12 @@ class ReviewPacketServiceTest {
                 telegramRuntimeSettingsService,
                 dealGroupingService,
                 dealGroupAiReviewService,
+                sourceEvaluationPreviewService,
                 scanRunRepository
         );
 
         String markdown = service.markdown();
+        ReviewPacketService.ReviewPacket packet = service.packet();
 
         assertThat(markdown)
                 .contains("# ParserNews Review Packet")
@@ -82,6 +87,8 @@ class ReviewPacketServiceTest {
                 .contains("## Telegram Status")
                 .contains("## Deal Group Quality Stats")
                 .contains("## AI Review Summary")
+                .contains("## Source Quality Audit")
+                .contains("GlobeNewswire Mergers and Acquisitions")
                 .contains("## Batch AI Candidates Preview")
                 .contains("## Top Deal Groups")
                 .contains("AbbVie to Acquire Apogee")
@@ -91,6 +98,57 @@ class ReviewPacketServiceTest {
                 .doesNotContain("raw-openai-secret-value-123456")
                 .doesNotContain("123456:raw-telegram-token")
                 .doesNotContain("987654321");
+        assertThat(packet.sourceQualityAudit().totalConfiguredSources()).isEqualTo(2);
+        assertThat(packet.sourceQualityAudit().keepCount()).isEqualTo(1);
+        assertThat(packet.sourceQualityAudit().needsReviewCount()).isEqualTo(1);
+        assertThat(packet.sourceQualityAudit().strictCandidateCountTotal()).isEqualTo(1);
+        assertThat(SourceEvaluationPreviewService.class.getDeclaredFields())
+                .noneMatch(field -> field.getType().getName().contains("Repository"));
+    }
+
+    @Test
+    void sourceAuditFailureDoesNotBreakReviewPacket() {
+        StatusService statusService = mock(StatusService.class);
+        SchedulerStatusService schedulerStatusService = mock(SchedulerStatusService.class);
+        OpenAiRuntimeSettingsService openAiRuntimeSettingsService = mock(OpenAiRuntimeSettingsService.class);
+        TelegramRuntimeSettingsService telegramRuntimeSettingsService = mock(TelegramRuntimeSettingsService.class);
+        DealGroupingService dealGroupingService = mock(DealGroupingService.class);
+        DealGroupAiReviewService dealGroupAiReviewService = mock(DealGroupAiReviewService.class);
+        SourceEvaluationPreviewService sourceEvaluationPreviewService = mock(SourceEvaluationPreviewService.class);
+        ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
+
+        when(statusService.status()).thenReturn(status());
+        when(schedulerStatusService.status()).thenReturn(schedulerStatus());
+        when(openAiRuntimeSettingsService.effectiveSettings()).thenReturn(openAiDisabled());
+        when(telegramRuntimeSettingsService.effectiveSettings()).thenReturn(telegramDisabled());
+        when(dealGroupingService.groups(null, null, 30)).thenReturn(List.of(group()));
+        when(dealGroupingService.groups(null, null, 200)).thenReturn(List.of(group()));
+        when(dealGroupAiReviewService.summary()).thenReturn(aiSummary());
+        when(dealGroupAiReviewService.previewBatchCandidates(org.mockito.ArgumentMatchers.any()))
+                .thenReturn(batchPreview());
+        when(sourceEvaluationPreviewService.previewConfigured(org.mockito.ArgumentMatchers.any()))
+                .thenThrow(new IllegalStateException("broken feed"));
+        when(scanRunRepository.findTop100ByOrderByStartedAtDesc()).thenReturn(List.of());
+
+        ReviewPacketService service = new ReviewPacketService(
+                statusService,
+                schedulerStatusService,
+                openAiRuntimeSettingsService,
+                telegramRuntimeSettingsService,
+                dealGroupingService,
+                dealGroupAiReviewService,
+                sourceEvaluationPreviewService,
+                scanRunRepository
+        );
+
+        String markdown = service.markdown();
+        ReviewPacketService.ReviewPacket packet = service.packet();
+
+        assertThat(markdown)
+                .contains("## Source Quality Audit")
+                .contains("DISABLE");
+        assertThat(packet.sourceQualityAudit().sources()).singleElement()
+                .satisfies(source -> assertThat(source.errors()).contains("Source audit failed: broken feed"));
     }
 
     private StatusService.StatusResponse status() {
@@ -174,6 +232,62 @@ class ReviewPacketServiceTest {
                         "Strict public cash deal candidate.",
                         null
                 ))
+        );
+    }
+
+    private SourceEvaluationPreviewService.ConfiguredSourceEvaluationResponse sourceAuditPreview() {
+        return new SourceEvaluationPreviewService.ConfiguredSourceEvaluationResponse(
+                2,
+                20,
+                List.of(
+                        new SourceEvaluationPreviewService.SourceEvaluationSummary(
+                                "GlobeNewswire Mergers and Acquisitions",
+                                "https://example.test/globenewswire.rss",
+                                20,
+                                3,
+                                1,
+                                10,
+                                SourceEvaluationPreviewService.Recommendation.KEEP,
+                                List.of()
+                        ),
+                        new SourceEvaluationPreviewService.SourceEvaluationSummary(
+                                "PRNewswire Private Placement",
+                                "https://example.test/prnewswire-private-placement.rss",
+                                20,
+                                0,
+                                0,
+                                20,
+                                SourceEvaluationPreviewService.Recommendation.NEEDS_REVIEW,
+                                List.of("temporary source warning")
+                        )
+                )
+        );
+    }
+
+    private OpenAiRuntimeSettingsService.EffectiveOpenAiSettings openAiDisabled() {
+        return new OpenAiRuntimeSettingsService.EffectiveOpenAiSettings(
+                false,
+                false,
+                "",
+                "gpt-4.1-mini",
+                12000,
+                OpenAiRuntimeSettingsService.KeySource.NONE,
+                "not configured",
+                "OpenAI AI Review is disabled."
+        );
+    }
+
+    private TelegramRuntimeSettingsService.EffectiveTelegramSettings telegramDisabled() {
+        return new TelegramRuntimeSettingsService.EffectiveTelegramSettings(
+                false,
+                false,
+                "",
+                "",
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                TelegramRuntimeSettingsService.SecretSource.NONE,
+                "not configured",
+                "not configured",
+                "Telegram is disabled."
         );
     }
 
