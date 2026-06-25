@@ -336,6 +336,9 @@ class KnownMaClassificationRegressionTest {
         assertThat(classification.relevance.relevanceWarnings()).contains("asset/non-company acquisition");
         assertThat(eligibility.eligible()).isFalse();
         assertThat(isStrictCandidate(classification)).isFalse();
+
+        DealGroupingService.DealGroupResponse group = groupingService(List.of(event), List.of()).groups(null, null, 50).getFirst();
+        assertThat(group.warnings()).doesNotContain("RSS signal is alert eligible");
     }
 
     @Test
@@ -346,7 +349,7 @@ class KnownMaClassificationRegressionTest {
                 "Merck KGaA announced an agreement to acquire Bio-Techne Corporation (NASDAQ: TECH). Terms were not disclosed.",
                 "https://www.prnewswire.com/news-releases/merck-biotechne.html",
                 "TECH",
-                "Bio-Techne Corporation",
+                "Bio-Techne, Strengthening Leadership Position",
                 "Merck KGaA",
                 CandidateStrength.HIGH,
                 "agreement to acquire"
@@ -368,6 +371,40 @@ class KnownMaClassificationRegressionTest {
 
         assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PRIVATE_COMPANY_ACQUISITION);
         assertThat(classification.relevance.tradability()).isIn(Tradability.MEDIUM, Tradability.HIGH);
+        assertThat(classification.relevance.relevancePositiveSignals()).contains("public target signal");
+        assertThat(eligibility.eligible()).isFalse();
+    }
+
+    @Test
+    void merckBioTechnePublicTargetWithPartialNameMatchStillDoesNotBecomeNotTradable() {
+        DetectedEventEntity event = event(
+                451L,
+                "Merck KGaA, Darmstadt, Germany, Agrees to Acquire Bio-Techne, Strengthening Leadership Position in Fast-Growing Life Sciences Markets",
+                "Merck KGaA announced an agreement to acquire Bio-Techne. The company has multiple subsidiaries. Terms were not disclosed.",
+                "https://www.prnewswire.com/news-releases/merck-biotechne-live.html",
+                "TECH",
+                "Bio-Techne, Strengthening Leadership Position",
+                "Merck KGaA, Darmstadt, Germany, Agrees",
+                CandidateStrength.HIGH,
+                "agreement to acquire"
+        );
+        event.updateCompanyEnrichment(
+                "TECH",
+                "842023",
+                false,
+                CompanyMatchConfidence.PARTIAL_NAME,
+                null,
+                null,
+                false,
+                CompanyMatchConfidence.NONE,
+                null
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.UNKNOWN);
+        assertThat(classification.relevance.tradability()).isEqualTo(Tradability.MEDIUM);
         assertThat(classification.relevance.relevancePositiveSignals()).contains("public target signal");
         assertThat(eligibility.eligible()).isFalse();
     }
@@ -532,6 +569,7 @@ class KnownMaClassificationRegressionTest {
                 dealTermsExtractionService,
                 dealRelevanceService,
                 dealStageDetectionService,
+                alertEligibilityService,
                 reviewRepository
         );
     }

@@ -132,8 +132,8 @@ public class ReviewPacketService {
             return new SourceQualityAudit(
                     0,
                     0,
-                    0,
                     1,
+                    0,
                     0,
                     List.of(new SourceEvaluationPreviewService.SourceEvaluationSummary(
                             "Source Quality Audit",
@@ -142,7 +142,7 @@ public class ReviewPacketService {
                             0,
                             0,
                             0,
-                            SourceEvaluationPreviewService.Recommendation.DISABLE,
+                            SourceEvaluationPreviewService.Recommendation.NEEDS_REVIEW,
                             List.of("Source audit failed: " + exception.getMessage())
                     ))
             );
@@ -150,7 +150,9 @@ public class ReviewPacketService {
     }
 
     private boolean isAlertLikeGroup(DealGroupingService.DealGroupResponse group) {
-        return group.warnings().stream()
+        return group.tradability() != com.parsernews.model.Tradability.NOT_TRADABLE
+                && group.dealRelevance() != com.parsernews.model.DealRelevance.NOT_TRADABLE
+                && group.warnings().stream()
                 .anyMatch(warning -> "RSS signal is alert eligible".equalsIgnoreCase(warning));
     }
 

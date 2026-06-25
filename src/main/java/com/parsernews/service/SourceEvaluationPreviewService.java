@@ -155,7 +155,7 @@ public class SourceEvaluationPreviewService {
                     0,
                     0,
                     errors,
-                    Recommendation.DISABLE,
+                    Recommendation.NEEDS_REVIEW,
                     List.of()
             );
         }
@@ -211,7 +211,7 @@ public class SourceEvaluationPreviewService {
                     0,
                     0,
                     0,
-                    Recommendation.DISABLE,
+                    Recommendation.NEEDS_REVIEW,
                     List.of(exception.getMessage())
             );
         }

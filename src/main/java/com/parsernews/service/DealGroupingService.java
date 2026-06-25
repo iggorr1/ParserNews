@@ -43,6 +43,7 @@ public class DealGroupingService {
     private final DealTermsExtractionService dealTermsExtractionService;
     private final DealRelevanceService dealRelevanceService;
     private final DealStageDetectionService dealStageDetectionService;
+    private final AlertEligibilityService alertEligibilityService;
     private final DealGroupReviewRepository dealGroupReviewRepository;
 
     public DealGroupingService(
@@ -52,6 +53,7 @@ public class DealGroupingService {
             DealTermsExtractionService dealTermsExtractionService,
             DealRelevanceService dealRelevanceService,
             DealStageDetectionService dealStageDetectionService,
+            AlertEligibilityService alertEligibilityService,
             DealGroupReviewRepository dealGroupReviewRepository
     ) {
         this.eventRepository = eventRepository;
@@ -60,6 +62,7 @@ public class DealGroupingService {
         this.dealTermsExtractionService = dealTermsExtractionService;
         this.dealRelevanceService = dealRelevanceService;
         this.dealStageDetectionService = dealStageDetectionService;
+        this.alertEligibilityService = alertEligibilityService;
         this.dealGroupReviewRepository = dealGroupReviewRepository;
     }
 
@@ -208,6 +211,7 @@ public class DealGroupingService {
         DealTermsExtractionService.DealTerms terms = dealTermsExtractionService.extract(article, event, insight);
         DealRelevanceService.RelevanceInsight relevance = dealRelevanceService.assess(article, event, insight, terms);
         DealStageDetectionService.StageInsight stage = dealStageDetectionService.detect(article, event, terms, insight, relevance);
+        AlertEligibilityService.AlertEligibility alertEligibility = alertEligibilityService.evaluate(event);
         return new RssDealSignal(
                 event.getId(),
                 article.getId(),
@@ -230,7 +234,7 @@ public class DealGroupingService {
                 relevance.tradability(),
                 stage.dealStage(),
                 stage.dealTiming(),
-                event.isAlertEligible()
+                alertEligibility.eligible()
         );
     }
 

@@ -55,7 +55,7 @@ public class NewsScannerService {
     }
 
     public synchronized ScanSummary scan(ScanRunTriggerType triggerType) {
-        ScanRunEntity scanRun = scanRunRepository.save(new ScanRunEntity(triggerType));
+        ScanRunEntity scanRun = new ScanRunEntity(triggerType);
         try {
             ScanSummary summary = doScan(scanRun);
             scanRunRepository.save(scanRun);

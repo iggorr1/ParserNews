@@ -146,7 +146,9 @@ class ReviewPacketServiceTest {
 
         assertThat(markdown)
                 .contains("## Source Quality Audit")
-                .contains("DISABLE");
+                .contains("NEEDS_REVIEW");
+        assertThat(packet.sourceQualityAudit().needsReviewCount()).isEqualTo(1);
+        assertThat(packet.sourceQualityAudit().disableCount()).isZero();
         assertThat(packet.sourceQualityAudit().sources()).singleElement()
                 .satisfies(source -> assertThat(source.errors()).contains("Source audit failed: broken feed"));
     }

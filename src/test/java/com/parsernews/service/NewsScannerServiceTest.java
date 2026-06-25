@@ -65,6 +65,7 @@ class NewsScannerServiceTest {
         verify(eventPersistenceService, never()).save(event, null);
         ScanRunEntity scanRun = savedScanRun(scanRunRepository);
         assertThat(scanRun.getStatus()).isEqualTo(ScanRunStatus.SUCCESS);
+        assertThat(scanRun.getFinishedAt()).isNotNull();
         assertThat(scanRun.getTotalFetched()).isEqualTo(1);
         assertThat(scanRun.getSavedArticles()).isZero();
         assertThat(scanRun.getDuplicatesSkipped()).isEqualTo(1);
@@ -119,6 +120,7 @@ class NewsScannerServiceTest {
         ScanRunEntity scanRun = savedScanRun(scanRunRepository);
         assertThat(scanRun.getTriggerType()).isEqualTo(ScanRunTriggerType.MANUAL);
         assertThat(scanRun.getStatus()).isEqualTo(ScanRunStatus.SUCCESS);
+        assertThat(scanRun.getFinishedAt()).isNotNull();
         assertThat(scanRun.getTotalFetched()).isEqualTo(1);
         assertThat(scanRun.getCandidatesFound()).isEqualTo(1);
         assertThat(scanRun.getSavedArticles()).isEqualTo(1);
@@ -156,6 +158,7 @@ class NewsScannerServiceTest {
         ScanRunEntity scanRun = savedScanRun(scanRunRepository);
         assertThat(scanRun.getTriggerType()).isEqualTo(ScanRunTriggerType.SCHEDULED);
         assertThat(scanRun.getStatus()).isEqualTo(ScanRunStatus.FAILED);
+        assertThat(scanRun.getFinishedAt()).isNotNull();
         assertThat(scanRun.getErrorsCount()).isEqualTo(1);
         assertThat(scanRun.getErrorMessage()).isEqualTo("Feed failed");
     }

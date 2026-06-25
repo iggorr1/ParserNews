@@ -45,6 +45,7 @@ class DealGroupingServiceTest {
     private DealTermsExtractionService dealTermsExtractionService;
     private DealRelevanceService dealRelevanceService;
     private DealStageDetectionService dealStageDetectionService;
+    private AlertEligibilityService alertEligibilityService;
     private DealGroupReviewRepository dealGroupReviewRepository;
     private DealGroupingService service;
 
@@ -56,6 +57,7 @@ class DealGroupingServiceTest {
         dealTermsExtractionService = mock(DealTermsExtractionService.class);
         dealRelevanceService = mock(DealRelevanceService.class);
         dealStageDetectionService = mock(DealStageDetectionService.class);
+        alertEligibilityService = mock(AlertEligibilityService.class);
         dealGroupReviewRepository = mock(DealGroupReviewRepository.class);
         when(reviewInsightService.insight(any(), any())).thenReturn(new CandidateReviewInsightService.ReviewInsight(
                 ReviewVerdict.LIKELY_DEAL,
@@ -92,6 +94,10 @@ class DealGroupingServiceTest {
                 List.of(),
                 List.of("definitive agreement")
         ));
+        when(alertEligibilityService.evaluate(any(DetectedEventEntity.class))).thenReturn(new AlertEligibilityService.AlertEligibility(
+                true,
+                "Strategy-eligible public target candidate."
+        ));
         service = new DealGroupingService(
                 eventRepository,
                 secFilingRepository,
@@ -99,6 +105,7 @@ class DealGroupingServiceTest {
                 dealTermsExtractionService,
                 dealRelevanceService,
                 dealStageDetectionService,
+                alertEligibilityService,
                 dealGroupReviewRepository
         );
     }

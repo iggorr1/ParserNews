@@ -193,7 +193,7 @@ class SourceEvaluationPreviewServiceTest {
         assertThat(response.sourceCount()).isEqualTo(2);
         assertThat(response.results().get(0).fetchedCount()).isEqualTo(1);
         assertThat(response.results().get(1).fetchedCount()).isZero();
-        assertThat(response.results().get(1).recommendation()).isEqualTo(SourceEvaluationPreviewService.Recommendation.DISABLE);
+        assertThat(response.results().get(1).recommendation()).isEqualTo(SourceEvaluationPreviewService.Recommendation.NEEDS_REVIEW);
         assertThat(response.results().get(1).errors()).isNotEmpty();
     }
 

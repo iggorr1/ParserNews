@@ -65,7 +65,7 @@ public class DealRelevanceService {
                     positives
             );
         }
-        if (isAssetOrNonCompanyAcquisition(lower, dealTerms)) {
+        if (isAssetOrNonCompanyAcquisition(lower, dealTerms) && !hasResolvedPublicTarget(event)) {
             warnings.add("asset/non-company acquisition");
             warnings.add("no public target signal");
             warnings.add("not directly tradable via target shares");
@@ -78,8 +78,9 @@ public class DealRelevanceService {
             );
         }
 
+        boolean resolvedPublicTarget = hasResolvedPublicTarget(event);
         boolean publicBuyer = hasPublicBuyerSignal(event, lower);
-        boolean privateTargetSignal = hasPrivateTargetSignal(dealTerms, lower);
+        boolean privateTargetSignal = !resolvedPublicTarget && hasPrivateTargetSignal(dealTerms, lower);
         boolean publicTarget = hasPublicTargetSignal(article, event, lower, privateTargetSignal, publicBuyer);
         boolean cash = dealTerms.paymentType() == PaymentType.CASH || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
         boolean stock = dealTerms.paymentType() == PaymentType.STOCK || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
@@ -268,13 +269,12 @@ public class DealRelevanceService {
         }
         if (event != null && event.getTargetTicker() != null && !event.getTargetTicker().isBlank()
                 && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())
-                && (event.getBuyerTicker() == null || !event.getTargetTicker().equalsIgnoreCase(event.getBuyerTicker()))
-                && event.getTargetMatchConfidence() != CompanyMatchConfidence.PARTIAL_NAME) {
+                && (event.isTargetPublicCompany() || event.getTargetMatchConfidence() != CompanyMatchConfidence.NONE)
+                && (event.getBuyerTicker() == null || !event.getTargetTicker().equalsIgnoreCase(event.getBuyerTicker()))) {
             return true;
         }
         if (event != null && event.getTargetCik() != null && !event.getTargetCik().isBlank()
-                && (event.getBuyerCik() == null || !event.getTargetCik().equalsIgnoreCase(event.getBuyerCik()))
-                && event.getTargetMatchConfidence() != CompanyMatchConfidence.PARTIAL_NAME) {
+                && (event.getBuyerCik() == null || !event.getTargetCik().equalsIgnoreCase(event.getBuyerCik()))) {
             return true;
         }
         if (article.getTicker() != null && !article.getTicker().isBlank() && !"UNKNOWN".equalsIgnoreCase(article.getTicker())
@@ -285,6 +285,21 @@ public class DealRelevanceService {
             return tickerCount(lower).count() >= 2;
         }
         return PUBLIC_TICKER.matcher(lower).find();
+    }
+
+    private boolean hasResolvedPublicTarget(DetectedEventEntity event) {
+        if (event == null) {
+            return false;
+        }
+        boolean hasTargetTicker = event.getTargetTicker() != null
+                && !event.getTargetTicker().isBlank()
+                && !"UNKNOWN".equalsIgnoreCase(event.getTargetTicker())
+                && (event.isTargetPublicCompany() || event.getTargetMatchConfidence() != CompanyMatchConfidence.NONE)
+                && (event.getBuyerTicker() == null || !event.getTargetTicker().equalsIgnoreCase(event.getBuyerTicker()));
+        boolean hasTargetCik = event.getTargetCik() != null
+                && !event.getTargetCik().isBlank()
+                && (event.getBuyerCik() == null || !event.getTargetCik().equalsIgnoreCase(event.getBuyerCik()));
+        return hasTargetTicker || hasTargetCik;
     }
 
     private boolean isFinancingOrDebtNoise(String lower) {
@@ -365,8 +380,6 @@ public class DealRelevanceService {
                 "project",
                 "assets",
                 "asset",
-                "position",
-                "stake",
                 "portfolio",
                 "property",
                 "hotel",
