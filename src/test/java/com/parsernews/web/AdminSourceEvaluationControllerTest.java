@@ -52,6 +52,16 @@ class AdminSourceEvaluationControllerTest {
     }
 
     @Test
+    void configuredPreviewRequiresAuth() throws Exception {
+        mockMvc.perform(post("/api/admin/source-evaluation/configured")
+                        .contentType("application/json")
+                        .content("""
+                                {"maxItems":20}
+                                """))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void previewReturnsSummary() throws Exception {
         when(sourceEvaluationPreviewService.preview(any())).thenReturn(new SourceEvaluationPreviewService.SourceEvaluationPreviewResponse(
                 "Test source",
@@ -90,5 +100,39 @@ class AdminSourceEvaluationControllerTest {
                                 {"name":"Bad","url":"ftp://example.com/rss.xml","maxItems":50}
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void configuredPreviewReturnsSummaries() throws Exception {
+        when(sourceEvaluationPreviewService.previewConfigured(any())).thenReturn(
+                new SourceEvaluationPreviewService.ConfiguredSourceEvaluationResponse(
+                        1,
+                        20,
+                        List.of(new SourceEvaluationPreviewService.SourceEvaluationSummary(
+                                "PRNewswire Acquisitions Mergers And Takeovers",
+                                "https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/acquisitions-mergers-and-takeovers-list.rss",
+                                20,
+                                3,
+                                1,
+                                10,
+                                SourceEvaluationPreviewService.Recommendation.NEEDS_REVIEW,
+                                List.of()
+                        ))
+                )
+        );
+
+        mockMvc.perform(post("/api/admin/source-evaluation/configured")
+                        .with(httpBasic("tester", "secret"))
+                        .contentType("application/json")
+                        .content("""
+                                {"maxItems":20}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.sourceCount").value(1))
+                .andExpect(jsonPath("$.maxItems").value(20))
+                .andExpect(jsonPath("$.results[0].sourceName").value("PRNewswire Acquisitions Mergers And Takeovers"))
+                .andExpect(jsonPath("$.results[0].candidateCount").value(3))
+                .andExpect(jsonPath("$.results[0].strictCandidateCount").value(1))
+                .andExpect(jsonPath("$.results[0].recommendation").value("NEEDS_REVIEW"));
     }
 }

@@ -1,6 +1,7 @@
 package com.parsernews.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.parsernews.config.RssSettings;
 import com.parsernews.config.RulesConfigLoader;
 import com.parsernews.model.DealRelevance;
 import com.parsernews.model.DealTiming;
@@ -11,6 +12,7 @@ import org.junit.jupiter.api.Test;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -128,12 +130,78 @@ class SourceEvaluationPreviewServiceTest {
                 .noneMatch(field -> field.getType().getName().contains("Repository"));
     }
 
-    private SourceEvaluationPreviewService service(String rssXml) throws Exception {
+    @Test
+    void configuredPreviewReturnsConfiguredSources() throws Exception {
+        SourceEvaluationPreviewService service = service(
+                new RssSettings(List.of(
+                        "https://www.globenewswire.com/RssFeed/subjectcode/27-Mergers%20and%20Acquisitions/feedTitle/GlobeNewswire%20-%20Mergers%20and%20Acquisitions",
+                        "https://www.prnewswire.com/rss/news-releases/financial-services-latest-news/private-placement-list.rss"
+                ), 20, 20, false, List.of()),
+                httpClientReturning(rss("""
+                        <item>
+                            <title>Company to be acquired by Buyer for $5.00 per share in cash</title>
+                            <link>https://example.com/deal</link>
+                            <description>Shareholders will receive $5.00 per share in cash.</description>
+                        </item>
+                        """))
+        );
+
+        SourceEvaluationPreviewService.ConfiguredSourceEvaluationResponse response = service.previewConfigured(
+                new SourceEvaluationPreviewService.ConfiguredSourceEvaluationRequest(20)
+        );
+
+        assertThat(response.sourceCount()).isEqualTo(2);
+        assertThat(response.maxItems()).isEqualTo(20);
+        assertThat(response.results()).extracting(SourceEvaluationPreviewService.SourceEvaluationSummary::sourceName)
+                .containsExactly(
+                        "GlobeNewswire Mergers and Acquisitions",
+                        "PRNewswire Private Placement"
+                );
+        assertThat(response.results()).allSatisfy(result -> assertThat(result.fetchedCount()).isEqualTo(1));
+    }
+
+    @Test
+    void configuredPreviewHandlesBrokenSourceWithoutFailingWholeBatch() throws Exception {
         HttpClient httpClient = mock(HttpClient.class);
-        HttpResponse<String> response = mock(HttpResponse.class);
-        when(response.statusCode()).thenReturn(200);
-        when(response.body()).thenReturn(rssXml);
-        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenAnswer(invocation -> {
+            HttpRequest request = invocation.getArgument(0);
+            HttpResponse<String> response = mock(HttpResponse.class);
+            if (request.uri().toString().contains("broken")) {
+                when(response.statusCode()).thenReturn(500);
+                when(response.body()).thenReturn("");
+            } else {
+                when(response.statusCode()).thenReturn(200);
+                when(response.body()).thenReturn(rss("""
+                        <item>
+                            <title>Company to be acquired by Buyer for $5.00 per share in cash</title>
+                            <link>https://example.com/deal</link>
+                            <description>Shareholders will receive $5.00 per share in cash.</description>
+                        </item>
+                        """));
+            }
+            return response;
+        });
+        SourceEvaluationPreviewService service = service(
+                new RssSettings(List.of("https://example.com/good.rss", "https://example.com/broken.rss"), 20, 20, false, List.of()),
+                httpClient
+        );
+
+        SourceEvaluationPreviewService.ConfiguredSourceEvaluationResponse response = service.previewConfigured(
+                new SourceEvaluationPreviewService.ConfiguredSourceEvaluationRequest(20)
+        );
+
+        assertThat(response.sourceCount()).isEqualTo(2);
+        assertThat(response.results().get(0).fetchedCount()).isEqualTo(1);
+        assertThat(response.results().get(1).fetchedCount()).isZero();
+        assertThat(response.results().get(1).recommendation()).isEqualTo(SourceEvaluationPreviewService.Recommendation.DISABLE);
+        assertThat(response.results().get(1).errors()).isNotEmpty();
+    }
+
+    private SourceEvaluationPreviewService service(String rssXml) throws Exception {
+        return service(new RssSettings(List.of(), 20, 20, false, List.of()), httpClientReturning(rssXml));
+    }
+
+    private SourceEvaluationPreviewService service(RssSettings rssSettings, HttpClient httpClient) {
         return new SourceEvaluationPreviewService(
                 new RuleBasedNewsAnalyzer(new RulesConfigLoader(new ObjectMapper())),
                 new CandidateScoringService(),
@@ -143,8 +211,18 @@ class SourceEvaluationPreviewServiceTest {
                 new DealStageDetectionService(),
                 new AlertEligibilityService(),
                 new FalsePositiveFilter(),
+                rssSettings,
                 httpClient
         );
+    }
+
+    private HttpClient httpClientReturning(String rssXml) throws Exception {
+        HttpClient httpClient = mock(HttpClient.class);
+        HttpResponse<String> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(200);
+        when(response.body()).thenReturn(rssXml);
+        when(httpClient.send(any(HttpRequest.class), any(HttpResponse.BodyHandler.class))).thenReturn(response);
+        return httpClient;
     }
 
     private String rss(String items) {

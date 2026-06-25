@@ -1,5 +1,6 @@
 package com.parsernews.service;
 
+import com.parsernews.config.RssSettings;
 import com.parsernews.model.AnalysisResult;
 import com.parsernews.model.DealRelevance;
 import com.parsernews.model.DealStage;
@@ -26,9 +27,11 @@ import javax.xml.parsers.DocumentBuilder;
 import javax.xml.parsers.DocumentBuilderFactory;
 import java.io.StringReader;
 import java.net.URI;
+import java.net.URLDecoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZonedDateTime;
@@ -53,6 +56,7 @@ public class SourceEvaluationPreviewService {
     private final DealStageDetectionService dealStageDetectionService;
     private final AlertEligibilityService alertEligibilityService;
     private final FalsePositiveFilter falsePositiveFilter;
+    private final RssSettings rssSettings;
     private final HttpClient httpClient;
 
     @Autowired
@@ -64,7 +68,8 @@ public class SourceEvaluationPreviewService {
             DealRelevanceService dealRelevanceService,
             DealStageDetectionService dealStageDetectionService,
             AlertEligibilityService alertEligibilityService,
-            FalsePositiveFilter falsePositiveFilter
+            FalsePositiveFilter falsePositiveFilter,
+            RssSettings rssSettings
     ) {
         this(
                 analyzer,
@@ -75,6 +80,7 @@ public class SourceEvaluationPreviewService {
                 dealStageDetectionService,
                 alertEligibilityService,
                 falsePositiveFilter,
+                rssSettings,
                 HttpClient.newBuilder()
                         .connectTimeout(Duration.ofSeconds(20))
                         .followRedirects(HttpClient.Redirect.NORMAL)
@@ -93,6 +99,32 @@ public class SourceEvaluationPreviewService {
             FalsePositiveFilter falsePositiveFilter,
             HttpClient httpClient
     ) {
+        this(
+                analyzer,
+                candidateScoringService,
+                reviewInsightService,
+                dealTermsExtractionService,
+                dealRelevanceService,
+                dealStageDetectionService,
+                alertEligibilityService,
+                falsePositiveFilter,
+                new RssSettings(List.of(), 20, 20, false, List.of()),
+                httpClient
+        );
+    }
+
+    SourceEvaluationPreviewService(
+            RuleBasedNewsAnalyzer analyzer,
+            CandidateScoringService candidateScoringService,
+            CandidateReviewInsightService reviewInsightService,
+            DealTermsExtractionService dealTermsExtractionService,
+            DealRelevanceService dealRelevanceService,
+            DealStageDetectionService dealStageDetectionService,
+            AlertEligibilityService alertEligibilityService,
+            FalsePositiveFilter falsePositiveFilter,
+            RssSettings rssSettings,
+            HttpClient httpClient
+    ) {
         this.analyzer = analyzer;
         this.candidateScoringService = candidateScoringService;
         this.reviewInsightService = reviewInsightService;
@@ -101,6 +133,7 @@ public class SourceEvaluationPreviewService {
         this.dealStageDetectionService = dealStageDetectionService;
         this.alertEligibilityService = alertEligibilityService;
         this.falsePositiveFilter = falsePositiveFilter;
+        this.rssSettings = rssSettings;
         this.httpClient = httpClient;
     }
 
@@ -153,6 +186,35 @@ public class SourceEvaluationPreviewService {
                 recommendation(events.size(), candidateCount, strictCandidateCount),
                 items
         );
+    }
+
+    public ConfiguredSourceEvaluationResponse previewConfigured(ConfiguredSourceEvaluationRequest request) {
+        int maxItems = normalizeMaxItems(request == null ? null : request.maxItems());
+        List<String> urls = rssSettings == null || rssSettings.urls() == null ? List.of() : rssSettings.urls();
+        List<SourceEvaluationSummary> results = urls.stream()
+                .filter(url -> !isBlank(url))
+                .map(url -> previewConfiguredSource(url, maxItems))
+                .toList();
+        return new ConfiguredSourceEvaluationResponse(results.size(), maxItems, results);
+    }
+
+    private SourceEvaluationSummary previewConfiguredSource(String rawUrl, int maxItems) {
+        String sourceName = deriveSourceName(rawUrl);
+        try {
+            SourceEvaluationPreviewResponse preview = preview(new SourceEvaluationPreviewRequest(sourceName, rawUrl, maxItems));
+            return SourceEvaluationSummary.from(preview);
+        } catch (RuntimeException exception) {
+            return new SourceEvaluationSummary(
+                    sourceName,
+                    rawUrl,
+                    0,
+                    0,
+                    0,
+                    0,
+                    Recommendation.DISABLE,
+                    List.of(exception.getMessage())
+            );
+        }
     }
 
     private PreviewItem previewItem(NewsEvent event) {
@@ -312,6 +374,75 @@ public class SourceEvaluationPreviewService {
         }
     }
 
+    private String deriveSourceName(String url) {
+        try {
+            URI uri = URI.create(url);
+            String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
+            String path = URLDecoder.decode(uri.getPath() == null ? "" : uri.getPath(), StandardCharsets.UTF_8);
+            String full = URLDecoder.decode(url, StandardCharsets.UTF_8);
+            if (host.contains("globenewswire")) {
+                Matcher matcher = Pattern.compile("feedTitle/([^?]+)", Pattern.CASE_INSENSITIVE).matcher(full);
+                if (matcher.find()) {
+                    return matcher.group(1)
+                            .replace("GlobeNewswire - ", "GlobeNewswire ")
+                            .replace("%20", " ")
+                            .trim();
+                }
+                return "GlobeNewswire " + titleCaseWords(lastMeaningfulPathSegment(path));
+            }
+            if (host.contains("prnewswire")) {
+                String segment = lastMeaningfulPathSegment(path)
+                        .replace("-list.rss", "")
+                        .replace(".rss", "");
+                return "PRNewswire " + titleCaseWords(segment);
+            }
+            if (host.contains("newsfilecorp")) {
+                return "Newsfile " + titleCaseWords(path.replace('/', ' '));
+            }
+            if (host.contains("sec.gov")) {
+                return "SEC Press Releases";
+            }
+            return titleCaseWords((host + " " + path).replace('.', ' ').replace('/', ' ')).trim();
+        } catch (RuntimeException exception) {
+            return "Configured RSS Source";
+        }
+    }
+
+    private String lastMeaningfulPathSegment(String path) {
+        if (isBlank(path)) {
+            return "";
+        }
+        String[] segments = path.split("/");
+        for (int index = segments.length - 1; index >= 0; index--) {
+            if (!segments[index].isBlank()) {
+                return segments[index];
+            }
+        }
+        return path;
+    }
+
+    private String titleCaseWords(String value) {
+        if (isBlank(value)) {
+            return "RSS";
+        }
+        String[] words = value.replace('-', ' ').replace('_', ' ').trim().split("\\s+");
+        List<String> titled = new ArrayList<>();
+        for (String word : words) {
+            if (word.isBlank()) {
+                continue;
+            }
+            String lower = word.toLowerCase(Locale.ROOT);
+            if (lower.equals("rss")) {
+                titled.add("RSS");
+            } else if (lower.equals("sec")) {
+                titled.add("SEC");
+            } else {
+                titled.add(Character.toUpperCase(lower.charAt(0)) + lower.substring(1));
+            }
+        }
+        return String.join(" ", titled);
+    }
+
     private void validateUri(URI uri) {
         if (!"https".equalsIgnoreCase(uri.getScheme()) || uri.getHost() == null || uri.getHost().isBlank()) {
             throw new IllegalArgumentException("Only HTTPS RSS feeds are allowed.");
@@ -418,6 +549,42 @@ public class SourceEvaluationPreviewService {
             Recommendation recommendation,
             List<PreviewItem> previewItems
     ) {
+    }
+
+    public record ConfiguredSourceEvaluationRequest(
+            Integer maxItems
+    ) {
+    }
+
+    public record ConfiguredSourceEvaluationResponse(
+            int sourceCount,
+            int maxItems,
+            List<SourceEvaluationSummary> results
+    ) {
+    }
+
+    public record SourceEvaluationSummary(
+            String sourceName,
+            String url,
+            int fetchedCount,
+            long candidateCount,
+            long strictCandidateCount,
+            long noiseCount,
+            Recommendation recommendation,
+            List<String> errors
+    ) {
+        static SourceEvaluationSummary from(SourceEvaluationPreviewResponse preview) {
+            return new SourceEvaluationSummary(
+                    preview.sourceName(),
+                    preview.url(),
+                    preview.fetchedCount(),
+                    preview.candidateCount(),
+                    preview.strictCandidateCount(),
+                    preview.noiseCount(),
+                    preview.recommendation(),
+                    preview.errors()
+            );
+        }
     }
 
     public record PreviewItem(

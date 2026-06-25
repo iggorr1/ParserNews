@@ -1,9 +1,12 @@
 package com.parsernews.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.parsernews.config.RssSettings;
 import com.parsernews.config.RulesConfigLoader;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -17,7 +20,8 @@ class SourceEvaluationPreviewContextTest {
             .withBean(DealRelevanceService.class, DealRelevanceService::new)
             .withBean(DealStageDetectionService.class, DealStageDetectionService::new)
             .withBean(AlertEligibilityService.class, AlertEligibilityService::new)
-            .withBean(FalsePositiveFilter.class, FalsePositiveFilter::new);
+            .withBean(FalsePositiveFilter.class, FalsePositiveFilter::new)
+            .withBean(RssSettings.class, () -> new RssSettings(List.of("https://example.com/rss.xml"), 20, 20, false, List.of()));
 
     @Test
     void sourceEvaluationPreviewServiceLoadsFromSpringContext() {

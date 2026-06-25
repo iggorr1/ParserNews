@@ -1435,6 +1435,7 @@
                 <input id="sourcePreviewMaxItemsInput" type="number" min="1" max="100" value="20">
             </div>
             <button id="sourcePreviewButton" class="primary" type="button">Run Preview</button>
+            <button id="sourceBatchPreviewButton" type="button">Evaluate Configured Sources</button>
         </div>
         <div class="actions compact-actions" id="sourcePreviewQuickFill" style="margin-bottom: 12px;">
             <button type="button"
@@ -1452,6 +1453,11 @@
             <button id="sourcePreviewExportCsvButton" type="button">Export CSV</button>
         </div>
         <div id="sourcePreviewResult" class="notice">Choose a feed and run preview. The production scanner and database will not be changed.</div>
+        <div class="actions compact-actions" id="sourceBatchPreviewExports" style="margin: 12px 0;" hidden>
+            <button id="sourceBatchExportJsonButton" type="button">Export Batch JSON</button>
+            <button id="sourceBatchExportCsvButton" type="button">Export Batch CSV</button>
+        </div>
+        <div id="sourceBatchPreviewResult" class="notice" style="margin-top: 12px;" hidden></div>
     </section>
 
     <details class="panel review-quality">
@@ -1925,6 +1931,8 @@
         signalDetails: null,
         sourcePreview: null,
         sourcePreviewError: null,
+        sourceBatchPreview: null,
+        sourceBatchPreviewError: null,
         fullRefreshResult: null,
         selectedPreviewId: null,
         selectedDealGroupKey: null,
@@ -1960,6 +1968,10 @@
     const sourcePreviewExports = document.querySelector("#sourcePreviewExports");
     const sourcePreviewExportJsonButton = document.querySelector("#sourcePreviewExportJsonButton");
     const sourcePreviewExportCsvButton = document.querySelector("#sourcePreviewExportCsvButton");
+    const sourceBatchPreviewButton = document.querySelector("#sourceBatchPreviewButton");
+    const sourceBatchPreviewExports = document.querySelector("#sourceBatchPreviewExports");
+    const sourceBatchExportJsonButton = document.querySelector("#sourceBatchExportJsonButton");
+    const sourceBatchExportCsvButton = document.querySelector("#sourceBatchExportCsvButton");
     const openAiEnabledInput = document.querySelector("#openAiEnabledInput");
     const openAiApiKeyInput = document.querySelector("#openAiApiKeyInput");
     const openAiModelInput = document.querySelector("#openAiModelInput");
@@ -2031,6 +2043,9 @@
     sourcePreviewQuickFill.addEventListener("click", fillSourcePreview);
     sourcePreviewExportJsonButton.addEventListener("click", exportSourcePreviewJson);
     sourcePreviewExportCsvButton.addEventListener("click", exportSourcePreviewCsv);
+    sourceBatchPreviewButton.addEventListener("click", runConfiguredSourcePreview);
+    sourceBatchExportJsonButton.addEventListener("click", exportSourceBatchJson);
+    sourceBatchExportCsvButton.addEventListener("click", exportSourceBatchCsv);
     openAiSettingsSaveButton.addEventListener("click", saveOpenAiSettings);
     openAiSettingsClearButton.addEventListener("click", clearOpenAiRuntimeKey);
     telegramSettingsSaveButton.addEventListener("click", saveTelegramSettings);
@@ -2370,6 +2385,25 @@
         }
     }
 
+    async function runConfiguredSourcePreview() {
+        clearErrors();
+        state.sourceBatchPreviewError = null;
+        setBusy(sourceBatchPreviewButton, true, "Evaluating");
+        try {
+            state.sourceBatchPreview = await postJson("/api/admin/source-evaluation/configured", {
+                maxItems: Number(sourcePreviewMaxItemsInput.value) || 20
+            });
+            renderSourceBatchPreview();
+        } catch (error) {
+            state.sourceBatchPreview = null;
+            state.sourceBatchPreviewError = error.message;
+            showError("Configured source evaluation", error.message);
+            renderSourceBatchPreview();
+        } finally {
+            setBusy(sourceBatchPreviewButton, false, "Evaluate Configured Sources");
+        }
+    }
+
     async function updateSecWatchlistEntry(id, enabled) {
         const entry = state.secWatchlist.find(item => item.id === id);
         if (!entry) {
@@ -2654,6 +2688,7 @@
         renderTelegramPreview();
         renderSignalDetails();
         renderSourcePreview();
+        renderSourceBatchPreview();
         renderSourceQuality();
         renderReviewQuality();
         renderSecWatchlist();
@@ -2729,6 +2764,65 @@
                             <td>${item.url ? `<a href="${escapeAttr(item.url)}" target="_blank" rel="noreferrer">Open</a>` : "-"}</td>
                         </tr>
                     `).join("") : `<tr><td colspan="8" class="muted">No items returned by this feed.</td></tr>`}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    function renderSourceBatchPreview() {
+        const target = document.querySelector("#sourceBatchPreviewResult");
+        if (state.sourceBatchPreviewError) {
+            sourceBatchPreviewExports.hidden = true;
+            target.hidden = false;
+            target.innerHTML = `<div class="danger-text">Configured source evaluation failed: ${escapeText(state.sourceBatchPreviewError)}</div>`;
+            return;
+        }
+        const result = state.sourceBatchPreview;
+        if (!result) {
+            sourceBatchPreviewExports.hidden = true;
+            target.hidden = true;
+            target.innerHTML = "";
+            return;
+        }
+        const rows = Array.isArray(result.results) ? result.results : [];
+        sourceBatchPreviewExports.hidden = false;
+        target.hidden = false;
+        target.innerHTML = `
+            <div class="kv" style="margin-bottom: 12px;">
+                ${kvRows([
+                    ["Configured sources", result.sourceCount ?? rows.length],
+                    ["Max items per source", result.maxItems ?? "-"],
+                    ["KEEP", rows.filter(row => row.recommendation === "KEEP").length],
+                    ["NEEDS_REVIEW", rows.filter(row => row.recommendation === "NEEDS_REVIEW").length],
+                    ["DISABLE", rows.filter(row => row.recommendation === "DISABLE").length]
+                ])}
+            </div>
+            <div class="table-wrap">
+                <table style="min-width: 920px;">
+                    <thead>
+                    <tr>
+                        <th>Source</th>
+                        <th>Fetched</th>
+                        <th>Candidates</th>
+                        <th>Strict</th>
+                        <th>Noise</th>
+                        <th>Recommendation</th>
+                        <th>Errors</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    ${rows.length ? rows.map(row => `
+                        <tr>
+                            <td class="title-cell">${escapeText(row.sourceName || "-")}<div class="small-cell">${row.url ? `<a href="${escapeAttr(row.url)}" target="_blank" rel="noreferrer">${escapeText(row.url)}</a>` : "-"}</div></td>
+                            <td>${escapeText(row.fetchedCount ?? 0)}</td>
+                            <td>${escapeText(row.candidateCount ?? 0)}</td>
+                            <td>${escapeText(row.strictCandidateCount ?? 0)}</td>
+                            <td>${escapeText(row.noiseCount ?? 0)}</td>
+                            <td>${badge(row.recommendation || "NEEDS_REVIEW", row.recommendation || "NEEDS_REVIEW")}</td>
+                            <td>${badge((row.errors || []).length, (row.errors || []).length ? "error" : "disabled")}</td>
+                        </tr>
+                    `).join("") : `<tr><td colspan="7" class="muted">No configured RSS sources found.</td></tr>`}
                     </tbody>
                 </table>
             </div>
@@ -4382,6 +4476,28 @@
         );
     }
 
+    function exportSourceBatchJson() {
+        if (!state.sourceBatchPreview) {
+            return;
+        }
+        downloadText(
+                `source-evaluation-configured-${timestampForFilename()}.json`,
+                "application/json;charset=utf-8",
+                JSON.stringify(state.sourceBatchPreview, null, 2)
+        );
+    }
+
+    function exportSourceBatchCsv() {
+        if (!state.sourceBatchPreview) {
+            return;
+        }
+        downloadText(
+                `source-evaluation-configured-${timestampForFilename()}.csv`,
+                "text/csv;charset=utf-8",
+                sourceBatchCsv(state.sourceBatchPreview)
+        );
+    }
+
     function sourcePreviewCsv(result) {
         const columns = [
             "sourceName",
@@ -4410,6 +4526,34 @@
             item.dealStage,
             item.dealTiming,
             item.alertEligible
+        ]);
+        return [columns, ...rows]
+                .map(row => row.map(csvCell).join(","))
+                .join("\r\n");
+    }
+
+    function sourceBatchCsv(result) {
+        const columns = [
+            "sourceName",
+            "url",
+            "fetchedCount",
+            "candidateCount",
+            "strictCandidateCount",
+            "noiseCount",
+            "recommendation",
+            "errorsCount",
+            "errors"
+        ];
+        const rows = (Array.isArray(result.results) ? result.results : []).map(item => [
+            item.sourceName,
+            item.url,
+            item.fetchedCount,
+            item.candidateCount,
+            item.strictCandidateCount,
+            item.noiseCount,
+            item.recommendation,
+            (item.errors || []).length,
+            (item.errors || []).join("; ")
         ]);
         return [columns, ...rows]
                 .map(row => row.map(csvCell).join(","))

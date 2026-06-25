@@ -25,4 +25,11 @@ public class AdminSourceEvaluationController {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, exception.getMessage());
         }
     }
+
+    @PostMapping("/api/admin/source-evaluation/configured")
+    public SourceEvaluationPreviewService.ConfiguredSourceEvaluationResponse configured(
+            @RequestBody(required = false) SourceEvaluationPreviewService.ConfiguredSourceEvaluationRequest request
+    ) {
+        return sourceEvaluationPreviewService.previewConfigured(request);
+    }
 }
