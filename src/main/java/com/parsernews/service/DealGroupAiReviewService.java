@@ -314,6 +314,14 @@ public class DealGroupAiReviewService {
                 && group.dealRelevance() != DealRelevance.PUBLIC_PUBLIC_MERGER) {
             return "Deal relevance is not a strict public-company M&A relevance.";
         }
+        if (!hasStrongGroupDealEvidence(group)) {
+            return "No explicit M&A deal phrase was found in group evidence.";
+        }
+        if ((group.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION
+                || group.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE)
+                && !hasCashOrFixedGroupTerms(group)) {
+            return "No cash or fixed-price deal terms were found in group evidence.";
+        }
         if (group.dealRelevance() == DealRelevance.LAW_FIRM_OR_SHAREHOLDER_ALERT
                 || group.dealRelevance() == DealRelevance.PRIVATE_COMPANY_ACQUISITION
                 || group.dealRelevance() == DealRelevance.REVERSE_TAKEOVER
@@ -340,6 +348,31 @@ public class DealGroupAiReviewService {
             return "Warnings indicate law/private/reverse-takeover/not-tradable/noise risk.";
         }
         return null;
+    }
+
+    private boolean hasStrongGroupDealEvidence(DealGroupingService.DealGroupResponse group) {
+        return hasAlertEligibleEvidence(group)
+                || NewsTextPatterns.hasStrongMaPhrase(group.title(), relatedSignalText(group));
+    }
+
+    private boolean hasCashOrFixedGroupTerms(DealGroupingService.DealGroupResponse group) {
+        return hasAlertEligibleEvidence(group)
+                || NewsTextPatterns.hasCashOrFixedDealTerms(group.title(), relatedSignalText(group));
+    }
+
+    private boolean hasAlertEligibleEvidence(DealGroupingService.DealGroupResponse group) {
+        return group.warnings().stream()
+                .anyMatch(warning -> "RSS signal is alert eligible".equalsIgnoreCase(warning));
+    }
+
+    private String relatedSignalText(DealGroupingService.DealGroupResponse group) {
+        return group.relatedSignals().stream()
+                .map(signal -> String.join(" ",
+                        nullSafe(signal.title(), ""),
+                        nullSafe(signal.signalType(), ""),
+                        nullSafe(signal.relatedReason(), "")
+                ))
+                .collect(java.util.stream.Collectors.joining(" "));
     }
 
     private boolean priorityAllowed(UnifiedPriority priority, UnifiedPriority minPriority) {

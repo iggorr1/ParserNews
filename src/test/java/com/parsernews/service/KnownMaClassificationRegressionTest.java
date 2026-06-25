@@ -335,7 +335,7 @@ class KnownMaClassificationRegressionTest {
         assertThat(classification.relevance.tradability()).isNotEqualTo(Tradability.HIGH);
         assertThat(classification.relevance.relevanceWarnings()).contains("asset/non-company acquisition");
         assertThat(eligibility.eligible()).isFalse();
-        assertThat(isStrictCandidate(classification)).isFalse();
+        assertThat(isStrictCandidate(classification, eligibility)).isFalse();
 
         DealGroupingService.DealGroupResponse group = groupingService(List.of(event), List.of()).groups(null, null, 50).getFirst();
         assertThat(group.warnings()).doesNotContain("RSS signal is alert eligible");
@@ -373,6 +373,7 @@ class KnownMaClassificationRegressionTest {
         assertThat(classification.relevance.tradability()).isIn(Tradability.MEDIUM, Tradability.HIGH);
         assertThat(classification.relevance.relevancePositiveSignals()).contains("public target signal");
         assertThat(eligibility.eligible()).isFalse();
+        assertThat(isStrictCandidate(classification, eligibility)).isFalse();
     }
 
     @Test
@@ -407,6 +408,75 @@ class KnownMaClassificationRegressionTest {
         assertThat(classification.relevance.tradability()).isEqualTo(Tradability.MEDIUM);
         assertThat(classification.relevance.relevancePositiveSignals()).contains("public target signal");
         assertThat(eligibility.eligible()).isFalse();
+        assertThat(isStrictCandidate(classification, eligibility)).isFalse();
+    }
+
+    @Test
+    void merckBioTechneWithCashTermsCanBecomeStrictPublicCashAcquisition() {
+        DetectedEventEntity event = event(
+                452L,
+                "Merck KGaA Agrees to Acquire Bio-Techne Corporation",
+                "Merck KGaA announced an agreement to acquire Bio-Techne Corporation (NASDAQ: TECH). "
+                        + "Bio-Techne shareholders will receive $100.00 per share in cash in an all-cash transaction.",
+                "https://www.prnewswire.com/news-releases/merck-biotechne-cash.html",
+                "TECH",
+                "Bio-Techne Corporation",
+                "Merck KGaA",
+                CandidateStrength.HIGH,
+                "agrees to acquire|per share in cash|all-cash transaction"
+        );
+        event.updateCompanyEnrichment(
+                "TECH",
+                "842023",
+                true,
+                CompanyMatchConfidence.EXACT_TICKER,
+                null,
+                null,
+                false,
+                CompanyMatchConfidence.NONE,
+                null
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isEqualTo(DealRelevance.PUBLIC_CASH_ACQUISITION);
+        assertThat(classification.relevance.tradability()).isEqualTo(Tradability.HIGH);
+        assertThat(eligibility.eligible()).isTrue();
+        assertThat(isStrictCandidate(classification, eligibility)).isTrue();
+    }
+
+    @Test
+    void onconetixRobotHeadlineDoesNotBecomePublicMergerOrAlertEligible() {
+        DetectedEventEntity event = event(
+                453L,
+                "Onconetix Highlights Realbotix's Launch of Humanoid Robot and AI Teachers Assistant Pilot Program",
+                "Onconetix highlights a product launch and pilot program. The page also contains unrelated boilerplate with merger agreement and cash consideration language.",
+                "https://www.prnewswire.com/news-releases/onconetix-robot.html",
+                "ONCO",
+                "Realbotix",
+                "Onconetix",
+                CandidateStrength.HIGH,
+                ""
+        );
+        event.updateCompanyEnrichment(
+                "ONCO",
+                "0000000001",
+                true,
+                CompanyMatchConfidence.EXACT_TICKER,
+                null,
+                null,
+                false,
+                CompanyMatchConfidence.NONE,
+                null
+        );
+
+        Classification classification = classify(event);
+        AlertEligibilityService.AlertEligibility eligibility = alertEligibilityService.evaluate(event);
+
+        assertThat(classification.relevance.dealRelevance()).isNotEqualTo(DealRelevance.PUBLIC_PUBLIC_MERGER);
+        assertThat(eligibility.eligible()).isFalse();
+        assertThat(isStrictCandidate(classification, eligibility)).isFalse();
     }
 
     @Test
@@ -545,8 +615,9 @@ class KnownMaClassificationRegressionTest {
         return new Classification(reviewInsight, terms, relevance, stage);
     }
 
-    private boolean isStrictCandidate(Classification classification) {
-        return (classification.relevance.tradability() == Tradability.HIGH
+    private boolean isStrictCandidate(Classification classification, AlertEligibilityService.AlertEligibility eligibility) {
+        return eligibility.eligible()
+                && (classification.relevance.tradability() == Tradability.HIGH
                 || classification.relevance.tradability() == Tradability.MEDIUM)
                 && (classification.relevance.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION
                 || classification.relevance.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE

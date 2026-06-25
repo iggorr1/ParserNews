@@ -87,6 +87,17 @@ public class DealRelevanceService {
         boolean perShare = lower.contains("per share") || lower.contains("a share");
         boolean takePrivate = containsAny(lower, "take private", "going private", "privately held", "private equity");
         boolean reverseTakeover = containsReverseTakeover(lower);
+        boolean dealHeadlineCue = NewsTextPatterns.hasDealHeadlineCue(article.getHeadline());
+        boolean strongMaPhrase = NewsTextPatterns.hasStrongMaPhrase(
+                article.getHeadline(),
+                article.getArticleText(),
+                event == null ? null : event.getMatchedPositiveKeywords()
+        );
+        boolean cashOrFixedTerms = NewsTextPatterns.hasCashOrFixedDealTerms(
+                article.getHeadline(),
+                article.getArticleText(),
+                event == null ? null : event.getMatchedPositiveKeywords()
+        );
         boolean publicPublicMerger = publicTarget && (publicBuyer
                 || containsAny(lower, "public-public", "combined company", "surviving entity", "stock-for-stock"));
         boolean privateCompanySignal = privateTargetSignal
@@ -162,7 +173,7 @@ public class DealRelevanceService {
                     positives
             );
         }
-        if (takePrivate && publicTarget && cash && perShare) {
+        if (takePrivate && publicTarget && cash && perShare && dealHeadlineCue && strongMaPhrase && cashOrFixedTerms) {
             positives.add("take-private cash/per-share signal");
             return new RelevanceInsight(
                     DealRelevance.PUBLIC_TAKE_PRIVATE,
@@ -172,7 +183,7 @@ public class DealRelevanceService {
                     positives
             );
         }
-        if (publicTarget && cash && perShare) {
+        if (publicTarget && cash && perShare && dealHeadlineCue && strongMaPhrase && cashOrFixedTerms) {
             positives.add("public cash acquisition signal");
             return new RelevanceInsight(
                     DealRelevance.PUBLIC_CASH_ACQUISITION,
@@ -182,7 +193,7 @@ public class DealRelevanceService {
                     positives
             );
         }
-        if (publicTarget && cash && dealTerms.offerPrice() != null) {
+        if (publicTarget && cash && dealTerms.offerPrice() != null && dealHeadlineCue && strongMaPhrase && cashOrFixedTerms) {
             positives.add("public cash acquisition signal");
             return new RelevanceInsight(
                     DealRelevance.PUBLIC_CASH_ACQUISITION,
@@ -192,7 +203,7 @@ public class DealRelevanceService {
                     positives
             );
         }
-        if (publicPublicMerger && stock) {
+        if (publicPublicMerger && stock && dealHeadlineCue && strongMaPhrase) {
             warnings.add("not take-private");
             warnings.add("public-public merger");
             positives.add("public merger signal");
@@ -204,7 +215,7 @@ public class DealRelevanceService {
                     positives
             );
         }
-        if (publicTarget && stock) {
+        if (publicTarget && stock && dealHeadlineCue && strongMaPhrase) {
             warnings.add("not take-private");
             positives.add("public stock merger signal");
             return new RelevanceInsight(

@@ -274,6 +274,7 @@ public class SourceEvaluationPreviewService {
 
     private boolean isStrictCandidate(PreviewItem item) {
         return (item.priority() == CandidateStrength.HIGH || item.priority() == CandidateStrength.MEDIUM)
+                && item.alertEligible()
                 && (item.tradability() == Tradability.HIGH || item.tradability() == Tradability.MEDIUM)
                 && (item.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION
                 || item.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE

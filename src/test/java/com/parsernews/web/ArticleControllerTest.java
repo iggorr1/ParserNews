@@ -150,7 +150,7 @@ class ArticleControllerTest {
     void candidateCsvExportReturnsCsvWithEscapedValues() {
         NewsArticleEntity article = article(
                 16L,
-                "Target \"Alpha\", Inc.\nDeal",
+                "Buyer agrees to acquire Target \"Alpha\", Inc.\nDeal",
                 "Target Alpha enters into definitive agreement. Shareholders will receive $5.00 per share in cash.",
                 "https://example.com/export-candidate"
         );
@@ -172,7 +172,7 @@ class ArticleControllerTest {
 
         assertThat(response.getHeaders().getContentType().toString()).contains("text/csv");
         assertThat(response.getBody()).startsWith("id,title,url,source,host,publishedAt,candidateStrength,candidateScore");
-        assertThat(response.getBody()).contains("\"Target \"\"Alpha\"\", Inc.\nDeal\"");
+        assertThat(response.getBody()).contains("\"Buyer agrees to acquire Target \"\"Alpha\"\", Inc.\nDeal\"");
         assertThat(response.getBody()).contains("HIGH");
         assertThat(response.getBody()).contains("PUBLIC_CASH_ACQUISITION");
     }

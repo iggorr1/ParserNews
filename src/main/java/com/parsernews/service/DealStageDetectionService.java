@@ -142,7 +142,8 @@ public class DealStageDetectionService {
             );
         }
         if (containsAny(lower, "enters into definitive agreement", "entered into definitive agreement",
-                "announces acquisition", "announce acquisition", "to be acquired by", "will acquire")) {
+                "announces acquisition", "announce acquisition", "to be acquired by", "will acquire",
+                "agrees to acquire")) {
             positives.add("initial announcement language");
             return new StageInsight(
                     DealStage.INITIAL_ANNOUNCEMENT,

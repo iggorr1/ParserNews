@@ -1,6 +1,6 @@
 # ParserNews Review Packet
 
-- **Generated:** 2026-06-25T13:32:37.776821484Z
+- **Generated:** 2026-06-25T14:04:22.706297471Z
 
 ## App Status
 
@@ -12,20 +12,20 @@
 
 ### Latest Scan
 
-- **id:** 1190
+- **id:** 1204
 - **status:** SUCCESS
-- **startedAt:** 2026-06-25T13:31:43.142725Z
-- **finishedAt:** -
+- **startedAt:** 2026-06-25T14:03:11.221287Z
+- **finishedAt:** 2026-06-25T14:03:25.867790Z
 - **triggerType:** MANUAL
-- **totalFetched:** 0
+- **totalFetched:** 490
 - **candidatesFound:** 0
-- **duplicatesSkipped:** 0
+- **duplicatesSkipped:** 472
 
 ### Counts
 
-- **savedArticles:** 4673
-- **detectedCandidates:** 52
-- **highCandidates:** 43
+- **savedArticles:** 4778
+- **detectedCandidates:** 53
+- **highCandidates:** 44
 - **mediumCandidates:** 9
 - **lowCandidates:** 0
 - **alertEligible:** 3
@@ -44,10 +44,10 @@
 
 ### Latest Scheduled RSS Scan
 
-- **id:** 1189
+- **id:** 1202
 - **status:** SUCCESS
-- **startedAt:** 2026-06-25T13:26:20.025702Z
-- **finishedAt:** 2026-06-25T13:26:27.897533Z
+- **startedAt:** 2026-06-25T13:57:51.913064Z
+- **finishedAt:** 2026-06-25T13:57:59.653302Z
 
 ## OpenAI Status
 
@@ -72,14 +72,14 @@
 
 ## Deal Group Quality Stats
 
-- **totalGroups:** 30
-- **pendingGroups:** 30
+- **totalGroups:** 31
+- **pendingGroups:** 31
 - **usefulGroups:** 0
 - **ignoredGroups:** 0
-- **highPriorityGroups:** 24
-- **alertLikeGroups:** 1
-- **groupedEvidenceTotal:** 42
-- **averageEvidencePerGroup:** 1.40
+- **highPriorityGroups:** 25
+- **alertLikeGroups:** 3
+- **groupedEvidenceTotal:** 43
+- **averageEvidencePerGroup:** 1.39
 
 ### Review reasons
 
@@ -88,34 +88,37 @@
 ### By relevance
 
 - NOT_TRADABLE: 13
-- PRIVATE_COMPANY_ACQUISITION: 6
+- PUBLIC_STOCK_MERGER: 2
+- PUBLIC_CASH_ACQUISITION: 2
+- PUBLIC_PUBLIC_MERGER: 1
 - LAW_FIRM_OR_SHAREHOLDER_ALERT: 4
 - UNKNOWN: 2
-- PUBLIC_STOCK_MERGER: 1
+- PRIVATE_COMPANY_ACQUISITION: 3
 
 ### By tradability
 
-- NOT_TRADABLE: 21
-- MEDIUM: 2
+- NOT_TRADABLE: 19
 - LOW: 3
+- HIGH: 2
+- MEDIUM: 3
 
 ### By stage
 
+- DEFINITIVE_AGREEMENT: 11
 - INITIAL_ANNOUNCEMENT: 5
 - RUMOR_OR_EXPLORATION: 2
-- DEFINITIVE_AGREEMENT: 10
 - UNKNOWN: 5
 - LITIGATION_OR_LAW_FIRM_UPDATE: 4
 
 ### By timing
 
-- EARLY: 17
+- EARLY: 18
 - UNKNOWN: 5
 - NOISE: 4
 
 ### By priority
 
-- HIGH: 24
+- HIGH: 25
 - MEDIUM: 4
 - LOW: 2
 
@@ -148,15 +151,15 @@
 
 - **totalConfiguredSources:** 25
 - **KEEP:** 0
-- **NEEDS_REVIEW:** 3
-- **DISABLE:** 22
+- **NEEDS_REVIEW:** 4
+- **DISABLE:** 21
 - **strictCandidateCountTotal:** 0
 
 | sourceName | fetched | candidates | strict | noise | recommendation | errors |
 |---|---:|---:|---:|---:|---|---:|
-| GlobeNewswire Mergers and Acquisitions | 0 | 0 | 0 | 0 | DISABLE | 1 |
-| GlobeNewswire Financing Agreements | 0 | 0 | 0 | 0 | DISABLE | 1 |
-| PRNewswire Acquisitions Mergers And Takeovers | 0 | 0 | 0 | 0 | DISABLE | 1 |
+| GlobeNewswire Mergers and Acquisitions | 20 | 0 | 0 | 20 | DISABLE | 0 |
+| GlobeNewswire Financing Agreements | 20 | 1 | 0 | 20 | NEEDS_REVIEW | 0 |
+| PRNewswire Acquisitions Mergers And Takeovers | 20 | 0 | 0 | 20 | DISABLE | 0 |
 | PRNewswire Bankruptcy | 20 | 0 | 0 | 20 | DISABLE | 0 |
 | PRNewswire Stock Offering | 20 | 0 | 0 | 20 | DISABLE | 0 |
 | PRNewswire Joint Ventures | 20 | 0 | 0 | 20 | DISABLE | 0 |
@@ -182,12 +185,31 @@
 
 ## Batch AI Candidates Preview
 
-- **eligibleCount:** 0
+- **eligibleCount:** 2
 - **requestedLimit:** 25
 
-- No promising groups need AI review right now.
+- target-cik:842023 | Merck KGaA, Darmstadt, Germany, Agrees to Acquire Bio-Techne, Strengthening Leadership Position in Fast-Growing Life Sciences Markets | HIGH | PUBLIC_CASH_ACQUISITION | HIGH | EARLY | Strict candidate: public target evidence, tradable, early/mid timing, and useful relevance.
+- target-cik:727346 | SELECTIS HEALTH, INC. ENTERS INTO AGREEMENT TO BE ACQUIRED BY BLACK PEARL | HIGH | PUBLIC_CASH_ACQUISITION | HIGH | EARLY | Strict candidate: public target evidence, tradable, early/mid timing, and useful relevance.
 
 ## Top Deal Groups
+
+### ASP Isotopes Announces Proposed Merger of Noble Africa with ENDRA Life Sciences and Approximately $50 Million Concurrent Private Placement Financing
+
+- **groupKey:** target-cik:1921865
+- **buyer:** -
+- **target:** -
+- **buyerTicker/CIK:** - / -
+- **targetTicker/CIK:** ASPI / 1921865
+- **priority:** HIGH
+- **dealRelevance:** NOT_TRADABLE
+- **tradability:** NOT_TRADABLE
+- **dealStage:** DEFINITIVE_AGREEMENT
+- **dealTiming:** EARLY
+- **review:** PENDING / -
+- **evidenceCount:** 1
+- **warnings:** 
+- evidenceUrls:
+  - https://www.globenewswire.com/news-release/2026/06/25/3317646/0/en/ASP-Isotopes-Announces-Proposed-Merger-of-Noble-Africa-with-ENDRA-Life-Sciences-and-Approximately-50-Million-Concurrent-Private-Placement-Financing.html
 
 ### Triller Group (Nasdaq: ILLR) to Acquire Significant SpaceX Position as a Strategic Treasury Asset
 
@@ -215,8 +237,8 @@
 - **buyerTicker/CIK:** - / -
 - **targetTicker/CIK:** NGTF / 1593001
 - **priority:** HIGH
-- **dealRelevance:** PRIVATE_COMPANY_ACQUISITION
-- **tradability:** NOT_TRADABLE
+- **dealRelevance:** PUBLIC_STOCK_MERGER
+- **tradability:** LOW
 - **dealStage:** RUMOR_OR_EXPLORATION
 - **dealTiming:** EARLY
 - **review:** PENDING / -
@@ -251,13 +273,13 @@
 - **buyerTicker/CIK:** - / -
 - **targetTicker/CIK:** TECH / 842023
 - **priority:** HIGH
-- **dealRelevance:** NOT_TRADABLE
-- **tradability:** NOT_TRADABLE
+- **dealRelevance:** PUBLIC_CASH_ACQUISITION
+- **tradability:** HIGH
 - **dealStage:** DEFINITIVE_AGREEMENT
 - **dealTiming:** EARLY
 - **review:** PENDING / -
 - **evidenceCount:** 1
-- **warnings:** 
+- **warnings:** RSS signal is alert eligible
 - evidenceUrls:
   - https://www.prnewswire.com/news-releases/merck-kgaa-darmstadt-germany-agrees-to-acquire-bio-techne-strengthening-leadership-position-in-fast-growing-life-sciences-markets-302810602.html
 
@@ -324,13 +346,13 @@
 - **buyerTicker/CIK:** - / -
 - **targetTicker/CIK:** ONCO / 1782107
 - **priority:** HIGH
-- **dealRelevance:** PRIVATE_COMPANY_ACQUISITION
-- **tradability:** NOT_TRADABLE
+- **dealRelevance:** PUBLIC_PUBLIC_MERGER
+- **tradability:** MEDIUM
 - **dealStage:** DEFINITIVE_AGREEMENT
 - **dealTiming:** EARLY
 - **review:** PENDING / -
 - **evidenceCount:** 1
-- **warnings:** 
+- **warnings:** RSS signal is alert eligible
 - evidenceUrls:
   - https://www.globenewswire.com/news-release/2026/06/24/3316830/0/en/Onconetix-Highlights-Realbotix-s-Launch-of-Humanoid-Robot-and-AI-Teachers-Assistant-Pilot-Program-in-New-York-State-School-District.html
 
@@ -385,7 +407,7 @@
 - **dealTiming:** EARLY
 - **review:** PENDING / -
 - **evidenceCount:** 1
-- **warnings:** RSS signal is alert eligible
+- **warnings:** 
 - evidenceUrls:
   - https://www.globenewswire.com/news-release/2026/06/24/3316792/0/en/Evolve-Royalties-Enters-Into-Definitive-Agreement-in-Connection-with-Previously-Announced-Acquisition-of-a-Royalty-on-the-Sunnyside-Project-in-Arizona-USA.html
 
@@ -451,13 +473,13 @@
 - **buyerTicker/CIK:** - / -
 - **targetTicker/CIK:** GBCS / 727346
 - **priority:** HIGH
-- **dealRelevance:** PRIVATE_COMPANY_ACQUISITION
-- **tradability:** LOW
+- **dealRelevance:** PUBLIC_CASH_ACQUISITION
+- **tradability:** HIGH
 - **dealStage:** INITIAL_ANNOUNCEMENT
 - **dealTiming:** EARLY
 - **review:** PENDING / -
 - **evidenceCount:** 1
-- **warnings:** 
+- **warnings:** RSS signal is alert eligible
 - evidenceUrls:
   - https://www.globenewswire.com/news-release/2026/06/23/3316460/0/en/SELECTIS-HEALTH-INC-ENTERS-INTO-AGREEMENT-TO-BE-ACQUIRED-BY-BLACK-PEARL.html
 
@@ -722,40 +744,19 @@
   - https://www.sec.gov/Archives/edgar/data/1318605/000162828026026551/tsla-20260422.htm
   - https://www.sec.gov/Archives/edgar/data/1318605/000162828026022956/tsla-20260402.htm
 
-### Apple Inc. 8-K
-
-- **groupKey:** sec:320193:0000320193-26-000011
-- **buyer:** -
-- **target:** Apple Inc.
-- **buyerTicker/CIK:** - / -
-- **targetTicker/CIK:** - / 0000320193
-- **priority:** LOW
-- **dealRelevance:** -
-- **tradability:** -
-- **dealStage:** -
-- **dealTiming:** -
-- **review:** PENDING / -
-- **evidenceCount:** 2
-- **warnings:** Multiple related signals found for this deal
-- evidenceUrls:
-  - https://www.sec.gov/Archives/edgar/data/320193/000032019326000011/aapl-20260430.htm
-  - https://www.sec.gov/Archives/edgar/data/320193/000114036126015711/ef20071035_8k.htm
-
 ## Recent Scan Runs
 
-- #1190 | SUCCESS | MANUAL | fetched=0 | candidates=0 | duplicates=0 | finishedAt=null
-- #1189 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=490 | finishedAt=2026-06-25T13:26:27.897533Z
-- #1188 | SUCCESS | MANUAL | fetched=470 | candidates=0 | duplicates=468 | finishedAt=2026-06-25T13:26:08.408985Z
-- #1187 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=474 | finishedAt=2026-06-25T13:21:28.741983Z
-- #1186 | FAILED | SCHEDULED | fetched=0 | candidates=0 | duplicates=0 | finishedAt=2026-06-25T13:16:11.877134Z
-- #1185 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=488 | finishedAt=2026-06-25T13:10:55.849148Z
-- #1184 | SUCCESS | MANUAL | fetched=490 | candidates=0 | duplicates=474 | finishedAt=2026-06-25T13:10:02.687045Z
-- #1183 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=450 | finishedAt=2026-06-25T13:04:18.520843Z
-- #1182 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=482 | finishedAt=2026-06-25T12:59:01.532445Z
-- #1181 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=481 | finishedAt=2026-06-25T12:53:31.583338Z
+- #1204 | SUCCESS | MANUAL | fetched=490 | candidates=0 | duplicates=472 | finishedAt=2026-06-25T14:03:25.867790Z
+- #1203 | SUCCESS | MANUAL | fetched=490 | candidates=0 | duplicates=439 | finishedAt=2026-06-25T14:01:53.234936Z
+- #1202 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=489 | finishedAt=2026-06-25T13:57:59.653302Z
+- #1201 | SUCCESS | MANUAL | fetched=490 | candidates=0 | duplicates=487 | finishedAt=2026-06-25T13:57:13.122320Z
+- #1200 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=488 | finishedAt=2026-06-25T13:54:13.461594Z
+- #1199 | SUCCESS | MANUAL | fetched=490 | candidates=0 | duplicates=488 | finishedAt=2026-06-25T13:53:16.899881Z
+- #1198 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=490 | finishedAt=2026-06-25T13:50:31.959830Z
+- #1197 | SUCCESS | MANUAL | fetched=490 | candidates=0 | duplicates=485 | finishedAt=2026-06-25T13:49:33.499736Z
+- #1196 | SUCCESS | SCHEDULED | fetched=490 | candidates=0 | duplicates=490 | finishedAt=2026-06-25T13:44:41.254738Z
+- #1195 | SUCCESS | MANUAL | fetched=490 | candidates=0 | duplicates=489 | finishedAt=2026-06-25T13:43:52.027992Z
 
 ## Known Warnings
 
-- Latest scan has no finishedAt timestamp.
-- No strict AI candidates are available right now.
 - Scheduled Full Refresh is disabled; Full Refresh runs only on manual click.

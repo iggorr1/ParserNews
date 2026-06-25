@@ -95,6 +95,16 @@ public class AlertEligibilityService {
         if (!hasPublicTargetEvidence(event)) {
             return new AlertEligibility(false, "No public target ticker or CIK was resolved for this RSS candidate.");
         }
+        if (!NewsTextPatterns.hasDealHeadlineCue(event.getArticle().getHeadline())) {
+            return new AlertEligibility(false, "Headline does not contain explicit M&A deal terms.");
+        }
+        if (!NewsTextPatterns.hasStrongMaPhrase(
+                event.getArticle().getHeadline(),
+                event.getArticle().getArticleText(),
+                event.getMatchedPositiveKeywords()
+        )) {
+            return new AlertEligibility(false, "No explicit M&A deal phrase was found for alert eligibility.");
+        }
 
         CandidateReviewInsightService.ReviewInsight reviewInsight = reviewInsightService.insight(event.getArticle(), event);
         DealTermsExtractionService.DealTerms dealTerms = dealTermsExtractionService.extract(event.getArticle(), event, reviewInsight);
@@ -124,6 +134,15 @@ public class AlertEligibilityService {
                 reason += " Warnings: " + String.join(", ", relevanceInsight.relevanceWarnings()) + ".";
             }
             return withStrategy(false, reason, relevanceInsight, stageInsight);
+        }
+        if ((relevanceInsight.dealRelevance() == DealRelevance.PUBLIC_TAKE_PRIVATE
+                || relevanceInsight.dealRelevance() == DealRelevance.PUBLIC_CASH_ACQUISITION)
+                && !NewsTextPatterns.hasCashOrFixedDealTerms(
+                event.getArticle().getHeadline(),
+                event.getArticle().getArticleText(),
+                event.getMatchedPositiveKeywords()
+        )) {
+            return withStrategy(false, "No cash or fixed-price deal terms were found.", relevanceInsight, stageInsight);
         }
         if (relevanceInsight.tradability() != Tradability.HIGH && relevanceInsight.tradability() != Tradability.MEDIUM) {
             return withStrategy(false, "Tradability is " + relevanceInsight.tradability() + ".", relevanceInsight, stageInsight);

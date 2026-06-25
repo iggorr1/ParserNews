@@ -61,7 +61,7 @@ class DealGroupAiReviewServiceTest {
     void mockOpenAiGoodSignalForAbbVieApogeeIsSaved() {
         DealGroupingService.DealGroupResponse group = group(
                 "target-ticker:APGE",
-                "AbbVie to Acquire Apogee",
+                "AbbVie agrees to acquire Apogee for $10.00 per share in cash",
                 "AbbVie Inc.",
                 "Apogee Therapeutics",
                 "ABBV",
@@ -132,7 +132,7 @@ class DealGroupAiReviewServiceTest {
     void reviewUsesRuntimeKeyWhenConfiguredFromUi() {
         DealGroupingService.DealGroupResponse group = group(
                 "target-ticker:APGE",
-                "AbbVie to Acquire Apogee",
+                "AbbVie agrees to acquire Apogee for $10.00 per share in cash",
                 "AbbVie Inc.",
                 "Apogee Therapeutics",
                 "ABBV",
@@ -196,7 +196,7 @@ class DealGroupAiReviewServiceTest {
     void batchDisabledModeReturnsSafeResponseWithoutApiCall() {
         when(dealGroupingService.groups(null, null, 200)).thenReturn(List.of(group(
                 "target-ticker:APGE",
-                "AbbVie to Acquire Apogee",
+                "AbbVie agrees to acquire Apogee for $10.00 per share in cash",
                 "AbbVie Inc.",
                 "Apogee Therapeutics",
                 "ABBV",
@@ -219,7 +219,7 @@ class DealGroupAiReviewServiceTest {
     void batchMissingApiKeyReturnsSafeResponseWithoutApiCall() {
         when(dealGroupingService.groups(null, null, 200)).thenReturn(List.of(group(
                 "target-ticker:APGE",
-                "AbbVie to Acquire Apogee",
+                "AbbVie agrees to acquire Apogee for $10.00 per share in cash",
                 "AbbVie Inc.",
                 "Apogee Therapeutics",
                 "ABBV",
@@ -241,7 +241,7 @@ class DealGroupAiReviewServiceTest {
     void batchSelectionExcludesPrivateLawNoiseAndNotTradableGroups() {
         DealGroupingService.DealGroupResponse good = group(
                 "target-ticker:APGE",
-                "AbbVie to Acquire Apogee",
+                "AbbVie agrees to acquire Apogee for $10.00 per share in cash",
                 "AbbVie Inc.",
                 "Apogee Therapeutics",
                 "ABBV",
@@ -272,7 +272,7 @@ class DealGroupAiReviewServiceTest {
     void previewSelectionIsStrictAndDoesNotCallOpenAi() {
         DealGroupingService.DealGroupResponse good = group(
                 "target-ticker:APGE",
-                "AbbVie to Acquire Apogee",
+                "AbbVie agrees to acquire Apogee for $10.00 per share in cash",
                 "AbbVie Inc.",
                 "Apogee Therapeutics",
                 "ABBV",
@@ -436,7 +436,7 @@ class DealGroupAiReviewServiceTest {
                 groupKey,
                 SignalInboxController.SourceType.RSS_NEWS,
                 1L,
-                "Test Deal Group " + groupKey,
+                "Buyer agrees to acquire Target for $10.00 per share in cash",
                 "Buyer Corp.",
                 "Target Corp.",
                 targetTicker,
@@ -456,7 +456,7 @@ class DealGroupAiReviewServiceTest {
                 List.of(new DealGroupingService.RelatedSignalResponse(
                         SignalInboxController.SourceType.RSS_NEWS,
                         1L,
-                        "Test Deal Group " + groupKey,
+                        "Buyer agrees to acquire Target for $10.00 per share in cash",
                         "https://example.test/" + groupKey,
                         Instant.parse("2026-06-20T12:00:00Z"),
                         null,
