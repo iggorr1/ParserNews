@@ -28,6 +28,10 @@ public class DealTermsExtractionService {
     private static final Pattern ENTERS_AGREEMENT_TO_ACQUIRE = Pattern.compile(
             "(?i)^(.+?)\\s+enters\\s+(?:into\\s+)?(?:a\\s+)?definitive\\s+agreement\\s+to\\s+acquire\\s+(.+?)(?:\\s+for\\s+|\\s+in\\s+|\\s+-\\s+|:|$)"
     );
+    // Catches "Buyer Agrees/Signs/Plans to Acquire Target"
+    private static final Pattern VERB_TO_ACQUIRE = Pattern.compile(
+            "(?i)^(.+?)\\s+(?:agrees?|agreed|signs?|signed|plans?|intends?|set)\\s+(?:\\w+\\s+){0,3}to\\s+acquire\\s+(.+?)(?:\\s+for\\s+|\\s+in\\s+|\\s+-\\s+|:|$)"
+    );
     private static final Pattern TO_ACQUIRE = Pattern.compile(
             "(?i)^(.+?)\\s+to\\s+acquire\\s+(.+?)(?:\\s+for\\s+|\\s+in\\s+|\\s+-\\s+|:|$)"
     );
@@ -125,7 +129,7 @@ public class DealTermsExtractionService {
     }
 
     private CompanyPair extractCompanies(String headline) {
-        for (Pattern pattern : List.of(RAISES_OFFER_TO_ACQUIRE, ENTERS_AGREEMENT_TO_ACQUIRE, TO_ACQUIRE)) {
+        for (Pattern pattern : List.of(RAISES_OFFER_TO_ACQUIRE, ENTERS_AGREEMENT_TO_ACQUIRE, VERB_TO_ACQUIRE, TO_ACQUIRE)) {
             Matcher matcher = pattern.matcher(headline);
             if (matcher.find()) {
                 return new CompanyPair(cleanCompany(matcher.group(2)), cleanCompany(matcher.group(1)));
@@ -274,8 +278,13 @@ public class DealTermsExtractionService {
     private String cleanCompany(String value) {
         String cleaned = safe(value)
                 .replaceAll("(?i)^(?:u\\.s\\.|us|united states|canada|canadian|uk|u\\.k\\.)-based\\s+", "")
-                .replaceAll("(?i)\\s+(inc\\.|incorporated|corp\\.|corporation|ltd\\.|limited|plc|llc)\\b.*$", " $1")
-                .replaceAll("(?i)\\s+(announces|announce|enters|entered|raises|raise|has|have)\\b.*$", "")
+                // Strip trailing verb phrases that bleed in from the headline
+                .replaceAll("(?i)\\s+(announces?|announce[sd]?|enters?|entered|raises?|raised?|has|have|agrees?|agreed|signs?|signed|plans?|intends?|said|will|completes?|completed|launches?)\\b.*$", "")
+                // Preserve known corporate suffixes but strip trailing subtitle after comma
+                .replaceAll("(?i)\\s+(inc\\.|incorporated|corp\\.|corporation|ltd\\.|limited|plc|llc|lp|llp|gmbh|ag|se|nv|bv|kgaa)\\b.*$", " $1")
+                // Strip geographic qualifiers and subtitle noise after comma
+                // e.g. ", Darmstadt, Germany" or ", Strengthening Leadership Position"
+                .replaceAll(",\\s+(?!(?:Inc\\.?|Corp\\.?|Ltd\\.?|Limited|LLC|LLP|PLC|LP|GmbH|AG|SE|NV|BV|KGaA)\\b).*$", "")
                 .replaceAll("[,;]+$", "")
                 .trim();
         return cleaned.isBlank() ? null : cleaned;

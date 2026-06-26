@@ -13,6 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class AutoDealGroupDispatchService {
@@ -23,6 +24,9 @@ public class AutoDealGroupDispatchService {
     );
 
     private static final int MAX_AI_PER_RUN = 3;
+    private static final double MIN_PRICE_USD = 0.50;
+
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
     private final DealGroupingService dealGroupingService;
     private final DealGroupAiReviewService aiReviewService;
@@ -69,8 +73,17 @@ public class AutoDealGroupDispatchService {
         autoDispatch();
     }
 
-    @Transactional
     public void autoDispatch() {
+        // Prevent concurrent runs (event + schedule firing together)
+        if (!running.compareAndSet(false, true)) return;
+        try {
+            doDispatch();
+        } finally {
+            running.set(false);
+        }
+    }
+
+    private void doDispatch() {
         if (!openAiSettings.effectiveSettings().enabled() || !openAiSettings.effectiveSettings().configured()) {
             return;
         }
@@ -78,26 +91,20 @@ public class AutoDealGroupDispatchService {
             return;
         }
 
-        // Get all HIGH+MEDIUM PENDING groups not yet dispatched to Telegram
-        List<DealGroupReviewEntity> notDispatched = reviewRepository.findByTgDispatchedAtIsNull();
-        List<String> notDispatchedKeys = notDispatched.stream()
-                .filter(r -> r.getManualReviewStatus() == ManualReviewStatus.PENDING)
-                .map(DealGroupReviewEntity::getGroupKey)
-                .toList();
+        List<String> notDispatchedKeys = findNotDispatchedPendingKeys();
 
-        // Also pick up groups with no review record yet (brand new)
         List<DealGroupingService.DealGroupResponse> candidates = dealGroupingService
                 .groups(ManualReviewStatus.PENDING, null, 50)
                 .stream()
                 .filter(g -> g.priority() == UnifiedPriority.HIGH || g.priority() == UnifiedPriority.MEDIUM)
-                .filter(g -> notDispatchedKeys.contains(g.groupKey()) || g.reviewStatus() == ManualReviewStatus.PENDING)
+                .filter(g -> notDispatchedKeys.contains(g.groupKey()) || !g.groupReviewStored())
+                .filter(this::passesQualityGate)
                 .toList();
 
         int aiRan = 0;
         for (DealGroupingService.DealGroupResponse group : candidates) {
             if (alreadyDispatched(group.groupKey())) continue;
 
-            // Run AI review if not done yet and budget allows
             DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
             boolean hasReview = aiReview.verdict() != null && aiReview.verdict() != AiReviewVerdict.UNKNOWN;
 
@@ -114,13 +121,36 @@ public class AutoDealGroupDispatchService {
                 continue;
             }
 
-            // Re-fetch group after AI review
             DealGroupingService.DealGroupResponse fresh = dealGroupingService.group(group.groupKey()).orElse(group);
             dispatchToTelegram(fresh);
         }
     }
 
-    private boolean alreadyDispatched(String groupKey) {
+    @Transactional(readOnly = true)
+    protected List<String> findNotDispatchedPendingKeys() {
+        return reviewRepository.findByTgDispatchedAtIsNull().stream()
+                .filter(r -> r.getManualReviewStatus() == ManualReviewStatus.PENDING)
+                .map(DealGroupReviewEntity::getGroupKey)
+                .toList();
+    }
+
+    private boolean passesQualityGate(DealGroupingService.DealGroupResponse group) {
+        // Skip if deal type completely unknown AND tradability not HIGH
+        if (group.dealRelevance() == null && group.tradability() != com.parsernews.model.Tradability.HIGH) {
+            return false;
+        }
+        // Skip penny stocks (price < $0.50) when ticker is known
+        String ticker = group.targetTicker();
+        if (ticker != null && !ticker.isBlank() && !"UNKNOWN".equalsIgnoreCase(ticker)) {
+            return stockPriceService.currentPrice(ticker)
+                    .map(p -> p.price() >= MIN_PRICE_USD)
+                    .orElse(true); // if price unavailable, don't block
+        }
+        return true;
+    }
+
+    @Transactional(readOnly = true)
+    protected boolean alreadyDispatched(String groupKey) {
         return reviewRepository.findByGroupKey(groupKey)
                 .map(DealGroupReviewEntity::isTgDispatched)
                 .orElse(false);
