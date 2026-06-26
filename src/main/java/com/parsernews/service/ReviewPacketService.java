@@ -226,7 +226,18 @@ public class ReviewPacketService {
         if (!secDiscoveryStatus.enabled()) {
             warnings.add("SEC Discovery is disabled; broad SEC discovery runs only when explicitly enabled.");
         }
+        if (secDiscoveryStatus.enabled() && hasSecDiscoveryErrors(secDiscoveryStatus)) {
+            warnings.add("SEC Discovery last run reported errors — check SEC Discovery status for details.");
+        }
         return List.copyOf(warnings);
+    }
+
+    private boolean hasSecDiscoveryErrors(SecDiscoveryScanner.SecDiscoveryStatus status) {
+        if (status.lastRunSummary() == null) {
+            return false;
+        }
+        return !status.lastRunSummary().errors().isEmpty()
+                || "FAILED".equals(status.lastRunStatus());
     }
 
     private String toMarkdown(ReviewPacket packet) {
