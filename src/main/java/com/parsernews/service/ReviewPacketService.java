@@ -23,6 +23,7 @@ public class ReviewPacketService {
     private final SourceEvaluationPreviewService sourceEvaluationPreviewService;
     private final SecDiscoveryScanner secDiscoveryScanner;
     private final ScanRunRepository scanRunRepository;
+    private final RssFeedHealthService rssFeedHealthService;
 
     public ReviewPacketService(
             StatusService statusService,
@@ -33,7 +34,8 @@ public class ReviewPacketService {
             DealGroupAiReviewService dealGroupAiReviewService,
             SourceEvaluationPreviewService sourceEvaluationPreviewService,
             SecDiscoveryScanner secDiscoveryScanner,
-            ScanRunRepository scanRunRepository
+            ScanRunRepository scanRunRepository,
+            RssFeedHealthService rssFeedHealthService
     ) {
         this.statusService = statusService;
         this.schedulerStatusService = schedulerStatusService;
@@ -44,6 +46,7 @@ public class ReviewPacketService {
         this.sourceEvaluationPreviewService = sourceEvaluationPreviewService;
         this.secDiscoveryScanner = secDiscoveryScanner;
         this.scanRunRepository = scanRunRepository;
+        this.rssFeedHealthService = rssFeedHealthService;
     }
 
     @Transactional(readOnly = true)
@@ -228,6 +231,14 @@ public class ReviewPacketService {
         }
         if (secDiscoveryStatus.enabled() && hasSecDiscoveryErrors(secDiscoveryStatus)) {
             warnings.add("SEC Discovery last run reported errors — check SEC Discovery status for details.");
+        }
+        List<RssFeedHealthService.FeedHealthSummary> unhealthyFeeds = rssFeedHealthService.unhealthy();
+        for (RssFeedHealthService.FeedHealthSummary feed : unhealthyFeeds) {
+            if (feed.consecutiveErrors() >= RssFeedHealthService.ERROR_THRESHOLD) {
+                warnings.add("RSS feed unhealthy (" + feed.consecutiveErrors() + " consecutive errors): " + feed.feedUrl());
+            } else {
+                warnings.add("RSS feed stale (no success in " + feed.staleSinceHours() + "h): " + feed.feedUrl());
+            }
         }
         return List.copyOf(warnings);
     }

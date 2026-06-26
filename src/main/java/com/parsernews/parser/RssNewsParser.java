@@ -2,6 +2,7 @@ package com.parsernews.parser;
 
 import com.parsernews.config.RssSettings;
 import com.parsernews.model.NewsEvent;
+import com.parsernews.service.RssFeedHealthService;
 import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -36,17 +37,19 @@ public class RssNewsParser implements NewsSourceParser {
 
     private final RssSettings settings;
     private final HttpClient httpClient;
+    private final RssFeedHealthService healthService;
 
     @Autowired
-    public RssNewsParser(RssSettings settings) {
-        this(settings, HttpClient.newBuilder()
+    public RssNewsParser(RssSettings settings, RssFeedHealthService healthService) {
+        this(settings, healthService, HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(settings.timeoutSeconds()))
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build());
     }
 
-    RssNewsParser(RssSettings settings, HttpClient httpClient) {
+    RssNewsParser(RssSettings settings, RssFeedHealthService healthService, HttpClient httpClient) {
         this.settings = settings;
+        this.healthService = healthService;
         this.httpClient = httpClient;
     }
 
@@ -57,11 +60,14 @@ public class RssNewsParser implements NewsSourceParser {
 
         for (String url : settings.urls()) {
             try {
-                events.addAll(readFeed(url));
+                List<NewsEvent> feedEvents = readFeed(url);
+                events.addAll(feedEvents);
+                healthService.recordSuccess(url);
             } catch (IllegalArgumentException exception) {
                 throw new IllegalStateException("Invalid RSS feed configuration: " + url, exception);
             } catch (IllegalStateException exception) {
                 failedFeeds++;
+                healthService.recordError(url, exception.getMessage());
                 System.err.println("Warning: skipped RSS feed because it could not be read: " + url);
                 System.err.println("Reason: " + exception.getMessage());
             }

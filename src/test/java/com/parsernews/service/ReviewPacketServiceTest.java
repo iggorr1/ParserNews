@@ -33,7 +33,9 @@ class ReviewPacketServiceTest {
         SourceEvaluationPreviewService sourceEvaluationPreviewService = mock(SourceEvaluationPreviewService.class);
         SecDiscoveryScanner secDiscoveryScanner = mock(SecDiscoveryScanner.class);
         ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
+        RssFeedHealthService rssFeedHealthService = mock(RssFeedHealthService.class);
 
+        when(rssFeedHealthService.unhealthy()).thenReturn(List.of());
         when(statusService.status()).thenReturn(status());
         when(schedulerStatusService.status()).thenReturn(schedulerStatus());
         when(openAiRuntimeSettingsService.effectiveSettings()).thenReturn(new OpenAiRuntimeSettingsService.EffectiveOpenAiSettings(
@@ -76,7 +78,8 @@ class ReviewPacketServiceTest {
                 dealGroupAiReviewService,
                 sourceEvaluationPreviewService,
                 secDiscoveryScanner,
-                scanRunRepository
+                scanRunRepository,
+                rssFeedHealthService
         );
 
         String markdown = service.markdown();
@@ -121,7 +124,9 @@ class ReviewPacketServiceTest {
         SourceEvaluationPreviewService sourceEvaluationPreviewService = mock(SourceEvaluationPreviewService.class);
         SecDiscoveryScanner secDiscoveryScanner = mock(SecDiscoveryScanner.class);
         ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
+        RssFeedHealthService rssFeedHealthService = mock(RssFeedHealthService.class);
 
+        when(rssFeedHealthService.unhealthy()).thenReturn(List.of());
         when(statusService.status()).thenReturn(status());
         when(schedulerStatusService.status()).thenReturn(schedulerStatus());
         when(openAiRuntimeSettingsService.effectiveSettings()).thenReturn(openAiDisabled());
@@ -145,7 +150,8 @@ class ReviewPacketServiceTest {
                 dealGroupAiReviewService,
                 sourceEvaluationPreviewService,
                 secDiscoveryScanner,
-                scanRunRepository
+                scanRunRepository,
+                rssFeedHealthService
         );
 
         String markdown = service.markdown();

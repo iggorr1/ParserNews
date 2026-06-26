@@ -2,6 +2,7 @@ package com.parsernews.parser;
 
 import com.parsernews.config.RssSettings;
 import com.parsernews.model.NewsEvent;
+import com.parsernews.service.RssFeedHealthService;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -22,12 +23,15 @@ import javax.net.ssl.SSLSession;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
 
 class RssNewsParserTest {
+    private final RssFeedHealthService noopHealthService = mock(RssFeedHealthService.class);
     @Test
     void parsesRssItemsIntoNewsEvents() {
         RssNewsParser parser = new RssNewsParser(
                 new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, false, List.of()),
+                noopHealthService,
                 new StubHttpClient("""
                         <?xml version="1.0" encoding="utf-8"?>
                         <rss version="2.0">
@@ -57,6 +61,7 @@ class RssNewsParserTest {
     void extractsTickerFromExchangeLabel() {
         RssNewsParser parser = new RssNewsParser(
                 new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, false, List.of()),
+                noopHealthService,
                 new StubHttpClient("""
                         <?xml version="1.0" encoding="utf-8"?>
                         <rss version="2.0">
@@ -82,6 +87,7 @@ class RssNewsParserTest {
     void doesNotTreatExchangeNameAsTickerWithoutColon() {
         RssNewsParser parser = new RssNewsParser(
                 new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, false, List.of()),
+                noopHealthService,
                 new StubHttpClient("""
                         <?xml version="1.0" encoding="utf-8"?>
                         <rss version="2.0">
@@ -107,6 +113,7 @@ class RssNewsParserTest {
     void rejectsNonHttpsFeeds() {
         RssNewsParser parser = new RssNewsParser(
                 new RssSettings(List.of("http://example.com/feed.xml"), 5, 10, false, List.of()),
+                noopHealthService,
                 new StubHttpClient("<rss />")
         );
 
@@ -122,6 +129,7 @@ class RssNewsParserTest {
                         "https://example.com/broken.xml",
                         "https://example.com/healthy.xml"
                 ), 5, 10, false, List.of()),
+                noopHealthService,
                 new UriAwareStubHttpClient(
                         Map.of("https://example.com/healthy.xml", """
                                 <?xml version="1.0" encoding="utf-8"?>
@@ -151,6 +159,7 @@ class RssNewsParserTest {
     void fetchesFullArticleTextForWhitelistedHosts() {
         RssNewsParser parser = new RssNewsParser(
                 new RssSettings(List.of("https://example.com/feed.xml"), 5, 10, true, List.of("example.com")),
+                noopHealthService,
                 new UriAwareStubHttpClient(
                         Map.of(
                                 "https://example.com/feed.xml", """
@@ -185,6 +194,7 @@ class RssNewsParserTest {
     void cleansFetchedArticleHtmlBeforeStoringFullText() {
         RssNewsParser parser = new RssNewsParser(
                 new RssSettings(List.of("https://www.globenewswire.com/feed.xml"), 5, 10, true, List.of("globenewswire.com")),
+                noopHealthService,
                 new UriAwareStubHttpClient(
                         Map.of(
                                 "https://www.globenewswire.com/feed.xml", """
