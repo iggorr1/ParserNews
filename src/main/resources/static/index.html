@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ParserNews Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <style>
         :root {
             --bg: #070b10;
@@ -1410,6 +1411,21 @@
                 </section>
             </aside>
         </div>
+    </section>
+
+    <section class="panel review-quality" id="confirmedSection">
+        <div class="panel-head">
+            <div>
+                <div class="section-kicker">Confirmed deals</div>
+                <h2>Confirmed Companies</h2>
+                <div class="muted">Deal groups marked Useful — price history with news date marker.</div>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button id="refreshConfirmedButton" type="button">Refresh</button>
+                <span class="badge" id="confirmedCount">0</span>
+            </div>
+        </div>
+        <div id="confirmedGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px;margin-top:16px;"></div>
     </section>
 
     <section class="panel source-quality">
@@ -4869,7 +4885,202 @@
         document.querySelector("#candidateSection").scrollIntoView({behavior: "smooth", block: "start"});
     });
 
+    // ── Confirmed Companies ──────────────────────────────────────────────────
+    const confirmedGrid = document.querySelector("#confirmedGrid");
+    const confirmedCount = document.querySelector("#confirmedCount");
+    const refreshConfirmedButton = document.querySelector("#refreshConfirmedButton");
+    const chartInstances = {};
+
+    refreshConfirmedButton.addEventListener("click", loadConfirmedCompanies);
+
+    async function loadConfirmedCompanies() {
+        confirmedGrid.innerHTML = `<div class="muted" style="padding:16px;">Loading confirmed companies...</div>`;
+        try {
+            const groups = await fetchJson("/api/deal-groups?status=USEFUL&limit=50");
+            const withTicker = (groups || []).filter(g => g.targetTicker && g.targetTicker !== "UNKNOWN");
+            const noTicker  = (groups || []).filter(g => !g.targetTicker || g.targetTicker === "UNKNOWN");
+
+            confirmedCount.textContent = (groups || []).length;
+            confirmedGrid.innerHTML = "";
+
+            // Destroy old Chart instances
+            Object.values(chartInstances).forEach(c => c.destroy());
+            Object.keys(chartInstances).forEach(k => delete chartInstances[k]);
+
+            for (const group of withTicker) {
+                confirmedGrid.appendChild(await buildConfirmedCard(group));
+            }
+            for (const group of noTicker) {
+                confirmedGrid.appendChild(buildNoTickerCard(group));
+            }
+            if ((groups || []).length === 0) {
+                confirmedGrid.innerHTML = `<div class="muted" style="padding:16px;">No confirmed deals yet. Mark a deal group as <strong>Useful</strong> to see it here.</div>`;
+            }
+        } catch (e) {
+            confirmedGrid.innerHTML = `<div class="muted" style="color:var(--danger);padding:16px;">Failed to load confirmed companies: ${e.message}</div>`;
+        }
+    }
+
+    async function buildConfirmedCard(group) {
+        const card = document.createElement("div");
+        card.className = "notice";
+        card.style.cssText = "padding:16px;display:flex;flex-direction:column;gap:10px;";
+
+        const ticker = group.targetTicker || "UNKNOWN";
+        const newsDate = group.sortInstant ? group.sortInstant.substring(0, 10) : null;
+
+        // Header
+        const header = document.createElement("div");
+        header.style.cssText = "display:flex;justify-content:space-between;align-items:flex-start;gap:8px;";
+        header.innerHTML = `
+            <div>
+                <div style="font-weight:700;font-size:15px;">${escHtml(group.title || group.targetCompany || ticker)}</div>
+                <div class="muted" style="font-size:12px;margin-top:2px;">
+                    ${escHtml(ticker)} &nbsp;·&nbsp; ${group.dealRelevance || ''} &nbsp;·&nbsp; ${group.priority || ''}
+                    ${newsDate ? `&nbsp;·&nbsp; news: ${newsDate}` : ''}
+                </div>
+            </div>
+            <span id="price-badge-${escHtml(ticker)}" class="badge" style="white-space:nowrap;">loading…</span>`;
+        card.appendChild(header);
+
+        // Chart canvas
+        const canvasWrap = document.createElement("div");
+        canvasWrap.style.cssText = "position:relative;height:120px;";
+        const canvas = document.createElement("canvas");
+        canvas.id = `chart-${ticker}-${group.groupKey}`;
+        canvasWrap.appendChild(canvas);
+        card.appendChild(canvasWrap);
+
+        // Load price + history in parallel
+        loadPriceAndChart(ticker, newsDate, canvas, `price-badge-${escHtml(ticker)}`);
+
+        return card;
+    }
+
+    function buildNoTickerCard(group) {
+        const card = document.createElement("div");
+        card.className = "notice";
+        card.style.cssText = "padding:16px;opacity:0.7;";
+        card.innerHTML = `
+            <div style="font-weight:700;">${escHtml(group.title || group.targetCompany || "Unknown")}</div>
+            <div class="muted" style="font-size:12px;margin-top:4px;">No ticker — price chart unavailable</div>`;
+        return card;
+    }
+
+    async function loadPriceAndChart(ticker, newsDate, canvas, badgeId) {
+        const badge = document.getElementById(badgeId);
+        try {
+            const [priceData, historyData] = await Promise.allSettled([
+                fetchJson(`/api/price/${encodeURIComponent(ticker)}`),
+                fetchJson(`/api/price/${encodeURIComponent(ticker)}/history?range=6mo`)
+            ]);
+
+            // Update price badge
+            if (priceData.status === "fulfilled" && priceData.value) {
+                const p = priceData.value;
+                const sign = p.changePct >= 0 ? "+" : "";
+                const color = p.changePct >= 0 ? "var(--success)" : "var(--danger)";
+                if (badge) {
+                    badge.textContent = `$${p.price.toFixed(2)} (${sign}${p.changePct.toFixed(1)}%)`;
+                    badge.style.color = color;
+                    badge.title = p.shortName || ticker;
+                }
+            } else {
+                if (badge) badge.textContent = "price N/A";
+            }
+
+            // Draw chart
+            if (historyData.status === "fulfilled" && historyData.value && historyData.value.points.length > 0) {
+                const pts = historyData.value.points;
+                const labels = pts.map(p => p.date);
+                const closes = pts.map(p => p.close);
+
+                const newsIdx = newsDate ? labels.findIndex(d => d >= newsDate) : -1;
+
+                const annotations = {};
+                if (newsIdx >= 0) {
+                    annotations.newsLine = {
+                        type: "line",
+                        xMin: newsIdx,
+                        xMax: newsIdx,
+                        borderColor: "rgba(216,167,62,0.8)",
+                        borderWidth: 2,
+                        borderDash: [4, 4],
+                        label: { display: true, content: "news", position: "start",
+                                 color: "var(--warning)", font: { size: 10 } }
+                    };
+                }
+
+                const ctx = canvas.getContext("2d");
+                const chartId = canvas.id;
+                if (chartInstances[chartId]) chartInstances[chartId].destroy();
+
+                chartInstances[chartId] = new Chart(ctx, {
+                    type: "line",
+                    data: {
+                        labels,
+                        datasets: [{
+                            data: closes,
+                            borderColor: "var(--accent)",
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            fill: true,
+                            backgroundColor: "rgba(56,214,201,0.07)",
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: ctx => `$${ctx.parsed.y.toFixed(2)}`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                ticks: { maxTicksLimit: 6, color: "var(--muted)", font: { size: 10 } },
+                                grid: { color: "rgba(36,50,68,0.5)" }
+                            },
+                            y: {
+                                ticks: { color: "var(--muted)", font: { size: 10 },
+                                         callback: v => `$${v.toFixed(0)}` },
+                                grid: { color: "rgba(36,50,68,0.5)" }
+                            }
+                        }
+                    }
+                });
+
+                // Draw news line manually (no annotation plugin needed)
+                if (newsIdx >= 0) {
+                    const chart = chartInstances[chartId];
+                    chart.options.plugins.afterDraw = undefined;
+                    const origAfterDraw = Chart.defaults.plugins.afterDraw;
+                    chart._newsIdx = newsIdx;
+                    chart._drawNewsLine = true;
+                }
+            } else {
+                canvas.parentElement.innerHTML = `<div class="muted" style="font-size:11px;padding-top:8px;">Chart data unavailable</div>`;
+            }
+        } catch (e) {
+            if (badge) badge.textContent = "N/A";
+        }
+    }
+
+    function escHtml(s) {
+        if (!s) return "";
+        return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    // Auto-load confirmed companies on dashboard load
+    const _origLoadDashboard = typeof loadDashboard !== "undefined" ? loadDashboard : null;
+
     loadDashboard();
+    loadConfirmedCompanies();
 </script>
 </body>
 </html>

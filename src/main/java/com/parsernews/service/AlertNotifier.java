@@ -9,7 +9,14 @@ public interface AlertNotifier {
         return send(message);
     }
 
-    record InlineButton(String text, String url) {
+    record InlineButton(String text, String url, String callbackData) {
+        public static InlineButton url(String text, String url) {
+            return new InlineButton(text, url, null);
+        }
+
+        public static InlineButton callback(String text, String callbackData) {
+            return new InlineButton(text, null, callbackData);
+        }
     }
 
     record AlertNotificationResult(

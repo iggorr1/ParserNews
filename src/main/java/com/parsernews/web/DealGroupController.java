@@ -11,6 +11,7 @@ import com.parsernews.service.AlertNotifier;
 import com.parsernews.service.DealGroupAiReviewService;
 import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
+import com.parsernews.service.StockPriceService;
 import com.parsernews.service.TelegramRuntimeSettingsService;
 import com.parsernews.web.SignalInboxController.UnifiedPriority;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +42,7 @@ public class DealGroupController {
     private final DealGroupAiReviewService dealGroupAiReviewService;
     private final AlertNotifier alertNotifier;
     private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
+    private final StockPriceService stockPriceService;
     private final String appBaseUrl;
 
     public DealGroupController(
@@ -49,6 +51,7 @@ public class DealGroupController {
             DealGroupAiReviewService dealGroupAiReviewService,
             AlertNotifier alertNotifier,
             TelegramRuntimeSettingsService telegramRuntimeSettingsService,
+            StockPriceService stockPriceService,
             @Value("${app.base-url:}") String appBaseUrl
     ) {
         this.dealGroupingService = dealGroupingService;
@@ -56,6 +59,7 @@ public class DealGroupController {
         this.dealGroupAiReviewService = dealGroupAiReviewService;
         this.alertNotifier = alertNotifier;
         this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
+        this.stockPriceService = stockPriceService;
         this.appBaseUrl = appBaseUrl == null ? "" : appBaseUrl.stripTrailing();
     }
 
@@ -196,9 +200,9 @@ public class DealGroupController {
                     null
             );
         }
+        String message = enrichWithPrice(dealGroupingService.formatTelegramPreview(group), group);
         List<AlertNotifier.InlineButton> buttons = buildQuickReviewButtons(group.groupKey());
-        AlertNotifier.AlertNotificationResult notification = alertNotifier.sendWithButtons(
-                dealGroupingService.formatTelegramPreview(group), buttons);
+        AlertNotifier.AlertNotificationResult notification = alertNotifier.sendWithButtons(message, buttons);
         return new DealGroupTelegramSendResponse(
                 notification.sent(),
                 readiness.telegramEnabled(),
@@ -237,14 +241,19 @@ public class DealGroupController {
     }
 
     private List<AlertNotifier.InlineButton> buildQuickReviewButtons(String groupKey) {
-        if (appBaseUrl.isBlank()) {
-            return List.of();
-        }
-        String base = appBaseUrl + "/api/deal-groups/" + groupKey + "/quick-review";
+        String cb = "qr|";
         return List.of(
-                new AlertNotifier.InlineButton("✓ Useful", base + "?status=USEFUL"),
-                new AlertNotifier.InlineButton("✗ Ignore", base + "?status=IGNORED")
+                AlertNotifier.InlineButton.callback("✓ Useful", cb + "USEFUL|" + groupKey),
+                AlertNotifier.InlineButton.callback("✗ Ignore", cb + "IGNORED|" + groupKey)
         );
+    }
+
+    private String enrichWithPrice(String message, DealGroupingService.DealGroupResponse group) {
+        String ticker = group.targetTicker();
+        if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) return message;
+        return stockPriceService.currentPrice(ticker)
+                .map(p -> message + "\n\n<b>Stock:</b> " + p.formatted() + " | " + p.shortName())
+                .orElse(message);
     }
 
     private TelegramReadiness telegramReadiness() {

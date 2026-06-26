@@ -11,6 +11,7 @@ import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
 import com.parsernews.service.NewsScannerService;
 import com.parsernews.service.SafetyGuardService;
+import com.parsernews.service.StockPriceService;
 import com.parsernews.service.TelegramRuntimeSettingsService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -60,6 +61,9 @@ class DealGroupControllerTest {
 
     @MockitoBean
     private TelegramRuntimeSettingsService telegramRuntimeSettingsService;
+
+    @MockitoBean
+    private StockPriceService stockPriceService;
 
     @MockitoBean
     private NewsScannerService newsScannerService;

@@ -28,27 +28,29 @@ public class TelegramAlertNotifier implements AlertNotifier {
     public AlertNotificationResult sendWithButtons(String message, List<InlineButton> buttons) {
         TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
         if (!settings.enabled()) {
-            return AlertNotificationResult.notSent(
-                    "DISABLED",
-                    "Telegram is disabled; no external message was sent."
-            );
+            return AlertNotificationResult.notSent("DISABLED", "Telegram is disabled; no external message was sent.");
         }
         if (isBlank(settings.botToken()) || isBlank(settings.chatId())) {
-            return AlertNotificationResult.notSent(
-                    "CONFIG_MISSING",
-                    "Telegram is enabled but bot token or chat id is missing."
-            );
+            return AlertNotificationResult.notSent("CONFIG_MISSING", "Telegram is enabled but bot token or chat id is missing.");
         }
         try {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("chat_id", settings.chatId());
             body.put("text", message);
+            body.put("parse_mode", "HTML");
             body.put("disable_web_page_preview", true);
             if (!buttons.isEmpty()) {
                 List<List<Map<String, String>>> keyboard = new ArrayList<>();
                 List<Map<String, String>> row = new ArrayList<>();
                 for (InlineButton button : buttons) {
-                    row.add(Map.of("text", button.text(), "url", button.url()));
+                    Map<String, String> btn = new LinkedHashMap<>();
+                    btn.put("text", button.text());
+                    if (button.callbackData() != null) {
+                        btn.put("callback_data", button.callbackData());
+                    } else if (button.url() != null) {
+                        btn.put("url", button.url());
+                    }
+                    row.add(btn);
                 }
                 keyboard.add(row);
                 body.put("reply_markup", Map.of("inline_keyboard", keyboard));
@@ -60,7 +62,7 @@ public class TelegramAlertNotifier implements AlertNotifier {
                     .toBodilessEntity();
             return AlertNotificationResult.sent("SENT", "Telegram alert message was sent.");
         } catch (RestClientException exception) {
-            return AlertNotificationResult.notSent("SEND_FAILED", "Telegram alert send failed.");
+            return AlertNotificationResult.notSent("SEND_FAILED", "Telegram alert send failed: " + exception.getMessage());
         }
     }
 
