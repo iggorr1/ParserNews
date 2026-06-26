@@ -2,6 +2,7 @@ package com.parsernews.service;
 
 import com.parsernews.config.FullRefreshSchedulerSettings;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Instant;
 import java.util.List;
@@ -21,7 +22,8 @@ class ScheduledFullRefreshSchedulerTest {
         FullRefreshService fullRefreshService = mock(FullRefreshService.class);
         ScheduledFullRefreshScheduler scheduler = new ScheduledFullRefreshScheduler(
                 fullRefreshService,
-                new FullRefreshSchedulerSettings(false, 120000, 900000)
+                new FullRefreshSchedulerSettings(false, 120000, 900000),
+                mock(ApplicationEventPublisher.class)
         );
 
         boolean started = scheduler.runOnce();
@@ -37,7 +39,8 @@ class ScheduledFullRefreshSchedulerTest {
         when(fullRefreshService.fullRefresh()).thenReturn(summary(true, List.of("SEC scanner disabled or watchlist empty"), List.of()));
         ScheduledFullRefreshScheduler scheduler = new ScheduledFullRefreshScheduler(
                 fullRefreshService,
-                new FullRefreshSchedulerSettings(true, 120000, 900000)
+                new FullRefreshSchedulerSettings(true, 120000, 900000),
+                mock(ApplicationEventPublisher.class)
         );
 
         boolean started = scheduler.runOnce();
@@ -57,7 +60,8 @@ class ScheduledFullRefreshSchedulerTest {
         BlockingFullRefreshService fullRefreshService = new BlockingFullRefreshService();
         ScheduledFullRefreshScheduler scheduler = new ScheduledFullRefreshScheduler(
                 fullRefreshService,
-                new FullRefreshSchedulerSettings(true, 120000, 900000)
+                new FullRefreshSchedulerSettings(true, 120000, 900000),
+                mock(ApplicationEventPublisher.class)
         );
         Thread firstRun = new Thread(scheduler::runOnce);
         firstRun.start();

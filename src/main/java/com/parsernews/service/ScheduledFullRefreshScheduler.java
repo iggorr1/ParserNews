@@ -1,6 +1,7 @@
 package com.parsernews.service;
 
 import com.parsernews.config.FullRefreshSchedulerSettings;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -12,6 +13,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class ScheduledFullRefreshScheduler {
     private final FullRefreshService fullRefreshService;
     private final FullRefreshSchedulerSettings settings;
+    private final ApplicationEventPublisher events;
     private final AtomicBoolean running = new AtomicBoolean(false);
 
     private volatile Instant lastStartedAt;
@@ -22,10 +24,12 @@ public class ScheduledFullRefreshScheduler {
 
     public ScheduledFullRefreshScheduler(
             FullRefreshService fullRefreshService,
-            FullRefreshSchedulerSettings settings
+            FullRefreshSchedulerSettings settings,
+            ApplicationEventPublisher events
     ) {
         this.fullRefreshService = fullRefreshService;
         this.settings = settings;
+        this.events = events;
     }
 
     @Scheduled(
@@ -55,6 +59,7 @@ public class ScheduledFullRefreshScheduler {
             lastError = summary.errors() == null || summary.errors().isEmpty()
                     ? null
                     : String.join("; ", summary.errors());
+            events.publishEvent(new ScanCompletedEvent(this));
         } catch (RuntimeException exception) {
             lastFinishedAt = Instant.now();
             lastSuccess = false;

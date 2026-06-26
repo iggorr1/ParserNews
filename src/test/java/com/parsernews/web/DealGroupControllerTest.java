@@ -5,6 +5,7 @@ import com.parsernews.persistence.AiReviewConfidence;
 import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
+import com.parsernews.persistence.DealGroupReviewRepository;
 import com.parsernews.service.AlertNotifier;
 import com.parsernews.service.DealGroupAiReviewService;
 import com.parsernews.service.DealGroupReviewService;
@@ -64,6 +65,9 @@ class DealGroupControllerTest {
 
     @MockitoBean
     private StockPriceService stockPriceService;
+
+    @MockitoBean
+    private DealGroupReviewRepository dealGroupReviewRepository;
 
     @MockitoBean
     private NewsScannerService newsScannerService;

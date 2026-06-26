@@ -3,6 +3,7 @@ package com.parsernews.service;
 import com.parsernews.config.AlertDispatchSettings;
 import com.parsernews.config.FullRefreshSchedulerSettings;
 import com.parsernews.config.TelegramAlertSettings;
+import org.springframework.context.ApplicationEventPublisher;
 import com.parsernews.persistence.ScanRunEntity;
 import com.parsernews.persistence.ScanRunRepository;
 import com.parsernews.persistence.ScanRunTriggerType;
@@ -63,7 +64,8 @@ class SchedulerStatusServiceTest {
     private ScheduledFullRefreshScheduler scheduler(boolean enabled) {
         return new ScheduledFullRefreshScheduler(
                 mock(FullRefreshService.class),
-                new FullRefreshSchedulerSettings(enabled, 120000, 900000)
+                new FullRefreshSchedulerSettings(enabled, 120000, 900000),
+                mock(ApplicationEventPublisher.class)
         );
     }
 

@@ -2,6 +2,7 @@ package com.parsernews.service;
 
 import com.parsernews.config.SecDiscoverySettings;
 import org.junit.jupiter.api.Test;
+import org.springframework.context.ApplicationEventPublisher;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -13,7 +14,8 @@ class ScheduledSecDiscoveryScannerTest {
         SecDiscoveryScanner scanner = mock(SecDiscoveryScanner.class);
         ScheduledSecDiscoveryScanner scheduler = new ScheduledSecDiscoveryScanner(
                 settings(true, false),
-                scanner
+                scanner,
+                mock(ApplicationEventPublisher.class)
         );
 
         scheduler.runScheduledDiscovery();
@@ -26,7 +28,8 @@ class ScheduledSecDiscoveryScannerTest {
         SecDiscoveryScanner scanner = mock(SecDiscoveryScanner.class);
         ScheduledSecDiscoveryScanner scheduler = new ScheduledSecDiscoveryScanner(
                 settings(false, true),
-                scanner
+                scanner,
+                mock(ApplicationEventPublisher.class)
         );
 
         scheduler.runScheduledDiscovery();
@@ -39,7 +42,8 @@ class ScheduledSecDiscoveryScannerTest {
         SecDiscoveryScanner scanner = mock(SecDiscoveryScanner.class);
         ScheduledSecDiscoveryScanner scheduler = new ScheduledSecDiscoveryScanner(
                 settings(true, true),
-                scanner
+                scanner,
+                mock(ApplicationEventPublisher.class)
         );
 
         scheduler.runScheduledDiscovery();

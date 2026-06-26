@@ -5,10 +5,12 @@ import com.parsernews.service.SafetyGuardService;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
+@EnableAsync
 public class StockScannerApplication implements CommandLineRunner {
     private final NewsScannerService newsScannerService;
     private final SafetyGuardService safetyGuardService;

@@ -1416,9 +1416,9 @@
     <section class="panel review-quality" id="confirmedSection">
         <div class="panel-head">
             <div>
-                <div class="section-kicker">Confirmed deals</div>
-                <h2>Confirmed Companies</h2>
-                <div class="muted">Deal groups marked Useful — price history with news date marker.</div>
+                <div class="section-kicker">Telegram pipeline</div>
+                <h2>Confirmed via Telegram</h2>
+                <div class="muted">Groups sent to Telegram — price charts for confirmed deals. <span id="confirmedBreakdown" class="muted" style="font-size:12px;"></span></div>
             </div>
             <div style="display:flex;gap:8px;align-items:center;">
                 <button id="refreshConfirmedButton" type="button">Refresh</button>
@@ -4894,30 +4894,41 @@
     refreshConfirmedButton.addEventListener("click", loadConfirmedCompanies);
 
     async function loadConfirmedCompanies() {
-        confirmedGrid.innerHTML = `<div class="muted" style="padding:16px;">Loading confirmed companies...</div>`;
+        confirmedGrid.innerHTML = `<div class="muted" style="padding:16px;">Loading Telegram pipeline...</div>`;
         try {
-            const groups = await fetchJson("/api/deal-groups?status=USEFUL&limit=50");
-            const withTicker = (groups || []).filter(g => g.targetTicker && g.targetTicker !== "UNKNOWN");
-            const noTicker  = (groups || []).filter(g => !g.targetTicker || g.targetTicker === "UNKNOWN");
+            const groups = await fetchJson("/api/deal-groups/tg-dispatched?limit=50");
+            const all = groups || [];
 
-            confirmedCount.textContent = (groups || []).length;
+            const useful   = all.filter(g => g.reviewStatus === "USEFUL");
+            const pending  = all.filter(g => g.reviewStatus === "PENDING");
+            const ignored  = all.filter(g => g.reviewStatus === "IGNORED");
+
+            confirmedCount.textContent = all.length;
+            const breakdownEl = document.getElementById("confirmedBreakdown");
+            if (breakdownEl) {
+                breakdownEl.textContent = all.length > 0
+                    ? `✓ ${useful.length} confirmed · ⏳ ${pending.length} pending · ✗ ${ignored.length} ignored`
+                    : "";
+            }
+
             confirmedGrid.innerHTML = "";
 
             // Destroy old Chart instances
             Object.values(chartInstances).forEach(c => c.destroy());
             Object.keys(chartInstances).forEach(k => delete chartInstances[k]);
 
-            for (const group of withTicker) {
+            // Show useful first (with charts), then pending (with charts), then ignored (no chart)
+            for (const group of [...useful, ...pending]) {
                 confirmedGrid.appendChild(await buildConfirmedCard(group));
             }
-            for (const group of noTicker) {
-                confirmedGrid.appendChild(buildNoTickerCard(group));
+            for (const group of ignored) {
+                confirmedGrid.appendChild(buildIgnoredCard(group));
             }
-            if ((groups || []).length === 0) {
-                confirmedGrid.innerHTML = `<div class="muted" style="padding:16px;">No confirmed deals yet. Mark a deal group as <strong>Useful</strong> to see it here.</div>`;
+            if (all.length === 0) {
+                confirmedGrid.innerHTML = `<div class="muted" style="padding:16px;">No groups dispatched to Telegram yet. The auto-dispatch will send groups here after scanning.</div>`;
             }
         } catch (e) {
-            confirmedGrid.innerHTML = `<div class="muted" style="color:var(--danger);padding:16px;">Failed to load confirmed companies: ${e.message}</div>`;
+            confirmedGrid.innerHTML = `<div class="muted" style="color:var(--danger);padding:16px;">Failed to load Telegram pipeline: ${e.message}</div>`;
         }
     }
 
@@ -4926,34 +4937,62 @@
         card.className = "notice";
         card.style.cssText = "padding:16px;display:flex;flex-direction:column;gap:10px;";
 
-        const ticker = group.targetTicker || "UNKNOWN";
+        const ticker = group.targetTicker && group.targetTicker !== "UNKNOWN" ? group.targetTicker : null;
         const newsDate = group.sortInstant ? group.sortInstant.substring(0, 10) : null;
+        const isUseful = group.reviewStatus === "USEFUL";
+        const statusColor = isUseful ? "var(--success)" : "var(--warning)";
+        const statusLabel = isUseful ? "✓ Confirmed" : "⏳ Pending";
+
+        const priceBadgeId = ticker ? `price-badge-${escHtml(ticker)}-${escHtml(group.groupKey)}` : null;
 
         // Header
         const header = document.createElement("div");
         header.style.cssText = "display:flex;justify-content:space-between;align-items:flex-start;gap:8px;";
         header.innerHTML = `
-            <div>
-                <div style="font-weight:700;font-size:15px;">${escHtml(group.title || group.targetCompany || ticker)}</div>
+            <div style="min-width:0;">
+                <div style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(group.title || group.targetCompany || ticker || "Unknown")}</div>
                 <div class="muted" style="font-size:12px;margin-top:2px;">
-                    ${escHtml(ticker)} &nbsp;·&nbsp; ${group.dealRelevance || ''} &nbsp;·&nbsp; ${group.priority || ''}
+                    ${ticker ? `<strong>${escHtml(ticker)}</strong> &nbsp;·&nbsp; ` : ''}${group.dealRelevance || ''} &nbsp;·&nbsp; ${group.priority || ''}
                     ${newsDate ? `&nbsp;·&nbsp; news: ${newsDate}` : ''}
                 </div>
             </div>
-            <span id="price-badge-${escHtml(ticker)}" class="badge" style="white-space:nowrap;">loading…</span>`;
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                <span class="badge" style="color:${statusColor};white-space:nowrap;">${statusLabel}</span>
+                ${priceBadgeId ? `<span id="${priceBadgeId}" class="badge" style="white-space:nowrap;">loading…</span>` : ''}
+            </div>`;
         card.appendChild(header);
 
-        // Chart canvas
-        const canvasWrap = document.createElement("div");
-        canvasWrap.style.cssText = "position:relative;height:120px;";
-        const canvas = document.createElement("canvas");
-        canvas.id = `chart-${ticker}-${group.groupKey}`;
-        canvasWrap.appendChild(canvas);
-        card.appendChild(canvasWrap);
+        if (ticker) {
+            // Chart canvas
+            const canvasWrap = document.createElement("div");
+            canvasWrap.style.cssText = "position:relative;height:120px;";
+            const canvas = document.createElement("canvas");
+            canvas.id = `chart-${ticker}-${group.groupKey}`;
+            canvasWrap.appendChild(canvas);
+            card.appendChild(canvasWrap);
+            loadPriceAndChart(ticker, newsDate, canvas, priceBadgeId);
+        } else {
+            const noTicker = document.createElement("div");
+            noTicker.className = "muted";
+            noTicker.style.cssText = "font-size:11px;";
+            noTicker.textContent = "No ticker — price chart unavailable";
+            card.appendChild(noTicker);
+        }
 
-        // Load price + history in parallel
-        loadPriceAndChart(ticker, newsDate, canvas, `price-badge-${escHtml(ticker)}`);
+        return card;
+    }
 
+    function buildIgnoredCard(group) {
+        const card = document.createElement("div");
+        card.className = "notice";
+        card.style.cssText = "padding:14px 16px;opacity:0.55;display:flex;justify-content:space-between;align-items:center;gap:8px;";
+        const ticker = group.targetTicker && group.targetTicker !== "UNKNOWN" ? group.targetTicker : null;
+        card.innerHTML = `
+            <div>
+                <div style="font-weight:600;">${escHtml(group.title || group.targetCompany || ticker || "Unknown")}</div>
+                <div class="muted" style="font-size:12px;margin-top:2px;">${ticker ? escHtml(ticker) + ' &nbsp;·&nbsp; ' : ''}${group.dealRelevance || ''}</div>
+            </div>
+            <span class="badge" style="color:var(--danger);white-space:nowrap;">✗ Ignored</span>`;
         return card;
     }
 

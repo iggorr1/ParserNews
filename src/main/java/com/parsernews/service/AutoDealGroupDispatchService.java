@@ -5,6 +5,8 @@ import com.parsernews.persistence.DealGroupReviewEntity;
 import com.parsernews.persistence.DealGroupReviewRepository;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.web.SignalInboxController.UnifiedPriority;
+import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,11 +51,21 @@ public class AutoDealGroupDispatchService {
     }
 
     /**
-     * Every 10 minutes: find new HIGH/MEDIUM priority deal groups,
-     * run AI review, dispatch positives to Telegram.
+     * Triggered immediately after each scan completes (event-driven, async).
+     * Also runs on a fallback schedule every 2 minutes in case events are missed.
      */
-    @Scheduled(fixedDelayString = "${auto.dispatch.fixed-delay-ms:600000}",
+    @EventListener
+    @Async
+    public void onScanCompleted(ScanCompletedEvent event) {
+        autoDispatch();
+    }
+
+    @Scheduled(fixedDelayString = "${auto.dispatch.fixed-delay-ms:120000}",
                initialDelayString = "${auto.dispatch.initial-delay-ms:120000}")
+    public void scheduledDispatch() {
+        autoDispatch();
+    }
+
     @Transactional
     public void autoDispatch() {
         if (!openAiSettings.effectiveSettings().enabled() || !openAiSettings.effectiveSettings().configured()) {

@@ -5,6 +5,7 @@ import com.parsernews.model.DealStage;
 import com.parsernews.model.DealTiming;
 import com.parsernews.model.Tradability;
 import com.parsernews.persistence.DealGroupReviewEntity;
+import com.parsernews.persistence.DealGroupReviewRepository;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.service.AlertNotifier;
@@ -40,6 +41,7 @@ public class DealGroupController {
     private final DealGroupingService dealGroupingService;
     private final DealGroupReviewService dealGroupReviewService;
     private final DealGroupAiReviewService dealGroupAiReviewService;
+    private final DealGroupReviewRepository reviewRepository;
     private final AlertNotifier alertNotifier;
     private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
     private final StockPriceService stockPriceService;
@@ -49,6 +51,7 @@ public class DealGroupController {
             DealGroupingService dealGroupingService,
             DealGroupReviewService dealGroupReviewService,
             DealGroupAiReviewService dealGroupAiReviewService,
+            DealGroupReviewRepository reviewRepository,
             AlertNotifier alertNotifier,
             TelegramRuntimeSettingsService telegramRuntimeSettingsService,
             StockPriceService stockPriceService,
@@ -57,6 +60,7 @@ public class DealGroupController {
         this.dealGroupingService = dealGroupingService;
         this.dealGroupReviewService = dealGroupReviewService;
         this.dealGroupAiReviewService = dealGroupAiReviewService;
+        this.reviewRepository = reviewRepository;
         this.alertNotifier = alertNotifier;
         this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
         this.stockPriceService = stockPriceService;
@@ -148,6 +152,20 @@ public class DealGroupController {
                 .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"parsernews-deal-groups.csv\"")
                 .body(toCsv(groups));
+    }
+
+    @GetMapping("/api/deal-groups/tg-dispatched")
+    @Transactional(readOnly = true)
+    public List<DealGroupingService.DealGroupResponse> tgDispatchedDealGroups(
+            @RequestParam(defaultValue = "50") int limit
+    ) {
+        return reviewRepository.findByTgDispatchedAtIsNotNullOrderByTgDispatchedAtDesc()
+                .stream()
+                .limit(Math.min(limit, 200))
+                .map(r -> dealGroupingService.group(r.getGroupKey()))
+                .filter(java.util.Optional::isPresent)
+                .map(java.util.Optional::get)
+                .toList();
     }
 
     @GetMapping("/api/deal-groups/{groupKey}")

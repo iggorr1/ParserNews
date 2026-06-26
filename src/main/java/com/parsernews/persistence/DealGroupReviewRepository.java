@@ -8,4 +8,5 @@ import java.util.Optional;
 public interface DealGroupReviewRepository extends JpaRepository<DealGroupReviewEntity, Long> {
     Optional<DealGroupReviewEntity> findByGroupKey(String groupKey);
     List<DealGroupReviewEntity> findByTgDispatchedAtIsNull();
+    List<DealGroupReviewEntity> findByTgDispatchedAtIsNotNullOrderByTgDispatchedAtDesc();
 }
