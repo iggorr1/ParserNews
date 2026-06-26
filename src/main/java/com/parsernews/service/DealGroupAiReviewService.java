@@ -27,6 +27,8 @@ import java.util.stream.Collectors;
 
 @Service
 public class DealGroupAiReviewService {
+    static final String PROMPT_VERSION = "v2";
+
     private static final String DISABLED_MESSAGE = "OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it.";
     private static final String MISSING_KEY_MESSAGE = "OpenAI AI Review is enabled but OPENAI_API_KEY is missing.";
 
@@ -203,6 +205,7 @@ public class DealGroupAiReviewService {
                                 .orElse(review.getGroupKey()),
                         review.getVerdict(),
                         review.getConfidence(),
+                        review.getPromptVersion(),
                         review.getCreatedAt(),
                         review.getReason()
                 ))
@@ -249,6 +252,7 @@ public class DealGroupAiReviewService {
         DealGroupAiReviewEntity saved = repository.save(new DealGroupAiReviewEntity(
                 group.groupKey(),
                 settings.model(),
+                PROMPT_VERSION,
                 nullSafe(result.verdict(), AiReviewVerdict.UNKNOWN),
                 nullSafe(result.confidence(), AiReviewConfidence.LOW),
                 result.tradablePublicTarget(),
@@ -478,6 +482,7 @@ public class DealGroupAiReviewService {
                 entity.getId(),
                 entity.getGroupKey(),
                 entity.getModel(),
+                entity.getPromptVersion(),
                 entity.getVerdict(),
                 entity.getConfidence(),
                 Boolean.TRUE.equals(entity.getTradablePublicTarget()),
@@ -506,6 +511,7 @@ public class DealGroupAiReviewService {
             Long id,
             String groupKey,
             String model,
+            String promptVersion,
             AiReviewVerdict verdict,
             AiReviewConfidence confidence,
             boolean tradablePublicTarget,
@@ -520,6 +526,7 @@ public class DealGroupAiReviewService {
                     enabled,
                     configured,
                     message,
+                    null,
                     null,
                     null,
                     null,
@@ -617,6 +624,7 @@ public class DealGroupAiReviewService {
             String title,
             AiReviewVerdict verdict,
             AiReviewConfidence confidence,
+            String promptVersion,
             Instant createdAt,
             String reason
     ) {

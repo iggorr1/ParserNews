@@ -31,6 +31,7 @@ class ReviewPacketServiceTest {
         DealGroupingService dealGroupingService = mock(DealGroupingService.class);
         DealGroupAiReviewService dealGroupAiReviewService = mock(DealGroupAiReviewService.class);
         SourceEvaluationPreviewService sourceEvaluationPreviewService = mock(SourceEvaluationPreviewService.class);
+        SecDiscoveryScanner secDiscoveryScanner = mock(SecDiscoveryScanner.class);
         ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
 
         when(statusService.status()).thenReturn(status());
@@ -63,6 +64,7 @@ class ReviewPacketServiceTest {
                 .thenReturn(batchPreview());
         when(sourceEvaluationPreviewService.previewConfigured(org.mockito.ArgumentMatchers.any()))
                 .thenReturn(sourceAuditPreview());
+        when(secDiscoveryScanner.status()).thenReturn(secDiscoveryStatus());
         when(scanRunRepository.findTop100ByOrderByStartedAtDesc()).thenReturn(List.of());
 
         ReviewPacketService service = new ReviewPacketService(
@@ -73,6 +75,7 @@ class ReviewPacketServiceTest {
                 dealGroupingService,
                 dealGroupAiReviewService,
                 sourceEvaluationPreviewService,
+                secDiscoveryScanner,
                 scanRunRepository
         );
 
@@ -83,6 +86,7 @@ class ReviewPacketServiceTest {
                 .contains("# ParserNews Review Packet")
                 .contains("## App Status")
                 .contains("## Scheduler Status")
+                .contains("## SEC Discovery Status")
                 .contains("## OpenAI Status")
                 .contains("## Telegram Status")
                 .contains("## Deal Group Quality Stats")
@@ -115,6 +119,7 @@ class ReviewPacketServiceTest {
         DealGroupingService dealGroupingService = mock(DealGroupingService.class);
         DealGroupAiReviewService dealGroupAiReviewService = mock(DealGroupAiReviewService.class);
         SourceEvaluationPreviewService sourceEvaluationPreviewService = mock(SourceEvaluationPreviewService.class);
+        SecDiscoveryScanner secDiscoveryScanner = mock(SecDiscoveryScanner.class);
         ScanRunRepository scanRunRepository = mock(ScanRunRepository.class);
 
         when(statusService.status()).thenReturn(status());
@@ -128,6 +133,7 @@ class ReviewPacketServiceTest {
                 .thenReturn(batchPreview());
         when(sourceEvaluationPreviewService.previewConfigured(org.mockito.ArgumentMatchers.any()))
                 .thenThrow(new IllegalStateException("broken feed"));
+        when(secDiscoveryScanner.status()).thenReturn(secDiscoveryStatus());
         when(scanRunRepository.findTop100ByOrderByStartedAtDesc()).thenReturn(List.of());
 
         ReviewPacketService service = new ReviewPacketService(
@@ -138,6 +144,7 @@ class ReviewPacketServiceTest {
                 dealGroupingService,
                 dealGroupAiReviewService,
                 sourceEvaluationPreviewService,
+                secDiscoveryScanner,
                 scanRunRepository
         );
 
@@ -212,6 +219,7 @@ class ReviewPacketServiceTest {
                         "AbbVie to Acquire Apogee",
                         AiReviewVerdict.GOOD_SIGNAL,
                         AiReviewConfidence.HIGH,
+                        "v1",
                         Instant.parse("2026-06-20T12:05:00Z"),
                         "Public cash acquisition signal."
                 ))
@@ -263,6 +271,20 @@ class ReviewPacketServiceTest {
                                 List.of("temporary source warning")
                         )
                 )
+        );
+    }
+
+    private SecDiscoveryScanner.SecDiscoveryStatus secDiscoveryStatus() {
+        return new SecDiscoveryScanner.SecDiscoveryStatus(
+                false,
+                false,
+                List.of("8-K", "SC TO-T"),
+                50,
+                false,
+                null,
+                null,
+                null,
+                "SEC discovery is disabled."
         );
     }
 

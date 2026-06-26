@@ -174,6 +174,7 @@ class DealGroupAiReviewServiceTest {
         DealGroupAiReviewEntity entity = new DealGroupAiReviewEntity(
                 "target-ticker:APGE",
                 "gpt-4.1-mini",
+                "v1",
                 AiReviewVerdict.GOOD_SIGNAL,
                 AiReviewConfidence.HIGH,
                 true,
@@ -326,6 +327,7 @@ class DealGroupAiReviewServiceTest {
         DealGroupAiReviewEntity oldGood = new DealGroupAiReviewEntity(
                 "good-group",
                 "gpt-4.1-mini",
+                "v1",
                 AiReviewVerdict.NEEDS_HUMAN_REVIEW,
                 AiReviewConfidence.LOW,
                 false,
@@ -338,6 +340,7 @@ class DealGroupAiReviewServiceTest {
         DealGroupAiReviewEntity latestGood = new DealGroupAiReviewEntity(
                 "good-group",
                 "gpt-4.1-mini",
+                "v1",
                 AiReviewVerdict.GOOD_SIGNAL,
                 AiReviewConfidence.HIGH,
                 true,
@@ -350,6 +353,7 @@ class DealGroupAiReviewServiceTest {
         DealGroupAiReviewEntity notTradable = new DealGroupAiReviewEntity(
                 "private-group",
                 "gpt-4.1-mini",
+                "v1",
                 AiReviewVerdict.NOT_TRADABLE,
                 AiReviewConfidence.MEDIUM,
                 false,

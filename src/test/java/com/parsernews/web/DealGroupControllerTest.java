@@ -386,6 +386,7 @@ class DealGroupControllerTest {
                                 "AbbVie to Acquire Apogee",
                                 AiReviewVerdict.GOOD_SIGNAL,
                                 AiReviewConfidence.HIGH,
+                                "v1",
                                 Instant.parse("2026-06-20T12:00:00Z"),
                                 "Useful signal."
                         ))

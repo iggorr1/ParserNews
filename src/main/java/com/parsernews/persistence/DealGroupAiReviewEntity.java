@@ -51,6 +51,9 @@ public class DealGroupAiReviewEntity {
     @Column(length = 10000)
     private String rawJson;
 
+    @Column(length = 32)
+    private String promptVersion;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -60,6 +63,7 @@ public class DealGroupAiReviewEntity {
     public DealGroupAiReviewEntity(
             String groupKey,
             String model,
+            String promptVersion,
             AiReviewVerdict verdict,
             AiReviewConfidence confidence,
             Boolean tradablePublicTarget,
@@ -71,6 +75,7 @@ public class DealGroupAiReviewEntity {
     ) {
         this.groupKey = groupKey;
         this.model = model;
+        this.promptVersion = promptVersion;
         this.verdict = verdict;
         this.confidence = confidence;
         this.tradablePublicTarget = tradablePublicTarget;
@@ -123,6 +128,10 @@ public class DealGroupAiReviewEntity {
 
     public String getRawJson() {
         return rawJson;
+    }
+
+    public String getPromptVersion() {
+        return promptVersion;
     }
 
     public Instant getCreatedAt() {

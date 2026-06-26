@@ -21,6 +21,7 @@ public class ReviewPacketService {
     private final DealGroupingService dealGroupingService;
     private final DealGroupAiReviewService dealGroupAiReviewService;
     private final SourceEvaluationPreviewService sourceEvaluationPreviewService;
+    private final SecDiscoveryScanner secDiscoveryScanner;
     private final ScanRunRepository scanRunRepository;
 
     public ReviewPacketService(
@@ -31,6 +32,7 @@ public class ReviewPacketService {
             DealGroupingService dealGroupingService,
             DealGroupAiReviewService dealGroupAiReviewService,
             SourceEvaluationPreviewService sourceEvaluationPreviewService,
+            SecDiscoveryScanner secDiscoveryScanner,
             ScanRunRepository scanRunRepository
     ) {
         this.statusService = statusService;
@@ -40,6 +42,7 @@ public class ReviewPacketService {
         this.dealGroupingService = dealGroupingService;
         this.dealGroupAiReviewService = dealGroupAiReviewService;
         this.sourceEvaluationPreviewService = sourceEvaluationPreviewService;
+        this.secDiscoveryScanner = secDiscoveryScanner;
         this.scanRunRepository = scanRunRepository;
     }
 
@@ -53,6 +56,7 @@ public class ReviewPacketService {
         DealGroupController.DealGroupStatsResponse dealGroupStats = dealGroupStats();
         DealGroupAiReviewService.AiReviewSummaryResponse aiSummary = dealGroupAiReviewService.summary();
         SourceQualityAudit sourceQualityAudit = sourceQualityAudit();
+        SecDiscoveryScanner.SecDiscoveryStatus secDiscoveryStatus = secDiscoveryScanner.status();
         DealGroupAiReviewService.BatchCandidatePreviewResponse batchPreview = dealGroupAiReviewService.previewBatchCandidates(
                 new DealGroupAiReviewService.BatchCandidatePreviewRequest(
                         25,
@@ -65,11 +69,12 @@ public class ReviewPacketService {
                 .limit(10)
                 .map(ScanRunSummary::from)
                 .toList();
-        List<String> knownWarnings = knownWarnings(appStatus, schedulerStatus, openAiStatus, batchPreview);
+        List<String> knownWarnings = knownWarnings(appStatus, schedulerStatus, openAiStatus, batchPreview, secDiscoveryStatus);
         return new ReviewPacket(
                 Instant.now(),
                 appStatus,
                 schedulerStatus,
+                secDiscoveryStatus,
                 safeOpenAiStatus(openAiStatus),
                 safeTelegramStatus(telegramStatus, appStatus.config().alertDispatchEnabled()),
                 dealGroupStats,
@@ -199,7 +204,8 @@ public class ReviewPacketService {
             StatusService.StatusResponse appStatus,
             SchedulerStatusService.SchedulerStatusResponse schedulerStatus,
             OpenAiRuntimeSettingsService.EffectiveOpenAiSettings openAiStatus,
-            DealGroupAiReviewService.BatchCandidatePreviewResponse batchPreview
+            DealGroupAiReviewService.BatchCandidatePreviewResponse batchPreview,
+            SecDiscoveryScanner.SecDiscoveryStatus secDiscoveryStatus
     ) {
         java.util.ArrayList<String> warnings = new java.util.ArrayList<>();
         if (appStatus.latestScan() != null && appStatus.latestScan().finishedAt() == null) {
@@ -217,6 +223,9 @@ public class ReviewPacketService {
         if (!schedulerStatus.fullRefreshSchedulerEnabled()) {
             warnings.add("Scheduled Full Refresh is disabled; Full Refresh runs only on manual click.");
         }
+        if (!secDiscoveryStatus.enabled()) {
+            warnings.add("SEC Discovery is disabled; broad SEC discovery runs only when explicitly enabled.");
+        }
         return List.copyOf(warnings);
     }
 
@@ -227,6 +236,7 @@ public class ReviewPacketService {
         builder.append("\n");
         appendStatus(builder, packet);
         appendScheduler(builder, packet.schedulerStatus());
+        appendSecDiscovery(builder, packet.secDiscoveryStatus());
         appendOpenAi(builder, packet.openAiStatus());
         appendTelegram(builder, packet.telegramStatus());
         appendDealGroupStats(builder, packet.dealGroupStats());
@@ -321,6 +331,28 @@ public class ReviewPacketService {
         builder.append("\n");
     }
 
+    private void appendSecDiscovery(StringBuilder builder, SecDiscoveryScanner.SecDiscoveryStatus status) {
+        builder.append("## SEC Discovery Status\n\n");
+        line(builder, "enabled", status.enabled());
+        line(builder, "schedulerEnabled", status.schedulerEnabled());
+        line(builder, "forms", String.join(", ", status.forms()));
+        line(builder, "maxFilingsPerRun", status.maxFilingsPerRun());
+        line(builder, "fetchPrimaryDocument", status.fetchPrimaryDocument());
+        line(builder, "lastRunAt", status.lastRunAt());
+        line(builder, "lastRunStatus", status.lastRunStatus());
+        if (status.lastRunSummary() != null) {
+            builder.append("\n### Last SEC Discovery Run\n\n");
+            line(builder, "scannedFilings", status.lastRunSummary().scannedFilings());
+            line(builder, "newFilings", status.lastRunSummary().newFilings());
+            line(builder, "duplicateFilings", status.lastRunSummary().duplicateFilings());
+            line(builder, "createdOrUpdatedDealGroups", status.lastRunSummary().createdOrUpdatedDealGroups());
+            line(builder, "skippedFilings", status.lastRunSummary().skippedFilings());
+            line(builder, "errors", status.lastRunSummary().errors().size());
+        }
+        line(builder, "warning", status.warning());
+        builder.append("\n");
+    }
+
     private void appendOpenAi(StringBuilder builder, SafeOpenAiStatus status) {
         builder.append("## OpenAI Status\n\n");
         line(builder, "enabled", status.enabled());
@@ -391,6 +423,8 @@ public class ReviewPacketService {
                     .append(review.verdict())
                     .append(" / ")
                     .append(review.confidence())
+                    .append(" | prompt=")
+                    .append(clean(review.promptVersion()))
                     .append(" | ")
                     .append(clean(review.reason()))
                     .append("\n"));
@@ -526,6 +560,7 @@ public class ReviewPacketService {
             Instant generatedAt,
             StatusService.StatusResponse appStatus,
             SchedulerStatusService.SchedulerStatusResponse schedulerStatus,
+            SecDiscoveryScanner.SecDiscoveryStatus secDiscoveryStatus,
             SafeOpenAiStatus openAiStatus,
             TelegramStatus telegramStatus,
             DealGroupController.DealGroupStatsResponse dealGroupStats,
