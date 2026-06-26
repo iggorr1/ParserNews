@@ -34,6 +34,8 @@ public class DealGroupReviewEntity {
 
     private Instant manualReviewedAt;
 
+    private Instant tgDispatchedAt;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -69,6 +71,19 @@ public class DealGroupReviewEntity {
 
     public Instant getManualReviewedAt() {
         return manualReviewedAt;
+    }
+
+    public Instant getTgDispatchedAt() {
+        return tgDispatchedAt;
+    }
+
+    public void markTgDispatched() {
+        this.tgDispatchedAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    public boolean isTgDispatched() {
+        return tgDispatchedAt != null;
     }
 
     public Instant getCreatedAt() {

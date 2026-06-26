@@ -23,6 +23,12 @@ public class DealGroupReviewService {
     }
 
     @Transactional
+    public DealGroupReviewEntity getOrCreate(String groupKey) {
+        return repository.findByGroupKey(groupKey)
+                .orElseGet(() -> repository.save(new DealGroupReviewEntity(groupKey)));
+    }
+
+    @Transactional
     public DealGroupReviewEntity update(String groupKey, ManualReviewStatus status, ManualReviewReason reason, String note) {
         DealGroupReviewEntity review = repository.findByGroupKey(groupKey)
                 .orElseGet(() -> new DealGroupReviewEntity(groupKey));
