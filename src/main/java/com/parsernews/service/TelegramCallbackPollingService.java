@@ -6,22 +6,26 @@ import com.parsernews.persistence.ManualReviewStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 @Service
 public class TelegramCallbackPollingService {
     private static final String TELEGRAM_BASE = "https://api.telegram.org";
-    private static final int POLL_TIMEOUT_SECONDS = 20;
+    private static final int POLL_TIMEOUT_SECONDS = 10;
     // callback_data format: "qr|STATUS|groupKey"
     private static final String CB_PREFIX = "qr|";
 
     private final AtomicLong offset = new AtomicLong(0);
+    private final AtomicBoolean webhookDeleted = new AtomicBoolean(false);
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final TelegramRuntimeSettingsService settingsService;
@@ -43,10 +47,21 @@ public class TelegramCallbackPollingService {
         this.dealGroupingService = dealGroupingService;
     }
 
+    @PostConstruct
+    public void deleteWebhookOnStartup() {
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
+        if (!settings.enabled() || isBlank(settings.botToken())) return;
+        tryDeleteWebhook(settings.botToken());
+    }
+
     @Scheduled(fixedDelay = 200)
     public void poll() {
         TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
         if (!settings.enabled() || isBlank(settings.botToken())) return;
+
+        if (webhookDeleted.compareAndSet(false, true)) {
+            tryDeleteWebhook(settings.botToken());
+        }
 
         try {
             String url = TELEGRAM_BASE + "/bot" + settings.botToken()
@@ -114,6 +129,17 @@ public class TelegramCallbackPollingService {
         dealGroupReviewService.update(groupKey, status, null, null);
         String text = status == ManualReviewStatus.USEFUL ? "✓ Marked as Useful" : "✗ Marked as Ignored";
         answerCallback(callbackId, token, text);
+    }
+
+    private void tryDeleteWebhook(String token) {
+        try {
+            String url = TELEGRAM_BASE + "/bot" + token + "/deleteWebhook?drop_pending_updates=false";
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(5))
+                    .GET().build();
+            httpClient.send(request, HttpResponse.BodyHandlers.discarding());
+        } catch (Exception ignored) {
+        }
     }
 
     private void answerCallback(String callbackId, String token, String text) {
