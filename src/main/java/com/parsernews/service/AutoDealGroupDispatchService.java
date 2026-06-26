@@ -29,6 +29,7 @@ public class AutoDealGroupDispatchService {
     private final DealGroupReviewService dealGroupReviewService;
     private final DealGroupReviewRepository reviewRepository;
     private final AlertNotifier alertNotifier;
+    private final StockPriceService stockPriceService;
     private final OpenAiRuntimeSettingsService openAiSettings;
     private final TelegramRuntimeSettingsService telegramSettings;
 
@@ -38,6 +39,7 @@ public class AutoDealGroupDispatchService {
             DealGroupReviewService dealGroupReviewService,
             DealGroupReviewRepository reviewRepository,
             AlertNotifier alertNotifier,
+            StockPriceService stockPriceService,
             OpenAiRuntimeSettingsService openAiSettings,
             TelegramRuntimeSettingsService telegramSettings
     ) {
@@ -46,6 +48,7 @@ public class AutoDealGroupDispatchService {
         this.dealGroupReviewService = dealGroupReviewService;
         this.reviewRepository = reviewRepository;
         this.alertNotifier = alertNotifier;
+        this.stockPriceService = stockPriceService;
         this.openAiSettings = openAiSettings;
         this.telegramSettings = telegramSettings;
     }
@@ -124,7 +127,10 @@ public class AutoDealGroupDispatchService {
     }
 
     private void dispatchToTelegram(DealGroupingService.DealGroupResponse group) {
-        String message = dealGroupingService.formatTelegramPreview(group);
+        DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
+        String message = dealGroupingService.formatTelegramPreview(group)
+                + formatAiSection(aiReview)
+                + formatPriceSection(group.targetTicker());
         List<AlertNotifier.InlineButton> buttons = List.of(
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
                 AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
@@ -134,5 +140,26 @@ public class AutoDealGroupDispatchService {
             DealGroupReviewEntity review = dealGroupReviewService.getOrCreate(group.groupKey());
             review.markTgDispatched();
         }
+    }
+
+    private String formatAiSection(DealGroupAiReviewService.AiReviewResponse ai) {
+        if (ai == null || ai.verdict() == null) return "";
+        StringBuilder b = new StringBuilder("\n\n🤖 <b>AI:</b> ").append(ai.verdict());
+        if (ai.confidence() != null) b.append(" · ").append(ai.confidence()).append(" confidence");
+        if (ai.reason() != null && !ai.reason().isBlank()) {
+            String reason = ai.reason().length() > 300 ? ai.reason().substring(0, 297) + "…" : ai.reason();
+            b.append('\n').append("<i>").append(reason).append("</i>");
+        }
+        if (ai.riskFlags() != null && !ai.riskFlags().isEmpty()) {
+            b.append('\n').append("⚠️ <b>Risks:</b> ").append(String.join(", ", ai.riskFlags()));
+        }
+        return b.toString();
+    }
+
+    private String formatPriceSection(String ticker) {
+        if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) return "";
+        return stockPriceService.currentPrice(ticker)
+                .map(p -> "\n\n💰 <b>Price:</b> " + p.formatted() + " | " + p.shortName())
+                .orElse("");
     }
 }

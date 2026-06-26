@@ -261,12 +261,11 @@ class DealGroupingServiceTest {
         DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
         String preview = service.formatTelegramPreview(group);
 
-        assertThat(preview).contains("DEAL GROUP SIGNAL");
+        assertThat(preview).contains("M&amp;A Signal");
         assertThat(preview).contains("AbbVie");
         assertThat(preview).contains("Apogee");
-        assertThat(preview).contains("RSS_NEWS");
-        assertThat(preview).contains("SEC_FILING");
-        assertThat(preview).contains("Related evidence: 2");
+        assertThat(preview).contains("$APGE");
+        assertThat(preview).contains("Triggered by");
     }
 
     private DetectedEventEntity rssEvent(

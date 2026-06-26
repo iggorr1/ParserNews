@@ -89,50 +89,86 @@ public class DealGroupingService {
     }
 
     public String formatTelegramPreview(DealGroupResponse group) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("DEAL GROUP SIGNAL").append('\n');
-        builder.append("Title: ").append(firstNonBlank(group.title(), "Unknown")).append('\n');
-        builder.append("Buyer: ").append(firstNonBlank(group.buyerCompany(), "Unknown"));
-        if (!isBlank(group.buyerTicker()) || !isBlank(group.buyerCik())) {
-            builder.append(" (").append(firstNonBlank(group.buyerTicker(), "-")).append(" / CIK ")
-                    .append(firstNonBlank(group.buyerCik(), "-")).append(")");
+        StringBuilder b = new StringBuilder();
+
+        // ── Header ──────────────────────────────────────────────────────────
+        String ticker = firstNonBlank(group.targetTicker(), group.buyerTicker(), null);
+        String tickerLabel = (ticker != null && !"UNKNOWN".equalsIgnoreCase(ticker)) ? " <b>$" + ticker + "</b>" : "";
+        b.append("📊 <b>M&amp;A Signal</b>").append(tickerLabel).append('\n');
+
+        // ── Companies ───────────────────────────────────────────────────────
+        String targetName = firstNonBlank(group.targetCompany(), null);
+        String buyerName  = firstNonBlank(group.buyerCompany(), null);
+        if (targetName != null) {
+            b.append("<b>Target:</b> ").append(escapeHtml(targetName));
+            if (!isBlank(group.targetTicker()) && !"UNKNOWN".equalsIgnoreCase(group.targetTicker())) {
+                b.append(" ($").append(group.targetTicker()).append(")");
+            }
+            if (!isBlank(group.targetCik())) {
+                b.append("  <i>CIK ").append(group.targetCik()).append("</i>");
+            }
+            b.append('\n');
         }
-        builder.append('\n');
-        builder.append("Target: ").append(firstNonBlank(group.targetCompany(), "Unknown"));
-        if (!isBlank(group.targetTicker()) || !isBlank(group.targetCik())) {
-            builder.append(" (").append(firstNonBlank(group.targetTicker(), "-")).append(" / CIK ")
-                    .append(firstNonBlank(group.targetCik(), "-")).append(")");
+        if (buyerName != null) {
+            b.append("<b>Buyer:</b> ").append(escapeHtml(buyerName));
+            if (!isBlank(group.buyerTicker()) && !"UNKNOWN".equalsIgnoreCase(group.buyerTicker())) {
+                b.append(" ($").append(group.buyerTicker()).append(")");
+            }
+            b.append('\n');
         }
-        builder.append('\n');
-        builder.append("Priority: ").append(group.priority()).append('\n');
-        builder.append("Relevance: ").append(firstNonBlank(stringValue(group.dealRelevance()), "UNKNOWN"))
-                .append(" / Tradability: ").append(firstNonBlank(stringValue(group.tradability()), "UNKNOWN")).append('\n');
-        builder.append("Stage: ").append(firstNonBlank(stringValue(group.dealStage()), "UNKNOWN"))
-                .append(" / Timing: ").append(firstNonBlank(stringValue(group.dealTiming()), "UNKNOWN")).append('\n');
-        builder.append("Review: ").append(group.reviewStatus());
-        if (group.reviewReason() != null) {
-            builder.append(" / ").append(group.reviewReason());
+        if (targetName == null && buyerName == null) {
+            b.append("<i>Parties unknown — see filing below</i>\n");
         }
-        if (!isBlank(group.reviewNote())) {
-            builder.append(" / ").append(group.reviewNote());
+
+        // ── Deal classification ──────────────────────────────────────────────
+        b.append('\n');
+        String relevance  = stringValue(group.dealRelevance());
+        String tradability = stringValue(group.tradability());
+        String stage      = stringValue(group.dealStage());
+        String timing     = stringValue(group.dealTiming());
+        if (relevance != null)  b.append("<b>Deal type:</b> ").append(relevance).append('\n');
+        b.append("<b>Priority:</b> ").append(group.priority())
+                .append("  ·  Tradability: ").append(firstNonBlank(tradability, "?"))
+                .append("  ·  Stage: ").append(firstNonBlank(stage, "?"));
+        if (timing != null) b.append(" (").append(timing.toLowerCase(Locale.ROOT)).append(")");
+        b.append('\n');
+
+        // ── Top trigger signal ───────────────────────────────────────────────
+        b.append('\n');
+        group.relatedSignals().stream().limit(1).forEach(signal -> {
+            String src = signal.sourceType() != null ? signal.sourceType().name() : "UNKNOWN";
+            String sig = firstNonBlank(signal.signalType(), null);
+            b.append("📡 <b>Triggered by:</b> ").append(src.replace("_", " "));
+            if (sig != null) b.append(" · ").append(sig.replace("_", " "));
+            b.append('\n');
+            String title = firstNonBlank(signal.title(), null);
+            if (title != null) {
+                String truncated = title.length() > 120 ? title.substring(0, 117) + "…" : title;
+                b.append("<i>").append(escapeHtml(truncated)).append("</i>\n");
+            }
+            String url = firstNonBlank(signal.url(), null);
+            if (url != null) b.append("🔗 ").append(url).append('\n');
+        });
+
+        // extra signals summary
+        int extra = group.relatedSignals().size() - 1;
+        if (extra > 0) {
+            b.append("<i>+").append(extra).append(" more signal").append(extra > 1 ? "s" : "").append("</i>\n");
         }
-        builder.append('\n');
-        builder.append("Related evidence: ").append(group.relatedSignals().size()).append('\n');
-        group.relatedSignals().stream().limit(5).forEach(signal -> builder
-                .append("- ")
-                .append(signal.sourceType())
-                .append(" ")
-                .append(firstNonBlank(signal.signalType(), "UNKNOWN"))
-                .append(": ")
-                .append(firstNonBlank(signal.title(), "Untitled"))
-                .append('\n')
-                .append("  ")
-                .append(firstNonBlank(signal.url(), "No URL"))
-                .append('\n'));
-        if (!group.warnings().isEmpty()) {
-            builder.append("Warnings: ").append(String.join("; ", group.warnings())).append('\n');
+
+        return b.toString().trim();
+    }
+
+    private String escapeHtml(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
+
+    private String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v;
         }
-        return builder.toString().trim();
+        return null;
     }
 
     private DealGroupResponse toResponse(GroupBuilder builder) {

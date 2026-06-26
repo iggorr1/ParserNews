@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Confirmed via Telegram — ParserNews</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #070b10;
+            --surface: #0d131b;
+            --surface-2: #121a24;
+            --border: #243244;
+            --text: #edf4f8;
+            --muted: #91a0b4;
+            --accent: #38d6c9;
+            --accent-soft: rgba(56, 214, 201, 0.12);
+            --success: #38d18a;
+            --warning: #d8a73e;
+            --danger: #f07272;
+            --badge-bg: #172230;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: radial-gradient(circle at top left, rgba(56,214,201,0.08), transparent 30rem),
+                        linear-gradient(180deg, #0a1018 0%, var(--bg) 20rem);
+            color: var(--text);
+            font-family: Inter, "Segoe UI", Arial, sans-serif;
+            font-size: 14px;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+        header {
+            background: rgba(8,13,20,0.88);
+            border-bottom: 1px solid rgba(36,50,68,0.72);
+            padding: 18px 28px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            backdrop-filter: blur(18px);
+        }
+        header h1 { font-size: 20px; }
+        header .subtitle { color: var(--muted); font-size: 13px; }
+        header a { color: var(--accent); text-decoration: none; font-size: 13px; margin-left: auto; }
+        header a:hover { text-decoration: underline; }
+        main { padding: 24px 28px 48px; max-width: 1400px; }
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .topbar h2 { font-size: 18px; }
+        .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        button {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--text);
+            padding: 7px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.15s;
+        }
+        button:hover { background: rgba(56,214,201,0.12); border-color: var(--accent); }
+        button.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+        .badge {
+            display: inline-block;
+            background: var(--badge-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2px 10px;
+            font-size: 12px;
+            color: var(--muted);
+        }
+        .breakdown { font-size: 13px; color: var(--muted); }
+        .breakdown .ok  { color: var(--success); }
+        .breakdown .warn { color: var(--warning); }
+        .breakdown .bad { color: var(--danger); }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            gap: 18px;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: border-color 0.2s;
+        }
+        .card:hover { border-color: rgba(56,214,201,0.35); }
+        .card.ignored { opacity: 0.5; }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .card-title { font-weight: 700; font-size: 15px; }
+        .card-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
+        .card-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
+        .status-badge {
+            border-radius: 12px;
+            padding: 3px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+        .status-badge.useful  { background: rgba(56,209,138,0.15); color: var(--success); border: 1px solid rgba(56,209,138,0.3); }
+        .status-badge.pending { background: rgba(216,167,62,0.15);  color: var(--warning); border: 1px solid rgba(216,167,62,0.3); }
+        .status-badge.ignored { background: rgba(240,114,114,0.15); color: var(--danger);  border: 1px solid rgba(240,114,114,0.3); }
+        .price-badge { font-size: 13px; font-weight: 600; white-space: nowrap; }
+        .chart-wrap { position: relative; height: 130px; }
+        .ai-section {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            padding: 10px 12px;
+            font-size: 13px;
+        }
+        .ai-verdict { font-weight: 700; margin-bottom: 4px; }
+        .ai-reason { color: var(--muted); font-size: 12px; line-height: 1.45; }
+        .ai-risks { color: var(--warning); font-size: 12px; margin-top: 4px; }
+        .trigger-badge {
+            display: inline-block;
+            background: rgba(56,214,201,0.08);
+            border: 1px solid rgba(56,214,201,0.2);
+            border-radius: 5px;
+            padding: 2px 8px;
+            font-size: 11px;
+            color: var(--accent);
+            margin-bottom: 4px;
+        }
+        .evidence-title { font-size: 12px; color: var(--muted); }
+        .evidence-link { font-size: 11px; color: var(--accent); word-break: break-all; }
+        .empty { color: var(--muted); padding: 40px 0; text-align: center; font-size: 15px; }
+        .loading { color: var(--muted); padding: 40px 0; text-align: center; }
+        .verdict-GOOD_SIGNAL    { color: var(--success); }
+        .verdict-NEEDS_HUMAN_REVIEW { color: var(--warning); }
+        .verdict-NOT_TRADABLE   { color: var(--muted); }
+        .verdict-FALSE_POSITIVE { color: var(--danger); }
+    </style>
+</head>
+<body>
+<header>
+    <div>
+        <h1>📋 Confirmed via Telegram</h1>
+        <div class="subtitle">Groups dispatched to Telegram bot with AI analysis and price charts</div>
+    </div>
+    <a href="/">← Dashboard</a>
+</header>
+<main>
+    <div class="topbar">
+        <div>
+            <h2 id="pageTitle">Telegram Pipeline</h2>
+            <div class="breakdown" id="breakdown" style="margin-top:5px;"></div>
+        </div>
+        <div class="controls">
+            <button class="active" id="filterAll">All</button>
+            <button id="filterUseful">✓ Confirmed</button>
+            <button id="filterPending">⏳ Pending</button>
+            <button id="filterIgnored">✗ Ignored</button>
+            <button id="refreshBtn">⟳ Refresh</button>
+        </div>
+    </div>
+    <div class="grid" id="grid">
+        <div class="loading">Loading pipeline...</div>
+    </div>
+</main>
+
+<script>
+'use strict';
+
+let allGroups = [];
+let currentFilter = 'ALL';
+const chartInstances = {};
+
+// ── Filter buttons ────────────────────────────────────────────────────────────
+document.getElementById('filterAll').addEventListener('click', () => setFilter('ALL'));
+document.getElementById('filterUseful').addEventListener('click', () => setFilter('USEFUL'));
+document.getElementById('filterPending').addEventListener('click', () => setFilter('PENDING'));
+document.getElementById('filterIgnored').addEventListener('click', () => setFilter('IGNORED'));
+document.getElementById('refreshBtn').addEventListener('click', loadData);
+
+function setFilter(f) {
+    currentFilter = f;
+    ['filterAll','filterUseful','filterPending','filterIgnored'].forEach(id => {
+        document.getElementById(id).classList.remove('active');
+    });
+    document.getElementById(f === 'ALL' ? 'filterAll' : f === 'USEFUL' ? 'filterUseful' : f === 'PENDING' ? 'filterPending' : 'filterIgnored').classList.add('active');
+    renderGrid();
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+async function loadData() {
+    document.getElementById('grid').innerHTML = '<div class="loading">Loading...</div>';
+    try {
+        const data = await fetchJson('/api/deal-groups/tg-dispatched?limit=100');
+        allGroups = data || [];
+        const useful   = allGroups.filter(g => g.reviewStatus === 'USEFUL').length;
+        const pending  = allGroups.filter(g => g.reviewStatus === 'PENDING').length;
+        const ignored  = allGroups.filter(g => g.reviewStatus === 'IGNORED').length;
+        document.getElementById('breakdown').innerHTML =
+            `<span class="ok">✓ ${useful} confirmed</span>  ·  ` +
+            `<span class="warn">⏳ ${pending} pending</span>  ·  ` +
+            `<span class="bad">✗ ${ignored} ignored</span>  ·  ` +
+            `<span>${allGroups.length} total sent to Telegram</span>`;
+        renderGrid();
+    } catch (e) {
+        document.getElementById('grid').innerHTML = `<div class="empty">Failed to load: ${esc(e.message)}</div>`;
+    }
+}
+
+async function fetchJson(url) {
+    const r = await fetch(url, { credentials: 'same-origin' });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return r.json();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderGrid() {
+    const grid = document.getElementById('grid');
+    Object.values(chartInstances).forEach(c => c.destroy());
+    Object.keys(chartInstances).forEach(k => delete chartInstances[k]);
+
+    const filtered = currentFilter === 'ALL' ? allGroups
+                   : allGroups.filter(g => g.reviewStatus === currentFilter);
+
+    if (filtered.length === 0) {
+        grid.innerHTML = `<div class="empty">${currentFilter === 'ALL'
+            ? 'No groups dispatched to Telegram yet.'
+            : `No ${currentFilter.toLowerCase()} groups.`}</div>`;
+        return;
+    }
+
+    grid.innerHTML = '';
+    filtered.forEach(group => {
+        const card = buildCard(group);
+        grid.appendChild(card);
+    });
+
+    // Load prices + AI data asynchronously after cards are rendered
+    filtered.forEach(group => {
+        const ticker = validTicker(group.targetTicker);
+        if (ticker) loadPriceAndChart(ticker, group.sortInstant, group.groupKey);
+        loadAiReview(group.groupKey);
+    });
+}
+
+function buildCard(group) {
+    const card = document.createElement('div');
+    const statusClass = (group.reviewStatus || 'PENDING').toLowerCase();
+    card.className = `card ${statusClass === 'ignored' ? 'ignored' : ''}`;
+    card.id = `card-${group.groupKey}`;
+
+    const ticker = validTicker(group.targetTicker);
+    const newsDate = group.sortInstant ? group.sortInstant.substring(0, 10) : null;
+    const statusLabel = { USEFUL: '✓ Confirmed', PENDING: '⏳ Pending', IGNORED: '✗ Ignored' }[group.reviewStatus] || '?';
+
+    // Primary signal for trigger info
+    const sig = (group.relatedSignals || [])[0];
+    const triggerText = sig ? formatTrigger(sig) : null;
+
+    card.innerHTML = `
+        <div class="card-header">
+            <div style="min-width:0;">
+                <div class="card-title">${esc(group.targetCompany || group.title || ticker || 'Unknown')}</div>
+                <div class="card-meta">
+                    ${ticker ? `<strong>$${esc(ticker)}</strong> · ` : ''}
+                    ${esc(group.dealRelevance || '')}
+                    ${group.buyerCompany ? ` · Buyer: ${esc(group.buyerCompany)}` : ''}
+                    ${newsDate ? ` · ${newsDate}` : ''}
+                </div>
+            </div>
+            <div class="card-badges">
+                <span class="status-badge ${statusClass}">${statusLabel}</span>
+                ${ticker ? `<span class="price-badge" id="price-${esc(group.groupKey)}">loading…</span>` : ''}
+            </div>
+        </div>
+        ${triggerText ? `<div>
+            <div class="trigger-badge">${esc(triggerText.label)}</div>
+            <div class="evidence-title">${esc(truncate(triggerText.title, 100))}</div>
+            ${triggerText.url ? `<div class="evidence-link"><a href="${esc(triggerText.url)}" target="_blank" rel="noopener">${esc(truncate(triggerText.url, 60))}</a></div>` : ''}
+        </div>` : ''}
+        ${ticker ? `<div class="chart-wrap"><canvas id="chart-${esc(group.groupKey)}"></canvas></div>` : ''}
+        <div id="ai-${esc(group.groupKey)}" class="ai-section" style="display:none;"></div>`;
+
+    return card;
+}
+
+function formatTrigger(sig) {
+    const src = sig.sourceType || '';
+    const type = sig.signalType || '';
+    const label = [src.replace(/_/g, ' '), type.replace(/_/g, ' ')].filter(Boolean).join(' · ');
+    return { label, title: sig.title || '', url: sig.url || '' };
+}
+
+// ── Price + Chart ─────────────────────────────────────────────────────────────
+async function loadPriceAndChart(ticker, sortInstant, groupKey) {
+    const newsDate = sortInstant ? sortInstant.substring(0, 10) : null;
+    const [priceResult, histResult] = await Promise.allSettled([
+        fetchJson(`/api/price/${encodeURIComponent(ticker)}`),
+        fetchJson(`/api/price/${encodeURIComponent(ticker)}/history?range=6mo`)
+    ]);
+
+    const priceBadge = document.getElementById(`price-${groupKey}`);
+    if (priceResult.status === 'fulfilled' && priceResult.value) {
+        const p = priceResult.value;
+        const sign = p.changePct >= 0 ? '+' : '';
+        const color = p.changePct >= 0 ? 'var(--success)' : 'var(--danger)';
+        if (priceBadge) {
+            priceBadge.textContent = `$${p.price.toFixed(2)} (${sign}${p.changePct.toFixed(1)}%)`;
+            priceBadge.style.color = color;
+            priceBadge.title = p.shortName || ticker;
+        }
+    } else {
+        if (priceBadge) priceBadge.textContent = 'N/A';
+    }
+
+    const canvas = document.getElementById(`chart-${groupKey}`);
+    if (!canvas) return;
+    if (histResult.status === 'fulfilled' && histResult.value && (histResult.value.points || []).length > 0) {
+        const pts = histResult.value.points;
+        const labels = pts.map(p => p.date);
+        const closes = pts.map(p => p.close);
+        const newsIdx = newsDate ? labels.findIndex(d => d >= newsDate) : -1;
+
+        const id = `chart-${groupKey}`;
+        if (chartInstances[id]) chartInstances[id].destroy();
+        chartInstances[id] = new Chart(canvas.getContext('2d'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    data: closes,
+                    borderColor: 'var(--accent)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    fill: true,
+                    backgroundColor: 'rgba(56,214,201,0.07)',
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
+                },
+                scales: {
+                    x: {
+                        ticks: { maxTicksLimit: 6, color: 'var(--muted)', font: { size: 10 } },
+                        grid: { color: 'rgba(36,50,68,0.5)' }
+                    },
+                    y: {
+                        ticks: { color: 'var(--muted)', font: { size: 10 }, callback: v => `$${v.toFixed(0)}` },
+                        grid: { color: 'rgba(36,50,68,0.5)' }
+                    }
+                }
+            }
+        });
+
+        // Draw news line via afterDraw plugin
+        if (newsIdx >= 0) {
+            const chart = chartInstances[id];
+            const originalAfterDraw = chart.options.plugins;
+            Chart.register({
+                id: `news-line-${groupKey}`,
+                afterDraw(c) {
+                    if (c !== chart) return;
+                    const { ctx, chartArea, scales } = c;
+                    const x = scales.x.getPixelForValue(newsIdx);
+                    ctx.save();
+                    ctx.strokeStyle = 'rgba(216,167,62,0.8)';
+                    ctx.lineWidth = 1.5;
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.moveTo(x, chartArea.top);
+                    ctx.lineTo(x, chartArea.bottom);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                    ctx.fillStyle = 'var(--warning)';
+                    ctx.font = '9px Inter, sans-serif';
+                    ctx.fillText('news', x + 3, chartArea.top + 10);
+                    ctx.restore();
+                }
+            });
+            chart.update();
+        }
+    } else {
+        canvas.parentElement.innerHTML = '<div style="color:var(--muted);font-size:11px;padding-top:6px;">Chart unavailable</div>';
+    }
+}
+
+// ── AI review ─────────────────────────────────────────────────────────────────
+async function loadAiReview(groupKey) {
+    const el = document.getElementById(`ai-${groupKey}`);
+    if (!el) return;
+    try {
+        const ai = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/ai-review/latest`);
+        if (!ai || !ai.verdict) return;
+        const verdictClass = `verdict-${ai.verdict}`;
+        el.style.display = '';
+        el.innerHTML = `
+            <div class="ai-verdict ${verdictClass}">🤖 ${esc(ai.verdict)}${ai.confidence ? ` · ${esc(ai.confidence)} confidence` : ''}</div>
+            ${ai.reason ? `<div class="ai-reason">${esc(truncate(ai.reason, 250))}</div>` : ''}
+            ${ai.riskFlags && ai.riskFlags.length > 0 ? `<div class="ai-risks">⚠️ ${esc(ai.riskFlags.join(', '))}</div>` : ''}`;
+    } catch { /* AI review unavailable */ }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function validTicker(t) {
+    return t && t !== 'UNKNOWN' && t.trim() !== '' ? t : null;
+}
+function truncate(s, n) {
+    if (!s) return '';
+    return s.length > n ? s.substring(0, n - 1) + '…' : s;
+}
+function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+loadData();
+</script>
+</body>
+</html>
