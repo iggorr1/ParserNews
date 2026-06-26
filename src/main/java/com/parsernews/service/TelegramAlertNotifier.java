@@ -4,6 +4,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 @Service
@@ -18,6 +21,11 @@ public class TelegramAlertNotifier implements AlertNotifier {
 
     @Override
     public AlertNotificationResult send(String message) {
+        return sendWithButtons(message, List.of());
+    }
+
+    @Override
+    public AlertNotificationResult sendWithButtons(String message, List<InlineButton> buttons) {
         TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
         if (!settings.enabled()) {
             return AlertNotificationResult.notSent(
@@ -32,13 +40,22 @@ public class TelegramAlertNotifier implements AlertNotifier {
             );
         }
         try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("chat_id", settings.chatId());
+            body.put("text", message);
+            body.put("disable_web_page_preview", true);
+            if (!buttons.isEmpty()) {
+                List<List<Map<String, String>>> keyboard = new ArrayList<>();
+                List<Map<String, String>> row = new ArrayList<>();
+                for (InlineButton button : buttons) {
+                    row.add(Map.of("text", button.text(), "url", button.url()));
+                }
+                keyboard.add(row);
+                body.put("reply_markup", Map.of("inline_keyboard", keyboard));
+            }
             restClient.post()
                     .uri("/bot{token}/sendMessage", settings.botToken())
-                    .body(Map.of(
-                            "chat_id", settings.chatId(),
-                            "text", message,
-                            "disable_web_page_preview", true
-                    ))
+                    .body(body)
                     .retrieve()
                     .toBodilessEntity();
             return AlertNotificationResult.sent("SENT", "Telegram alert message was sent.");

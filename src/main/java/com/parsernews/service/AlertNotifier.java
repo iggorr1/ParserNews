@@ -1,7 +1,16 @@
 package com.parsernews.service;
 
+import java.util.List;
+
 public interface AlertNotifier {
     AlertNotificationResult send(String message);
+
+    default AlertNotificationResult sendWithButtons(String message, List<InlineButton> buttons) {
+        return send(message);
+    }
+
+    record InlineButton(String text, String url) {
+    }
 
     record AlertNotificationResult(
             boolean sent,

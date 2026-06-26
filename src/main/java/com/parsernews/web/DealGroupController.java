@@ -13,6 +13,7 @@ import com.parsernews.service.DealGroupReviewService;
 import com.parsernews.service.DealGroupingService;
 import com.parsernews.service.TelegramRuntimeSettingsService;
 import com.parsernews.web.SignalInboxController.UnifiedPriority;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,19 +41,22 @@ public class DealGroupController {
     private final DealGroupAiReviewService dealGroupAiReviewService;
     private final AlertNotifier alertNotifier;
     private final TelegramRuntimeSettingsService telegramRuntimeSettingsService;
+    private final String appBaseUrl;
 
     public DealGroupController(
             DealGroupingService dealGroupingService,
             DealGroupReviewService dealGroupReviewService,
             DealGroupAiReviewService dealGroupAiReviewService,
             AlertNotifier alertNotifier,
-            TelegramRuntimeSettingsService telegramRuntimeSettingsService
+            TelegramRuntimeSettingsService telegramRuntimeSettingsService,
+            @Value("${app.base-url:}") String appBaseUrl
     ) {
         this.dealGroupingService = dealGroupingService;
         this.dealGroupReviewService = dealGroupReviewService;
         this.dealGroupAiReviewService = dealGroupAiReviewService;
         this.alertNotifier = alertNotifier;
         this.telegramRuntimeSettingsService = telegramRuntimeSettingsService;
+        this.appBaseUrl = appBaseUrl == null ? "" : appBaseUrl.stripTrailing();
     }
 
     @GetMapping("/api/deal-groups")
@@ -191,7 +195,9 @@ public class DealGroupController {
                     null
             );
         }
-        AlertNotifier.AlertNotificationResult notification = alertNotifier.send(dealGroupingService.formatTelegramPreview(group));
+        List<AlertNotifier.InlineButton> buttons = buildQuickReviewButtons(group.groupKey());
+        AlertNotifier.AlertNotificationResult notification = alertNotifier.sendWithButtons(
+                dealGroupingService.formatTelegramPreview(group), buttons);
         return new DealGroupTelegramSendResponse(
                 notification.sent(),
                 readiness.telegramEnabled(),
@@ -199,6 +205,18 @@ public class DealGroupController {
                 notification.reason(),
                 notification.sent() ? null : notification.status()
         );
+    }
+
+    @PostMapping("/api/deal-groups/{groupKey}/quick-review")
+    @Transactional
+    public ResponseEntity<Void> quickReview(
+            @PathVariable String groupKey,
+            @RequestParam ManualReviewStatus status
+    ) {
+        dealGroupingService.group(groupKey)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal group not found"));
+        dealGroupReviewService.update(groupKey, status, null, null);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/api/deal-groups/{groupKey}/ai-review/latest")
@@ -215,6 +233,17 @@ public class DealGroupController {
         dealGroupingService.group(groupKey)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal group not found"));
         return dealGroupAiReviewService.review(groupKey);
+    }
+
+    private List<AlertNotifier.InlineButton> buildQuickReviewButtons(String groupKey) {
+        if (appBaseUrl.isBlank()) {
+            return List.of();
+        }
+        String base = appBaseUrl + "/api/deal-groups/" + groupKey + "/quick-review";
+        return List.of(
+                new AlertNotifier.InlineButton("✓ Useful", base + "?status=USEFUL"),
+                new AlertNotifier.InlineButton("✗ Ignore", base + "?status=IGNORED")
+        );
     }
 
     private TelegramReadiness telegramReadiness() {

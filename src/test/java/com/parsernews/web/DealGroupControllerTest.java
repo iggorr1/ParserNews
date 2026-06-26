@@ -232,7 +232,7 @@ class DealGroupControllerTest {
         ));
         when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
         when(dealGroupingService.formatTelegramPreview(group)).thenReturn("DEAL GROUP SIGNAL");
-        when(alertNotifier.send("DEAL GROUP SIGNAL"))
+        when(alertNotifier.sendWithButtons(org.mockito.ArgumentMatchers.eq("DEAL GROUP SIGNAL"), org.mockito.ArgumentMatchers.anyList()))
                 .thenReturn(AlertNotifier.AlertNotificationResult.sent("SENT", "Telegram message sent."));
 
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/send-telegram")
@@ -243,7 +243,7 @@ class DealGroupControllerTest {
                 .andExpect(jsonPath("$.telegramConfigured").value(true))
                 .andExpect(jsonPath("$.message").value("Telegram message sent."));
 
-        verify(alertNotifier).send("DEAL GROUP SIGNAL");
+        verify(alertNotifier).sendWithButtons(org.mockito.ArgumentMatchers.eq("DEAL GROUP SIGNAL"), org.mockito.ArgumentMatchers.anyList());
     }
 
     @Test
