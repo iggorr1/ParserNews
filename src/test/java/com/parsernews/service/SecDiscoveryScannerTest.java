@@ -148,6 +148,53 @@ class SecDiscoveryScannerTest {
     }
 
     @Test
+    void amendedFormIsAcceptedAndFlaggedWhenBaseFormIsConfigured() throws Exception {
+        // EDGAR returns SC TO-T/A entries when queried with type=SC+TO-T/A (fallbackForm = "SC TO-T/A").
+        // If only "SC TO-T" is in the configured form list, isFormAllowed() should accept the amendment
+        // by matching its base form, and the entity should be flagged as an amendment.
+        SecCurrentFilingsClient client = (form, count) -> atom(
+                entry("SC TO-T/A - AcmeCorp Inc (1111111)", "2026-06-24T12:00:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/1111111/000011111126000001/offer-a.htm")
+        );
+        SecFilingRepository filingRepository = mock(SecFilingRepository.class);
+        SecDiscoveryRunRepository runRepository = runRepository();
+        when(filingRepository.findByAccessionNumber(any())).thenReturn(Optional.empty());
+        when(filingRepository.save(any(SecFilingEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        // Client is queried for "SC TO-T/A" as the fallback form (the configured query form type).
+        // Base form "SC TO-T" is in the list so isFormAllowed passes.
+        SecDiscoveryScanner scanner = scanner(settings(true, "SC TO-T/A", false), client, filingRepository, runRepository);
+
+        SecDiscoveryScanner.SecDiscoverySummary summary = scanner.scan();
+
+        assertThat(summary.newFilings()).isEqualTo(1);
+        verify(filingRepository).save(org.mockito.ArgumentMatchers.argThat(SecFilingEntity::isAmendment));
+    }
+
+    @Test
+    void amendedFormWithOnlyBaseFormConfiguredIsAlsoAccepted() throws Exception {
+        // When the user configures "SC TO-T" but the EDGAR feed returns an "SC TO-T/A" entry,
+        // isFormAllowed() should accept it via base form matching.
+        SecCurrentFilingsClient client = (form, count) -> atom(
+                entry("SC TO-T - TargetCo Inc (2222222)", "2026-06-24T12:00:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/2222222/000022222226000001/offer.htm"),
+                entry("SC TO-T/A - TargetCo Inc (2222222)", "2026-06-24T12:00:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/2222222/000022222226000002/offer-a.htm")
+        );
+        SecFilingRepository filingRepository = mock(SecFilingRepository.class);
+        SecDiscoveryRunRepository runRepository = runRepository();
+        when(filingRepository.findByAccessionNumber(any())).thenReturn(Optional.empty());
+        when(filingRepository.save(any(SecFilingEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SecDiscoveryScanner scanner = scanner(settings(true, "SC TO-T", false), client, filingRepository, runRepository);
+
+        SecDiscoveryScanner.SecDiscoverySummary summary = scanner.scan();
+
+        assertThat(summary.newFilings()).isEqualTo(2);
+        assertThat(summary.skippedFilings()).isZero();
+    }
+
+    @Test
     void statusReportsLatestRunAndConfig() {
         SecDiscoveryRunEntity run = new SecDiscoveryRunEntity(java.time.Instant.parse("2026-06-24T12:00:00Z"));
         run.finish("SUCCESS", 4, 2, 1, 2, 0, 0, null);

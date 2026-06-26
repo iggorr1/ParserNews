@@ -100,7 +100,7 @@ public class SecDiscoveryScanner {
                         if (scanned >= settings.maxFilingsPerRun()) {
                             break;
                         }
-                        if (!settings.formList().contains(normalizeForm(filing.form()))) {
+                        if (!isFormAllowed(filing.form())) {
                             skipped++;
                             continue;
                         }
@@ -117,6 +117,9 @@ public class SecDiscoveryScanner {
                         SecMetadataSignal signal = detectMetadataSignal(filing);
                         SecFilingEntity entity = toEntity(filing, signal);
                         entity.updateSecSignal(signal.type(), signal.priority(), signal.summary(), signal.warning());
+                        if (isAmendment(filing.form())) {
+                            entity.markAsAmendment();
+                        }
                         SecFilingEntity savedEntity = filingRepository.save(entity);
                         saved++;
                         if (settings.fetchPrimaryDocument()) {
@@ -237,24 +240,28 @@ public class SecDiscoveryScanner {
     }
 
     private SecMetadataSignal detectMetadataSignal(DiscoveredSecFiling filing) {
-        String form = normalizeForm(filing.form());
+        String form = baseForm(filing.form());
         String text = normalize(filing.title() + " " + filing.primaryDocument());
+        String amendmentWarning = isAmendment(filing.form())
+                ? "Amendment filing — review for updated deal terms (price, extension, termination)."
+                : null;
         if (form.equals("SC TO-I") || form.equals("SC TO-T") || containsAny(text, "tender offer", "offer to purchase")) {
-            return new SecMetadataSignal(SecSignalType.TENDER_OFFER, SecSignalPriority.HIGH, "Discovery filing indicates tender offer activity.", null);
+            return new SecMetadataSignal(SecSignalType.TENDER_OFFER, SecSignalPriority.HIGH, "Discovery filing indicates tender offer activity.", amendmentWarning);
         }
         if (containsAny(text, "going private", "go private")) {
-            return new SecMetadataSignal(SecSignalType.GOING_PRIVATE, SecSignalPriority.HIGH, "Discovery filing mentions going-private language.", null);
+            return new SecMetadataSignal(SecSignalType.GOING_PRIVATE, SecSignalPriority.HIGH, "Discovery filing mentions going-private language.", amendmentWarning);
         }
         if (containsAny(text, "merger agreement", "agreement and plan of merger", "acquisition agreement")) {
-            return new SecMetadataSignal(SecSignalType.MERGER_AGREEMENT, SecSignalPriority.HIGH, "Discovery filing mentions merger/acquisition agreement language.", null);
+            return new SecMetadataSignal(SecSignalType.MERGER_AGREEMENT, SecSignalPriority.HIGH, "Discovery filing mentions merger/acquisition agreement language.", amendmentWarning);
         }
         if (form.equals("DEFM14A") || form.equals("PREM14A") || form.equals("SC 14D9")) {
-            return new SecMetadataSignal(SecSignalType.DEFINITIVE_PROXY, SecSignalPriority.MEDIUM, "Discovery filing form can contain M&A proxy or response material.", "Review timing and transaction context.");
+            String warning = amendmentWarning != null ? amendmentWarning : "Review timing and transaction context.";
+            return new SecMetadataSignal(SecSignalType.DEFINITIVE_PROXY, SecSignalPriority.MEDIUM, "Discovery filing form can contain M&A proxy or response material.", warning);
         }
         if (form.equals("425") || form.equals("S-4") || containsAny(text, "business combination")) {
-            return new SecMetadataSignal(SecSignalType.BUSINESS_COMBINATION, SecSignalPriority.MEDIUM, "Discovery filing form can indicate merger/business-combination communications.", null);
+            return new SecMetadataSignal(SecSignalType.BUSINESS_COMBINATION, SecSignalPriority.MEDIUM, "Discovery filing form can indicate merger/business-combination communications.", amendmentWarning);
         }
-        return new SecMetadataSignal(SecSignalType.ROUTINE_FILING, SecSignalPriority.LOW, "Discovery filing matched configured SEC form.", "Metadata-only signal; document review may be needed.");
+        return new SecMetadataSignal(SecSignalType.ROUTINE_FILING, SecSignalPriority.LOW, "Discovery filing matched configured SEC form.", amendmentWarning != null ? amendmentWarning : "Metadata-only signal; document review may be needed.");
     }
 
     private String childText(Element element, String tagName) {
@@ -359,6 +366,20 @@ public class SecDiscoveryScanner {
 
     private String normalizeForm(String form) {
         return form == null ? "" : form.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private boolean isAmendment(String form) {
+        return normalizeForm(form).endsWith("/A");
+    }
+
+    private String baseForm(String form) {
+        String normalized = normalizeForm(form);
+        return normalized.endsWith("/A") ? normalized.substring(0, normalized.length() - 2) : normalized;
+    }
+
+    private boolean isFormAllowed(String form) {
+        String normalized = normalizeForm(form);
+        return settings.formList().contains(normalized) || settings.formList().contains(baseForm(form));
     }
 
     private String normalize(String value) {

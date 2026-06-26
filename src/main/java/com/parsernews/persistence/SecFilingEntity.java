@@ -90,6 +90,9 @@ public class SecFilingEntity {
     private Instant manualReviewedAt;
 
     @Column(nullable = false)
+    private boolean amendment = false;
+
+    @Column(nullable = false)
     private Instant processedAt = Instant.now();
 
     protected SecFilingEntity() {
@@ -155,6 +158,14 @@ public class SecFilingEntity {
 
     public String getSignalReason() {
         return signalReason;
+    }
+
+    public boolean isAmendment() {
+        return amendment;
+    }
+
+    public void markAsAmendment() {
+        this.amendment = true;
     }
 
     public Instant getProcessedAt() {
@@ -233,6 +244,18 @@ public class SecFilingEntity {
         this.documentFetchStatus = "FETCHED";
         this.documentSignalStrength = signalStrength;
         this.documentSignalReason = signalReason;
+        this.secSignalType = secSignalType == null ? SecSignalType.UNKNOWN : secSignalType;
+        this.secSignalPriority = secSignalPriority == null ? SecSignalPriority.UNKNOWN : secSignalPriority;
+        this.secSignalSummary = secSignalSummary;
+        this.secSignalWarnings = secSignalWarnings;
+    }
+
+    public void updateSecSignal(
+            SecSignalType secSignalType,
+            SecSignalPriority secSignalPriority,
+            String secSignalSummary,
+            String secSignalWarnings
+    ) {
         this.secSignalType = secSignalType == null ? SecSignalType.UNKNOWN : secSignalType;
         this.secSignalPriority = secSignalPriority == null ? SecSignalPriority.UNKNOWN : secSignalPriority;
         this.secSignalSummary = secSignalSummary;
