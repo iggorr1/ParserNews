@@ -10,6 +10,7 @@ import com.parsernews.persistence.NewsSourceEntity;
 import com.parsernews.persistence.NewsSourceRepository;
 import com.parsernews.persistence.NewsSourceType;
 import com.parsernews.persistence.DetectedEventRepository;
+import com.parsernews.service.SourceTierClassifier;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -44,7 +45,8 @@ class EventPersistenceServiceTest {
                 new FalsePositiveFilter(),
                 new CandidateScoringService(),
                 new AlertEligibilityService(),
-                mock(RssCompanyEnrichmentService.class)
+                mock(RssCompanyEnrichmentService.class),
+                new SourceTierClassifier()
         );
         String longBody = "A".repeat(EventPersistenceService.MAX_ARTICLE_TEXT_LENGTH + 500);
         NewsEvent event = new NewsEvent(

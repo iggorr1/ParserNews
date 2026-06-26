@@ -36,8 +36,9 @@ public class SourceStatsService {
     public List<SourceStatsResponse> sourceStats() {
         Map<SourceKey, MutableSourceStats> stats = new LinkedHashMap<>();
         for (NewsArticleEntity article : articleRepository.findAll()) {
-            stats.computeIfAbsent(SourceKey.from(article), MutableSourceStats::new)
-                    .totalArticles++;
+            MutableSourceStats s = stats.computeIfAbsent(SourceKey.from(article), MutableSourceStats::new);
+            s.totalArticles++;
+            s.tier = article.getSource().getTier();
         }
 
         for (DetectedEventEntity event : eventRepository.findAll()) {
@@ -81,6 +82,7 @@ public class SourceStatsService {
     public record SourceStatsResponse(
             String source,
             String host,
+            com.parsernews.persistence.SourceTier tier,
             int totalArticles,
             int totalCandidates,
             int highCandidates,
@@ -114,6 +116,7 @@ public class SourceStatsService {
 
     private static final class MutableSourceStats {
         private final SourceKey sourceKey;
+        private com.parsernews.persistence.SourceTier tier = com.parsernews.persistence.SourceTier.BROAD;
         private int totalArticles;
         private int totalCandidates;
         private int highCandidates;
@@ -137,6 +140,7 @@ public class SourceStatsService {
             return new SourceStatsResponse(
                     sourceKey.source(),
                     sourceKey.host(),
+                    tier,
                     totalArticles,
                     totalCandidates,
                     highCandidates,

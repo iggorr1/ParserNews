@@ -34,6 +34,7 @@ public class EventPersistenceService {
     private final CandidateScoringService candidateScoringService;
     private final AlertEligibilityService alertEligibilityService;
     private final RssCompanyEnrichmentService rssCompanyEnrichmentService;
+    private final SourceTierClassifier sourceTierClassifier;
 
     public EventPersistenceService(
             NewsSourceRepository sourceRepository,
@@ -42,7 +43,8 @@ public class EventPersistenceService {
             FalsePositiveFilter falsePositiveFilter,
             CandidateScoringService candidateScoringService,
             AlertEligibilityService alertEligibilityService,
-            RssCompanyEnrichmentService rssCompanyEnrichmentService
+            RssCompanyEnrichmentService rssCompanyEnrichmentService,
+            SourceTierClassifier sourceTierClassifier
     ) {
         this.sourceRepository = sourceRepository;
         this.articleRepository = articleRepository;
@@ -51,16 +53,21 @@ public class EventPersistenceService {
         this.candidateScoringService = candidateScoringService;
         this.alertEligibilityService = alertEligibilityService;
         this.rssCompanyEnrichmentService = rssCompanyEnrichmentService;
+        this.sourceTierClassifier = sourceTierClassifier;
     }
 
     @Transactional
     public void save(NewsEvent newsEvent, AnalysisResult analysisResult) {
         NewsSourceEntity source = sourceRepository.findByName(newsEvent.source())
-                .orElseGet(() -> sourceRepository.save(new NewsSourceEntity(
-                        newsEvent.source(),
-                        sourceType(newsEvent),
-                        newsEvent.sourceUrl()
-                )));
+                .orElseGet(() -> {
+                    NewsSourceEntity created = new NewsSourceEntity(
+                            newsEvent.source(),
+                            sourceType(newsEvent),
+                            newsEvent.sourceUrl()
+                    );
+                    created.setTier(sourceTierClassifier.classify(newsEvent.sourceUrl()));
+                    return sourceRepository.save(created);
+                });
 
         String urlHash = urlHash(newsEvent.sourceUrl());
         NewsArticleEntity article = articleRepository.findByUrlHash(urlHash)
@@ -84,9 +91,9 @@ public class EventPersistenceService {
             return;
         }
 
-        CandidateScoringService.CandidateScore candidateScore = candidateScoringService.score(
-                newsEvent.headline(),
-                newsEvent.body()
+        CandidateScoringService.CandidateScore candidateScore = applyTierCap(
+                candidateScoringService.score(newsEvent.headline(), newsEvent.body()),
+                source.getTier()
         );
         DetectedEventEntity event = new DetectedEventEntity(
                 article,
@@ -188,6 +195,23 @@ public class EventPersistenceService {
             return value;
         }
         return value.substring(0, MAX_ARTICLE_TEXT_LENGTH);
+    }
+
+    private CandidateScoringService.CandidateScore applyTierCap(
+            CandidateScoringService.CandidateScore score,
+            com.parsernews.persistence.SourceTier tier
+    ) {
+        if (tier != com.parsernews.persistence.SourceTier.NOISY) {
+            return score;
+        }
+        if (score.strength() != com.parsernews.persistence.CandidateStrength.HIGH) {
+            return score;
+        }
+        return new CandidateScoringService.CandidateScore(
+                60,
+                com.parsernews.persistence.CandidateStrength.MEDIUM,
+                score.reason() + " [capped to MEDIUM: NOISY source tier]"
+        );
     }
 
     public static String urlHash(String value) {

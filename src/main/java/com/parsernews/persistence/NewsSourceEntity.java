@@ -31,6 +31,10 @@ public class NewsSourceEntity {
     @Column(nullable = false)
     private boolean enabled = true;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 16)
+    private SourceTier tier = SourceTier.BROAD;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -61,6 +65,14 @@ public class NewsSourceEntity {
 
     public boolean isEnabled() {
         return enabled;
+    }
+
+    public SourceTier getTier() {
+        return tier == null ? SourceTier.BROAD : tier;
+    }
+
+    public void setTier(SourceTier tier) {
+        this.tier = tier == null ? SourceTier.BROAD : tier;
     }
 
     public Instant getCreatedAt() {
