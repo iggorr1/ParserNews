@@ -86,6 +86,7 @@ public class DealGroupController {
                 countReviewStatus(groups, ManualReviewStatus.IGNORED),
                 countPriority(groups, UnifiedPriority.HIGH),
                 groups.stream().filter(this::isAlertLikeGroup).count(),
+                groups.stream().filter(this::isSecOnlyGroup).count(),
                 groupedEvidenceTotal,
                 averageEvidencePerGroup,
                 reasonBreakdown(groups),
@@ -263,6 +264,12 @@ public class DealGroupController {
                     .forEach(group -> groupsByKey.put(group.groupKey(), group));
         }
         return List.copyOf(groupsByKey.values());
+    }
+
+    private boolean isSecOnlyGroup(DealGroupingService.DealGroupResponse group) {
+        return !group.relatedSignals().isEmpty()
+                && group.relatedSignals().stream()
+                        .allMatch(signal -> signal.sourceType() == SignalInboxController.SourceType.SEC_FILING);
     }
 
     private boolean isAlertLikeGroup(DealGroupingService.DealGroupResponse group) {
@@ -457,6 +464,7 @@ public class DealGroupController {
             long ignoredGroups,
             long highPriorityGroups,
             long alertLikeGroups,
+            long secOnlyGroups,
             long groupedEvidenceTotal,
             double averageEvidencePerGroup,
             Map<String, Long> reviewReasonBreakdown,

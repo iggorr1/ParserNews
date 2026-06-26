@@ -110,6 +110,7 @@ public class ReviewPacketService {
                 groups.stream().filter(group -> group.reviewStatus() == com.parsernews.persistence.ManualReviewStatus.IGNORED).count(),
                 groups.stream().filter(group -> group.priority() == SignalInboxController.UnifiedPriority.HIGH).count(),
                 groups.stream().filter(this::isAlertLikeGroup).count(),
+                groups.stream().filter(this::isSecOnlyGroup).count(),
                 groupedEvidenceTotal,
                 averageEvidencePerGroup,
                 reviewReasonBreakdown(groups),
@@ -155,6 +156,12 @@ public class ReviewPacketService {
                     ))
             );
         }
+    }
+
+    private boolean isSecOnlyGroup(DealGroupingService.DealGroupResponse group) {
+        return !group.relatedSignals().isEmpty()
+                && group.relatedSignals().stream()
+                        .allMatch(signal -> signal.sourceType() == SignalInboxController.SourceType.SEC_FILING);
     }
 
     private boolean isAlertLikeGroup(DealGroupingService.DealGroupResponse group) {
