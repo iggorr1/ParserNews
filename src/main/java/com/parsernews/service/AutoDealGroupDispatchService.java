@@ -1,5 +1,6 @@
 package com.parsernews.service;
 
+import com.parsernews.model.DealRelevance;
 import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.DealGroupReviewEntity;
 import com.parsernews.persistence.DealGroupReviewRepository;
@@ -135,8 +136,9 @@ public class AutoDealGroupDispatchService {
     }
 
     private boolean passesQualityGate(DealGroupingService.DealGroupResponse group) {
-        // Skip if deal type completely unknown AND tradability not HIGH
-        if (group.dealRelevance() == null && group.tradability() != com.parsernews.model.Tradability.HIGH) {
+        // Skip if deal type unknown/null AND tradability not HIGH
+        boolean unknownRelevance = group.dealRelevance() == null || group.dealRelevance() == DealRelevance.UNKNOWN;
+        if (unknownRelevance && group.tradability() != com.parsernews.model.Tradability.HIGH) {
             return false;
         }
         // Skip penny stocks (price < $0.50) when ticker is known
@@ -167,8 +169,7 @@ public class AutoDealGroupDispatchService {
         );
         AlertNotifier.AlertNotificationResult result = alertNotifier.sendWithButtons(message, buttons);
         if (result.sent()) {
-            DealGroupReviewEntity review = dealGroupReviewService.getOrCreate(group.groupKey());
-            review.markTgDispatched();
+            dealGroupReviewService.markTgDispatched(group.groupKey());
         }
     }
 
