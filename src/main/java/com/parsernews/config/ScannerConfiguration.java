@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
         OpenAiAnalysisSettings.class,
         RssSettings.class,
         SafetySettings.class,
+        SecDiscoverySettings.class,
         SecScannerSettings.class,
         TelegramAlertSettings.class
 })

@@ -334,6 +334,30 @@ These example CIKs are Apple (`320193`), Microsoft (`789019`), and Tesla
 recommendations. SEC scanning is watchlist-only; the app does not scan all SEC
 filings.
 
+SEC Discovery is a separate, broader form-based discovery layer. It is disabled
+by default and does not replace the SEC Watchlist Scanner. It can be enabled for
+manual discovery scans against recent EDGAR current filing feeds:
+
+```text
+SEC_DISCOVERY_ENABLED=false
+SEC_DISCOVERY_MAX_FILINGS_PER_RUN=50
+SEC_DISCOVERY_FORMS=8-K,SC TO-T,SC TO-I,SC 14D9,DEFM14A,PREM14A,425,S-4
+SEC_DISCOVERY_FETCH_PRIMARY_DOCUMENT=false
+SEC_DISCOVERY_REQUEST_DELAY_MS=150
+SEC_DISCOVERY_SCHEDULER_ENABLED=false
+SEC_DISCOVERY_SCHEDULER_INITIAL_DELAY_MS=120000
+SEC_DISCOVERY_SCHEDULER_FIXED_DELAY_MS=300000
+```
+
+Useful SEC Discovery endpoints:
+
+- `GET /api/sec/discovery/status`
+- `POST /api/sec/discovery/scan`
+
+Discovery findings are stored in the existing SEC filings table and therefore
+flow into existing Deal Groups. OpenAI and Telegram are not called by SEC
+Discovery.
+
 `stop-docker.bat` / `docker compose down` stops containers but does not delete
 the PostgreSQL volume. `docker compose down -v` deletes database data and should
 be used only for a full reset.
@@ -358,7 +382,9 @@ For day-to-day review, use the dashboard instead of opening raw endpoints:
    - SEC document fetch
    - RSS candidate recompute
 7. SEC scanner disabled or empty watchlist warnings are normal on a fresh
-   install. They mean SEC scanning is safely off until you add CIKs.
+   install. They mean SEC watchlist scanning is safely off until you add CIKs.
+8. SEC Discovery disabled warnings are also normal. Discovery is a separate
+   broader filing-discovery layer and must be explicitly enabled.
 
 RSS auto scan is separate from Full Refresh. In the live profile,
 `scanner.monitoring.enabled=true` runs scheduled RSS polling. Full Refresh runs

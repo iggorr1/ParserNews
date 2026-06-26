@@ -1598,6 +1598,20 @@
         <div class="panel" style="margin-top: 12px;">
             <div class="panel-head">
                 <div>
+                    <h3>SEC Discovery</h3>
+                    <div class="muted">Broader form-based SEC discovery. Disabled by default; manual-only from this button.</div>
+                </div>
+                <div class="actions">
+                    <button id="secDiscoveryScanButton" type="button">Run SEC Discovery Scan</button>
+                    <span class="badge" id="secDiscoveryStatusBadge">Loading</span>
+                </div>
+            </div>
+            <div class="kv" id="secDiscoveryStatus"></div>
+            <div id="secDiscoveryResult" class="notice" style="margin-top: 10px;">No SEC Discovery scan run from this dashboard yet.</div>
+        </div>
+        <div class="panel" style="margin-top: 12px;">
+            <div class="panel-head">
+                <div>
                     <h3>SEC Watchlist Manager</h3>
                     <div class="muted">Search by ticker or company, then add the selected company. Manual CIK entry is available under Advanced.</div>
                 </div>
@@ -1913,6 +1927,8 @@
         sourceStats: [],
         reviewed: [],
         secStatus: null,
+        secDiscoveryStatus: null,
+        secDiscoveryResult: null,
         secFilings: [],
         secWatchlist: [],
         secCompanyLookupResults: [],
@@ -1950,6 +1966,7 @@
     const fullRefreshButton = document.querySelector("#fullRefreshButton");
     const reviewHighButton = document.querySelector("#reviewHighButton");
     const secScanButton = document.querySelector("#secScanButton");
+    const secDiscoveryScanButton = document.querySelector("#secDiscoveryScanButton");
     const secFetchDocumentsButton = document.querySelector("#secFetchDocumentsButton");
     const secWatchlistAddButton = document.querySelector("#secWatchlistAddButton");
     const secWatchlistCikInput = document.querySelector("#secWatchlistCikInput");
@@ -2036,6 +2053,7 @@
     fullRefreshButton.addEventListener("click", runFullRefresh);
     reviewHighButton.addEventListener("click", reviewHighCandidates);
     secScanButton.addEventListener("click", runSecScan);
+    secDiscoveryScanButton.addEventListener("click", runSecDiscoveryScan);
     secFetchDocumentsButton.addEventListener("click", runSecFetchDocuments);
     secWatchlistAddButton.addEventListener("click", addSecWatchlistEntry);
     secCompanyLookupButton.addEventListener("click", searchSecCompanyLookup);
@@ -2103,6 +2121,7 @@
             fetchJson("/api/stats/sources"),
             fetchJson("/api/articles/reviewed?limit=100"),
             fetchJson("/api/sec/status"),
+            fetchJson("/api/sec/discovery/status"),
             fetchJson("/api/sec/filings"),
             fetchJson("/api/sec/watchlist"),
             fetchJson("/api/signals?limit=100"),
@@ -2122,15 +2141,16 @@
         assignResult(results[6], "sourceStats", [], "Source stats");
         assignResult(results[7], "reviewed", [], "Reviewed candidates");
         assignResult(results[8], "secStatus", null, "SEC status");
-        assignResult(results[9], "secFilings", [], "SEC filings");
-        assignResult(results[10], "secWatchlist", [], "SEC watchlist");
-        assignResult(results[11], "signals", [], "Signal inbox");
-        assignResult(results[12], "dealGroups", [], "Deal groups");
-        assignResult(results[13], "dealGroupStats", null, "Deal group stats");
-        assignResult(results[14], "schedulerStatus", null, "Scheduler status");
-        assignResult(results[15], "openAiSettings", null, "OpenAI settings");
-        assignResult(results[16], "dealGroupAiReviewSummary", null, "AI review summary");
-        assignResult(results[17], "telegramSettings", null, "Telegram settings");
+        assignResult(results[9], "secDiscoveryStatus", null, "SEC discovery status");
+        assignResult(results[10], "secFilings", [], "SEC filings");
+        assignResult(results[11], "secWatchlist", [], "SEC watchlist");
+        assignResult(results[12], "signals", [], "Signal inbox");
+        assignResult(results[13], "dealGroups", [], "Deal groups");
+        assignResult(results[14], "dealGroupStats", null, "Deal group stats");
+        assignResult(results[15], "schedulerStatus", null, "Scheduler status");
+        assignResult(results[16], "openAiSettings", null, "OpenAI settings");
+        assignResult(results[17], "dealGroupAiReviewSummary", null, "AI review summary");
+        assignResult(results[18], "telegramSettings", null, "Telegram settings");
         if (!state.selectedDealGroupKey && state.dealGroups.length > 0) {
             state.selectedDealGroupKey = state.dealGroups[0].groupKey;
             state.dealGroupDetails = state.dealGroups[0];
@@ -2250,6 +2270,24 @@
             showError("SEC scan", error.message);
         } finally {
             setBusy(secScanButton, false, "Run SEC scan");
+        }
+    }
+
+    async function runSecDiscoveryScan() {
+        setBusy(secDiscoveryScanButton, true, "Discovering SEC");
+        try {
+            state.secDiscoveryResult = await postJson("/api/sec/discovery/scan");
+            state.secDiscoveryStatus = await fetchJson("/api/sec/discovery/status");
+            state.secFilings = await fetchJson("/api/sec/filings");
+            state.signals = await fetchJson("/api/signals?limit=100");
+            state.dealGroups = await fetchJson("/api/deal-groups?limit=100");
+            state.dealGroupStats = await fetchJson("/api/deal-groups/stats");
+            lastUpdated.textContent = new Date().toLocaleString();
+            render();
+        } catch (error) {
+            showError("SEC discovery", error.message);
+        } finally {
+            setBusy(secDiscoveryScanButton, false, "Run SEC Discovery Scan");
         }
     }
 
@@ -2972,6 +3010,7 @@
             ["Saved filings", status.savedFilings ?? 0],
             ["Warning", warning || "-"]
         ]) + (warning ? `<div class="warning">${escapeText(warning)}</div>` : "");
+        renderSecDiscovery();
         renderSecWatchlistEntries();
         renderSecCompanyLookupResults();
 
@@ -3034,6 +3073,43 @@
                 <td><a href="${escapeAttr(filing.filingUrl)}" target="_blank" rel="noreferrer">SEC filing</a></td>
             </tr>
         `).join("");
+    }
+
+    function renderSecDiscovery() {
+        const status = state.secDiscoveryStatus || {};
+        const enabled = Boolean(status.enabled);
+        const schedulerEnabled = Boolean(status.schedulerEnabled);
+        const warning = status.warning || "";
+        const badgeTarget = document.querySelector("#secDiscoveryStatusBadge");
+        badgeTarget.textContent = enabled ? "Enabled" : "Disabled";
+        badgeTarget.className = `badge ${enabled ? "ok" : "disabled"}`;
+        const last = status.lastRunSummary || {};
+        document.querySelector("#secDiscoveryStatus").innerHTML = kvRows([
+            ["Enabled", enabled ? "Yes" : "No"],
+            ["Scheduler", schedulerEnabled ? "Enabled" : "Disabled"],
+            ["Forms", Array.isArray(status.forms) ? status.forms.join(", ") : "-"],
+            ["Max filings / run", status.maxFilingsPerRun ?? "-"],
+            ["Fetch primary document", status.fetchPrimaryDocument ? "Yes" : "No"],
+            ["Last run", formatDate(status.lastRunAt)],
+            ["Last status", status.lastRunStatus || "-"],
+            ["Last scanned", last.scannedFilings ?? "-"],
+            ["Last new", last.newFilings ?? "-"],
+            ["Last duplicates", last.duplicateFilings ?? "-"],
+            ["Last groups", last.createdOrUpdatedDealGroups ?? "-"],
+            ["Warning", warning || "-"]
+        ]) + (warning ? `<div class="warning">${escapeText(warning)}</div>` : "");
+
+        const result = state.secDiscoveryResult;
+        const resultTarget = document.querySelector("#secDiscoveryResult");
+        if (!result) {
+            resultTarget.innerHTML = "No SEC Discovery scan run from this dashboard yet.";
+            return;
+        }
+        resultTarget.innerHTML = `
+            ${badge(result.success ? "Completed" : "No-op / failed", result.success ? "ok" : "warn")}
+            <span class="muted">scanned ${Number(result.scannedFilings || 0)}, new ${Number(result.newFilings || 0)}, duplicates ${Number(result.duplicateFilings || 0)}, groups ${Number(result.createdOrUpdatedDealGroups || 0)}, errors ${(result.errors || []).length}</span>
+            ${(result.errors || []).length ? `<div class="warning">${escapeText(result.errors.join("; "))}</div>` : ""}
+        `;
     }
 
     function renderSecWatchlistEntries() {
