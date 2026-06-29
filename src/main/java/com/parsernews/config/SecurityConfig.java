@@ -33,8 +33,12 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.GET, "/error").permitAll()
-                        .requestMatchers("/", "/index.html", "/api/**", "/actuator/**").authenticated()
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.POST, "/api/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/api/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.DELETE, "/api/**").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.GET, "/", "/index.html", "/*.html", "/api/**", "/actuator/**").authenticated()
+                        .anyRequest().hasRole("ADMIN")
                 )
                 .httpBasic(Customizer.withDefaults())
                 .build();
@@ -42,11 +46,19 @@ public class SecurityConfig {
 
     @Bean
     UserDetailsService userDetailsService(ParserNewsAuthProperties authProperties, PasswordEncoder passwordEncoder) {
-        UserDetails user = User.withUsername(authProperties.username())
+        UserDetails admin = User.withUsername(authProperties.username())
                 .password(passwordEncoder.encode(authProperties.password()))
-                .roles("USER")
+                .roles("ADMIN", "VIEWER")
                 .build();
-        return new InMemoryUserDetailsManager(user);
+        InMemoryUserDetailsManager manager = new InMemoryUserDetailsManager(admin);
+        if (authProperties.viewerUsername() != null && authProperties.viewerPassword() != null) {
+            UserDetails viewer = User.withUsername(authProperties.viewerUsername())
+                    .password(passwordEncoder.encode(authProperties.viewerPassword()))
+                    .roles("VIEWER")
+                    .build();
+            manager.createUser(viewer);
+        }
+        return manager;
     }
 
     @Bean
@@ -58,11 +70,15 @@ public class SecurityConfig {
     public record ParserNewsAuthProperties(
             boolean enabled,
             String username,
-            String password
+            String password,
+            String viewerUsername,
+            String viewerPassword
     ) {
         public ParserNewsAuthProperties {
             username = (username == null || username.isBlank()) ? "admin" : username;
             password = (password == null || password.isBlank()) ? "admin" : password;
+            viewerUsername = (viewerUsername == null || viewerUsername.isBlank()) ? null : viewerUsername;
+            viewerPassword = (viewerPassword == null || viewerPassword.isBlank()) ? null : viewerPassword;
         }
     }
 }
