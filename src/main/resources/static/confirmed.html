@@ -81,7 +81,7 @@
         .breakdown .bad { color: var(--danger); }
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
             gap: 18px;
         }
         .card {
@@ -145,6 +145,14 @@
         .verdict-NEEDS_HUMAN_REVIEW { color: var(--warning); }
         .verdict-NOT_TRADABLE   { color: var(--muted); }
         .verdict-FALSE_POSITIVE { color: var(--danger); }
+        @media (max-width: 480px) {
+            header { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px 16px; }
+            header a { margin-left: 0; }
+            main { padding: 16px; }
+            .topbar { flex-direction: column; align-items: flex-start; }
+            .controls { flex-wrap: wrap; }
+            .controls button { font-size: 12px; padding: 6px 10px; }
+        }
         .card-actions { display: flex; gap: 8px; margin-top: 4px; }
         .btn-confirm { background: rgba(56,209,138,0.1); border-color: rgba(56,209,138,0.3); color: var(--success); }
         .btn-confirm:hover { background: rgba(56,209,138,0.2); border-color: var(--success); }

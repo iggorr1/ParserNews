@@ -1004,6 +1004,62 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        @media (max-width: 480px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+
+            header a.button, header > a {
+                margin-left: 0;
+                width: 100%;
+                text-align: center;
+            }
+
+            .topbar .actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 6px;
+            }
+
+            .topbar .actions button,
+            .topbar .actions a.button {
+                flex: 1 1 calc(50% - 6px);
+                min-width: 0;
+                font-size: 12px;
+                padding: 7px 8px;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .deal-row {
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .deal-row-side {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+
+            .badge-row {
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+
+            .filters {
+                grid-template-columns: 1fr;
+            }
+
+            .deal-row-footer {
+                flex-wrap: wrap;
+            }
+        }
     </style>
 </head>
 <body>
