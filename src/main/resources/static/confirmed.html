@@ -165,7 +165,7 @@
             top: 0;
             right: 0;
             bottom: 0;
-            width: 480px;
+            width: 640px;
             max-width: 100vw;
             background: #0b1320;
             border-left: 1px solid var(--border);
@@ -177,6 +177,18 @@
             box-shadow: -8px 0 40px rgba(0,0,0,0.5);
         }
         .side-panel.open { transform: translateX(0); }
+        .panel-resize-handle {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 5px;
+            cursor: col-resize;
+            background: transparent;
+            transition: background 0.15s;
+            z-index: 10;
+        }
+        .panel-resize-handle:hover { background: rgba(56,214,201,0.3); }
         .panel-header {
             padding: 18px 20px 14px;
             border-bottom: 1px solid var(--border);
@@ -188,6 +200,16 @@
         }
         .panel-title { font-size: 17px; font-weight: 700; line-height: 1.25; }
         .panel-subtitle { color: var(--muted); font-size: 12px; margin-top: 4px; }
+        .panel-price-hero {
+            margin-top: 10px;
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .panel-price-now { font-size: 32px; font-weight: 800; line-height: 1; letter-spacing: -0.5px; }
+        .panel-price-change { font-size: 15px; font-weight: 700; }
+        .panel-price-label { font-size: 11px; color: var(--muted); }
         .panel-close {
             background: none;
             border: 1px solid var(--border);
@@ -248,7 +270,7 @@
         .price-change-pill.flat { background: var(--badge-bg); color: var(--muted); border: 1px solid var(--border); }
 
         /* Detail chart */
-        .detail-chart-wrap { position: relative; height: 220px; }
+        .detail-chart-wrap { position: relative; height: 260px; }
         .chart-toolbar {
             display: flex;
             align-items: center;
@@ -375,10 +397,12 @@
 <!-- Side panel -->
 <div class="panel-backdrop" id="panelBackdrop"></div>
 <div class="side-panel" id="sidePanel" aria-hidden="true">
+    <div class="panel-resize-handle" id="panelResizeHandle"></div>
     <div class="panel-header">
-        <div style="min-width:0;">
+        <div style="min-width:0;flex:1;">
             <div class="panel-title" id="panelTitle">—</div>
             <div class="panel-subtitle" id="panelSubtitle"></div>
+            <div class="panel-price-hero" id="panelPriceHero" style="display:none;"></div>
         </div>
         <button class="panel-close" id="panelClose" title="Close">✕</button>
     </div>
@@ -399,6 +423,7 @@ const chartInstances = {};   // mini charts on cards
 let panelChart = null;       // chart inside side panel
 let panelHistoryPoints = []; // full 6mo data for range switching
 let panelNewsDate = null;    // news date of open group
+let panelDirection = 'flat'; // 'up' | 'down' | 'flat'
 let activeRange = '6M';      // current range selection
 
 // ── Filter buttons ────────────────────────────────────────────────────────────
@@ -410,6 +435,32 @@ document.getElementById('refreshBtn').addEventListener('click', loadData);
 document.getElementById('panelClose').addEventListener('click', closePanel);
 document.getElementById('panelBackdrop').addEventListener('click', closePanel);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
+
+// ── Panel resize handle ───────────────────────────────────────────────────────
+(function() {
+    const handle = document.getElementById('panelResizeHandle');
+    const panel  = document.getElementById('sidePanel');
+    let dragging = false, startX = 0, startW = 0;
+    handle.addEventListener('mousedown', e => {
+        dragging = true; startX = e.clientX;
+        startW = panel.getBoundingClientRect().width;
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+        e.preventDefault();
+    });
+    document.addEventListener('mousemove', e => {
+        if (!dragging) return;
+        const delta = startX - e.clientX;
+        const w = Math.max(340, Math.min(window.innerWidth - 60, startW + delta));
+        panel.style.width = w + 'px';
+    });
+    document.addEventListener('mouseup', () => {
+        if (!dragging) return;
+        dragging = false;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+    });
+})();
 
 function setFilter(f) {
     currentFilter = f;
@@ -568,6 +619,9 @@ async function openPanel(group) {
         `${ticker ? `<strong style="color:var(--accent)">$${esc(ticker)}</strong> · ` : ''}` +
         `<span class="status-badge ${statusClass}" style="vertical-align:middle;">${statusLabel}</span>` +
         `${newsDate ? ` · ${newsDate}` : ''}`;
+    const priceHero = document.getElementById('panelPriceHero');
+    priceHero.style.display = 'none';
+    priceHero.innerHTML = '';
 
     // Show panel
     document.getElementById('panelBody').innerHTML = '<div class="spinner">Loading data…</div>';
@@ -608,16 +662,24 @@ async function openPanel(group) {
     body.innerHTML = '';
 
     // ── Price comparison ──────────────────────────────────────────────────────
-    if (ticker && (price || priceBeforeNews)) {
-        const nowPrice   = price?.price ?? null;
-        const changeSinceNews = (nowPrice && priceBeforeNews)
-            ? ((nowPrice - priceBeforeNews) / priceBeforeNews * 100)
-            : null;
-        const pillClass = changeSinceNews == null ? 'flat'
-                        : changeSinceNews > 0.5 ? 'up'
-                        : changeSinceNews < -0.5 ? 'down' : 'flat';
-        const pillSign = changeSinceNews >= 0 ? '+' : '';
+    const nowPrice = price?.price ?? null;
+    const changeSinceNews = (nowPrice && priceBeforeNews)
+        ? ((nowPrice - priceBeforeNews) / priceBeforeNews * 100) : null;
+    const direction = changeSinceNews == null ? 'flat' : changeSinceNews > 0.5 ? 'up' : changeSinceNews < -0.5 ? 'down' : 'flat';
+    const dirColor  = direction === 'up' ? 'var(--success)' : direction === 'down' ? 'var(--danger)' : 'var(--muted)';
+    const pillSign  = changeSinceNews != null && changeSinceNews >= 0 ? '+' : '';
 
+    if (ticker && nowPrice) {
+        const dayChange = price?.changePct ?? null;
+        const daySign   = dayChange != null && dayChange >= 0 ? '+' : '';
+        priceHero.style.display = 'flex';
+        priceHero.innerHTML = `
+            <span class="panel-price-now" style="color:${dirColor};">$${nowPrice.toFixed(2)}</span>
+            ${dayChange != null ? `<span class="panel-price-change" style="color:${dayChange >= 0 ? 'var(--success)' : 'var(--danger)'};">${daySign}${dayChange.toFixed(2)}% today</span>` : ''}
+            ${changeSinceNews != null ? `<span class="panel-price-label">${pillSign}${changeSinceNews.toFixed(1)}% since news</span>` : ''}`;
+    }
+
+    if (ticker && (nowPrice || priceBeforeNews)) {
         body.appendChild(el('div', 'panel-section', `
             <div class="panel-section-label">Price movement</div>
             <div class="price-compare">
@@ -631,14 +693,14 @@ async function openPanel(group) {
                 <div class="price-compare-arrow">→</div>
                 <div>
                     <div class="price-compare-label">Now</div>
-                    <div class="price-compare-value" style="color:${changeSinceNews >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                    <div class="price-compare-value" style="color:${dirColor};">
                         ${nowPrice ? `$${nowPrice.toFixed(2)}` : '—'}
                     </div>
                     <div class="price-compare-date">today</div>
                 </div>
             </div>
             ${changeSinceNews != null ? `<div style="text-align:center;">
-                <span class="price-change-pill ${pillClass}">${pillSign}${changeSinceNews.toFixed(1)}% since news</span>
+                <span class="price-change-pill ${direction}">${pillSign}${changeSinceNews.toFixed(1)}% since news</span>
             </div>` : ''}
         `));
     }
@@ -647,6 +709,7 @@ async function openPanel(group) {
     if (hist?.points?.length) {
         panelHistoryPoints = hist.points;
         panelNewsDate = newsDate;
+        panelDirection = direction;
         activeRange = '6M';
 
         const section = document.createElement('div');
@@ -773,7 +836,7 @@ function renderPanelChart(canvas, range) {
     const labels = pts.map(p => p.date);
     const closes = pts.map(p => p.close);
     const newsIdx = panelNewsDate ? labels.findIndex(d => d >= panelNewsDate) : -1;
-    panelChart = buildChart(canvas, labels, closes, newsIdx, 11, true);
+    panelChart = buildChart(canvas, labels, closes, newsIdx, 11, true, panelDirection);
 }
 
 function filterByRange(pts, range) {
@@ -786,7 +849,7 @@ function filterByRange(pts, range) {
 }
 
 // ── Chart builder ─────────────────────────────────────────────────────────────
-function buildChart(canvas, labels, closes, newsIdx, tickFontSize, enableZoom = false) {
+function buildChart(canvas, labels, closes, newsIdx, tickFontSize, enableZoom = false, direction = 'flat') {
     const zoomPlugin = enableZoom ? {
         zoom: {
             pan: { enabled: true, mode: 'x', threshold: 5 },
@@ -798,17 +861,41 @@ function buildChart(canvas, labels, closes, newsIdx, tickFontSize, enableZoom = 
         }
     } : {};
 
+    // Binance-style: green if up, red if down, teal for mini cards (flat/unknown)
+    const lineColor = direction === 'up'   ? '#26c96f'
+                    : direction === 'down' ? '#ef5350'
+                    : '#38d6c9';
+
+    const gradientTop    = direction === 'up'   ? 'rgba(38,201,111,0.38)'
+                         : direction === 'down' ? 'rgba(239,83,80,0.38)'
+                         : 'rgba(56,214,201,0.18)';
+    const gradientMid    = direction === 'up'   ? 'rgba(38,201,111,0.08)'
+                         : direction === 'down' ? 'rgba(239,83,80,0.08)'
+                         : 'rgba(56,214,201,0.04)';
+
+    function makeGradient(ctx, chartArea) {
+        const g = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+        g.addColorStop(0,   gradientTop);
+        g.addColorStop(0.55, gradientMid);
+        g.addColorStop(1,   'rgba(0,0,0,0)');
+        return g;
+    }
+
     const chart = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
             labels,
             datasets: [{
                 data: closes,
-                borderColor: 'var(--accent)',
-                borderWidth: 1.5,
+                borderColor: lineColor,
+                borderWidth: enableZoom ? 2 : 1.5,
                 pointRadius: 0,
                 fill: true,
-                backgroundColor: 'rgba(56,214,201,0.07)',
+                backgroundColor: function(context) {
+                    const { chart: c } = context;
+                    if (!c.chartArea) return 'transparent';
+                    return makeGradient(c.ctx, c.chartArea);
+                },
                 tension: 0.3
             }]
         },
