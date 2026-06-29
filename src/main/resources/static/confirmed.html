@@ -29,6 +29,7 @@
             font-size: 14px;
             line-height: 1.5;
             min-height: 100vh;
+            overflow-x: hidden;
         }
         header {
             background: rgba(8,13,20,0.88);
@@ -38,6 +39,9 @@
             align-items: center;
             gap: 20px;
             backdrop-filter: blur(18px);
+            position: sticky;
+            top: 0;
+            z-index: 10;
         }
         header h1 { font-size: 20px; }
         header .subtitle { color: var(--muted); font-size: 13px; }
@@ -79,30 +83,37 @@
         .breakdown .ok  { color: var(--success); }
         .breakdown .warn { color: var(--warning); }
         .breakdown .bad { color: var(--danger); }
+
+        /* ── Grid ── */
         .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr));
-            gap: 18px;
+            grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+            gap: 16px;
         }
+
+        /* ── Card ── */
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 18px;
+            padding: 16px;
             display: flex;
             flex-direction: column;
-            gap: 12px;
-            transition: border-color 0.2s;
+            gap: 10px;
+            cursor: pointer;
+            transition: border-color 0.18s, box-shadow 0.18s;
+            user-select: none;
         }
-        .card:hover { border-color: rgba(56,214,201,0.35); }
-        .card.ignored { opacity: 0.5; }
+        .card:hover { border-color: rgba(56,214,201,0.4); box-shadow: 0 0 0 1px rgba(56,214,201,0.08); }
+        .card.selected { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(56,214,201,0.15); }
+        .card.ignored { opacity: 0.55; }
         .card-header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
             gap: 10px;
         }
-        .card-title { font-weight: 700; font-size: 15px; }
+        .card-title { font-weight: 700; font-size: 14px; line-height: 1.3; }
         .card-meta { color: var(--muted); font-size: 12px; margin-top: 3px; }
         .card-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; flex-shrink: 0; }
         .status-badge {
@@ -116,17 +127,7 @@
         .status-badge.pending { background: rgba(216,167,62,0.15);  color: var(--warning); border: 1px solid rgba(216,167,62,0.3); }
         .status-badge.ignored { background: rgba(240,114,114,0.15); color: var(--danger);  border: 1px solid rgba(240,114,114,0.3); }
         .price-badge { font-size: 13px; font-weight: 600; white-space: nowrap; }
-        .chart-wrap { position: relative; height: 130px; }
-        .ai-section {
-            background: var(--surface-2);
-            border: 1px solid var(--border);
-            border-radius: 7px;
-            padding: 10px 12px;
-            font-size: 13px;
-        }
-        .ai-verdict { font-weight: 700; margin-bottom: 4px; }
-        .ai-reason { color: var(--muted); font-size: 12px; line-height: 1.45; }
-        .ai-risks { color: var(--warning); font-size: 12px; margin-top: 4px; }
+        .mini-chart-wrap { position: relative; height: 90px; }
         .trigger-badge {
             display: inline-block;
             background: rgba(56,214,201,0.08);
@@ -135,16 +136,172 @@
             padding: 2px 8px;
             font-size: 11px;
             color: var(--accent);
-            margin-bottom: 4px;
         }
-        .evidence-title { font-size: 12px; color: var(--muted); }
-        .evidence-link { font-size: 11px; color: var(--accent); word-break: break-all; }
+        .evidence-title { font-size: 12px; color: var(--muted); margin-top: 2px; }
         .empty { color: var(--muted); padding: 40px 0; text-align: center; font-size: 15px; }
         .loading { color: var(--muted); padding: 40px 0; text-align: center; }
+
+        /* ── Card action buttons ── */
+        .card-actions { display: flex; gap: 8px; }
+        .btn-confirm { background: rgba(56,209,138,0.1); border-color: rgba(56,209,138,0.3); color: var(--success); }
+        .btn-confirm:hover { background: rgba(56,209,138,0.2); border-color: var(--success); }
+        .btn-ignore  { background: rgba(240,114,114,0.1); border-color: rgba(240,114,114,0.3); color: var(--danger); }
+        .btn-ignore:hover  { background: rgba(240,114,114,0.2); border-color: var(--danger); }
+
+        /* ── Side panel ── */
+        .panel-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(4,8,14,0.55);
+            backdrop-filter: blur(3px);
+            z-index: 100;
+        }
+        .panel-backdrop.open { display: block; }
+        .side-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 480px;
+            max-width: 100vw;
+            background: #0b1320;
+            border-left: 1px solid var(--border);
+            z-index: 101;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            transition: transform 0.25s cubic-bezier(0.4,0,0.2,1);
+            box-shadow: -8px 0 40px rgba(0,0,0,0.5);
+        }
+        .side-panel.open { transform: translateX(0); }
+        .panel-header {
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+        .panel-title { font-size: 17px; font-weight: 700; line-height: 1.25; }
+        .panel-subtitle { color: var(--muted); font-size: 12px; margin-top: 4px; }
+        .panel-close {
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 5px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            flex-shrink: 0;
+            line-height: 1;
+        }
+        .panel-close:hover { border-color: var(--accent); color: var(--accent); background: none; }
+        .panel-body {
+            overflow-y: auto;
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Panel sections */
+        .panel-section { display: flex; flex-direction: column; gap: 8px; }
+        .panel-section-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.07em;
+            color: var(--muted);
+            font-weight: 600;
+        }
+
+        /* Price comparison block */
+        .price-compare {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px 16px;
+            display: grid;
+            grid-template-columns: 1fr auto 1fr;
+            align-items: center;
+            gap: 8px;
+            text-align: center;
+        }
+        .price-compare-arrow { color: var(--muted); font-size: 18px; }
+        .price-compare-label { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+        .price-compare-value { font-size: 22px; font-weight: 700; }
+        .price-compare-date { font-size: 11px; color: var(--muted); margin-top: 2px; }
+        .price-change-pill {
+            display: inline-block;
+            border-radius: 20px;
+            padding: 4px 12px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-top: 8px;
+        }
+        .price-change-pill.up   { background: rgba(56,209,138,0.15); color: var(--success); border: 1px solid rgba(56,209,138,0.3); }
+        .price-change-pill.down { background: rgba(240,114,114,0.15); color: var(--danger);  border: 1px solid rgba(240,114,114,0.3); }
+        .price-change-pill.flat { background: var(--badge-bg); color: var(--muted); border: 1px solid var(--border); }
+
+        /* Detail chart */
+        .detail-chart-wrap { position: relative; height: 220px; }
+
+        /* AI block */
+        .ai-block {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 14px;
+        }
+        .ai-verdict-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+        .ai-verdict-label { font-size: 14px; font-weight: 700; }
+        .ai-conf { font-size: 12px; color: var(--muted); }
+        .ai-reason-text { font-size: 13px; color: var(--muted); line-height: 1.55; }
+        .ai-risks-text { font-size: 12px; color: var(--warning); margin-top: 8px; }
         .verdict-GOOD_SIGNAL    { color: var(--success); }
         .verdict-NEEDS_HUMAN_REVIEW { color: var(--warning); }
         .verdict-NOT_TRADABLE   { color: var(--muted); }
         .verdict-FALSE_POSITIVE { color: var(--danger); }
+
+        /* Deal meta grid */
+        .meta-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .meta-item { background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; padding: 10px 12px; }
+        .meta-item-label { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+        .meta-item-value { font-size: 13px; font-weight: 600; }
+
+        /* Evidence list */
+        .evidence-item {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 7px;
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .evidence-source { font-size: 11px; color: var(--accent); }
+        .evidence-ev-title { font-size: 13px; }
+        .evidence-ev-link { font-size: 11px; color: var(--accent); word-break: break-all; }
+        .evidence-ev-link a { color: var(--accent); }
+
+        /* Panel actions */
+        .panel-actions { display: flex; gap: 10px; padding: 16px 20px; border-top: 1px solid var(--border); flex-shrink: 0; }
+        .panel-actions button { flex: 1; padding: 10px; font-size: 14px; }
+
+        .spinner { color: var(--muted); text-align: center; padding: 30px; }
+
+        @media (max-width: 560px) {
+            .side-panel { width: 100vw; }
+            .price-compare { grid-template-columns: 1fr; gap: 4px; }
+            .price-compare-arrow { display: none; }
+            .meta-grid { grid-template-columns: 1fr; }
+        }
         @media (max-width: 480px) {
             header { flex-direction: column; align-items: flex-start; gap: 8px; padding: 14px 16px; }
             header a { margin-left: 0; }
@@ -153,18 +310,13 @@
             .controls { flex-wrap: wrap; }
             .controls button { font-size: 12px; padding: 6px 10px; }
         }
-        .card-actions { display: flex; gap: 8px; margin-top: 4px; }
-        .btn-confirm { background: rgba(56,209,138,0.1); border-color: rgba(56,209,138,0.3); color: var(--success); }
-        .btn-confirm:hover { background: rgba(56,209,138,0.2); border-color: var(--success); }
-        .btn-ignore  { background: rgba(240,114,114,0.1); border-color: rgba(240,114,114,0.3); color: var(--danger); }
-        .btn-ignore:hover  { background: rgba(240,114,114,0.2); border-color: var(--danger); }
     </style>
 </head>
 <body>
 <header>
     <div>
         <h1>📋 Confirmed via Telegram</h1>
-        <div class="subtitle">Groups dispatched to Telegram bot with AI analysis and price charts</div>
+        <div class="subtitle">Click a deal to see price chart, AI analysis, and evidence</div>
     </div>
     <a href="/">← Dashboard</a>
 </header>
@@ -187,13 +339,31 @@
     </div>
 </main>
 
+<!-- Side panel -->
+<div class="panel-backdrop" id="panelBackdrop"></div>
+<div class="side-panel" id="sidePanel" aria-hidden="true">
+    <div class="panel-header">
+        <div style="min-width:0;">
+            <div class="panel-title" id="panelTitle">—</div>
+            <div class="panel-subtitle" id="panelSubtitle"></div>
+        </div>
+        <button class="panel-close" id="panelClose" title="Close">✕</button>
+    </div>
+    <div class="panel-body" id="panelBody">
+        <div class="spinner">Loading…</div>
+    </div>
+    <div class="panel-actions" id="panelActions" style="display:none;"></div>
+</div>
+
 <script>
 'use strict';
 
 let allGroups = [];
 let currentFilter = 'ALL';
 let isAdmin = false;
-const chartInstances = {};
+let selectedGroupKey = null;
+const chartInstances = {};   // mini charts on cards
+let panelChart = null;       // chart inside side panel
 
 // ── Filter buttons ────────────────────────────────────────────────────────────
 document.getElementById('filterAll').addEventListener('click', () => setFilter('ALL'));
@@ -201,13 +371,16 @@ document.getElementById('filterUseful').addEventListener('click', () => setFilte
 document.getElementById('filterPending').addEventListener('click', () => setFilter('PENDING'));
 document.getElementById('filterIgnored').addEventListener('click', () => setFilter('IGNORED'));
 document.getElementById('refreshBtn').addEventListener('click', loadData);
+document.getElementById('panelClose').addEventListener('click', closePanel);
+document.getElementById('panelBackdrop').addEventListener('click', closePanel);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
 function setFilter(f) {
     currentFilter = f;
-    ['filterAll','filterUseful','filterPending','filterIgnored'].forEach(id => {
-        document.getElementById(id).classList.remove('active');
-    });
-    document.getElementById(f === 'ALL' ? 'filterAll' : f === 'USEFUL' ? 'filterUseful' : f === 'PENDING' ? 'filterPending' : 'filterIgnored').classList.add('active');
+    ['filterAll','filterUseful','filterPending','filterIgnored'].forEach(id =>
+        document.getElementById(id).classList.remove('active'));
+    const map = { ALL:'filterAll', USEFUL:'filterUseful', PENDING:'filterPending', IGNORED:'filterIgnored' };
+    document.getElementById(map[f]).classList.add('active');
     renderGrid();
 }
 
@@ -217,15 +390,20 @@ async function loadData() {
     try {
         const data = await fetchJson('/api/deal-groups/tg-dispatched?limit=100');
         allGroups = data || [];
-        const useful   = allGroups.filter(g => g.reviewStatus === 'USEFUL').length;
-        const pending  = allGroups.filter(g => g.reviewStatus === 'PENDING').length;
-        const ignored  = allGroups.filter(g => g.reviewStatus === 'IGNORED').length;
+        const useful  = allGroups.filter(g => g.reviewStatus === 'USEFUL').length;
+        const pending = allGroups.filter(g => g.reviewStatus === 'PENDING').length;
+        const ignored = allGroups.filter(g => g.reviewStatus === 'IGNORED').length;
         document.getElementById('breakdown').innerHTML =
             `<span class="ok">✓ ${useful} confirmed</span>  ·  ` +
             `<span class="warn">⏳ ${pending} pending</span>  ·  ` +
             `<span class="bad">✗ ${ignored} ignored</span>  ·  ` +
             `<span>${allGroups.length} total sent to Telegram</span>`;
         renderGrid();
+        // Refresh open panel if visible
+        if (selectedGroupKey) {
+            const updated = allGroups.find(g => g.groupKey === selectedGroupKey);
+            if (updated) openPanel(updated);
+        }
     } catch (e) {
         document.getElementById('grid').innerHTML = `<div class="empty">Failed to load: ${esc(e.message)}</div>`;
     }
@@ -237,7 +415,7 @@ async function fetchJson(url) {
     return r.json();
 }
 
-// ── Render ────────────────────────────────────────────────────────────────────
+// ── Render grid ───────────────────────────────────────────────────────────────
 function renderGrid() {
     const grid = document.getElementById('grid');
     Object.values(chartInstances).forEach(c => c.destroy());
@@ -256,196 +434,324 @@ function renderGrid() {
     grid.innerHTML = '';
     filtered.forEach(group => {
         const card = buildCard(group);
+        card.addEventListener('click', () => openPanel(group));
         grid.appendChild(card);
     });
 
-    // Load prices + AI data asynchronously after cards are rendered
     filtered.forEach(group => {
         const ticker = validTicker(group.targetTicker);
-        if (ticker) loadPriceAndChart(ticker, group.sortInstant, group.groupKey);
-        loadAiReview(group.groupKey);
+        if (ticker) loadMiniChart(ticker, group.sortInstant, group.groupKey);
     });
 }
 
 function buildCard(group) {
     const card = document.createElement('div');
     const statusClass = (group.reviewStatus || 'PENDING').toLowerCase();
-    card.className = `card ${statusClass === 'ignored' ? 'ignored' : ''}`;
+    const isSelected = group.groupKey === selectedGroupKey;
+    card.className = `card ${statusClass === 'ignored' ? 'ignored' : ''} ${isSelected ? 'selected' : ''}`;
     card.id = `card-${group.groupKey}`;
 
     const ticker = validTicker(group.targetTicker);
     const newsDate = group.sortInstant ? group.sortInstant.substring(0, 10) : null;
     const statusLabel = { USEFUL: '✓ Confirmed', PENDING: '⏳ Pending', IGNORED: '✗ Ignored' }[group.reviewStatus] || '?';
-
-    // Primary signal for trigger info
     const sig = (group.relatedSignals || [])[0];
-    const triggerText = sig ? formatTrigger(sig) : null;
 
     card.innerHTML = `
         <div class="card-header">
             <div style="min-width:0;">
                 <div class="card-title">${esc(group.targetCompany || group.title || ticker || 'Unknown')}</div>
                 <div class="card-meta">
-                    ${ticker ? `<strong>$${esc(ticker)}</strong> · ` : ''}
-                    ${esc(group.dealRelevance || '')}
-                    ${group.buyerCompany ? ` · Buyer: ${esc(group.buyerCompany)}` : ''}
+                    ${ticker ? `<strong>$${esc(ticker)}</strong> · ` : ''}${esc(group.dealRelevance || '')}
+                    ${group.buyerCompany ? ` · ${esc(group.buyerCompany)}` : ''}
                     ${newsDate ? ` · ${newsDate}` : ''}
                 </div>
             </div>
             <div class="card-badges">
                 <span class="status-badge ${statusClass}">${statusLabel}</span>
-                ${ticker ? `<span class="price-badge" id="price-${esc(group.groupKey)}">loading…</span>` : ''}
+                ${ticker ? `<span class="price-badge" id="cprice-${esc(group.groupKey)}">…</span>` : ''}
             </div>
         </div>
-        ${triggerText ? `<div>
-            <div class="trigger-badge">${esc(triggerText.label)}</div>
-            <div class="evidence-title">${esc(truncate(triggerText.title, 100))}</div>
-            ${triggerText.url ? `<div class="evidence-link"><a href="${esc(triggerText.url)}" target="_blank" rel="noopener">${esc(truncate(triggerText.url, 60))}</a></div>` : ''}
+        ${sig ? `<div>
+            <span class="trigger-badge">${esc(formatTriggerLabel(sig))}</span>
+            <div class="evidence-title">${esc(truncate(sig.title, 90))}</div>
         </div>` : ''}
-        ${ticker ? `<div class="chart-wrap"><canvas id="chart-${esc(group.groupKey)}"></canvas></div>` : ''}
-        <div id="ai-${esc(group.groupKey)}" class="ai-section" style="display:none;"></div>
-        ${isAdmin && group.reviewStatus === 'PENDING' ? `
-        <div class="card-actions">
-            <button class="btn-confirm" onclick="setReviewStatus('${esc(group.groupKey)}','USEFUL')">✓ Confirm</button>
-            <button class="btn-ignore"  onclick="setReviewStatus('${esc(group.groupKey)}','IGNORED')">✗ Ignore</button>
-        </div>` : ''}`;
+        ${ticker ? `<div class="mini-chart-wrap"><canvas id="mchart-${esc(group.groupKey)}"></canvas></div>` : ''}`;
 
     return card;
 }
 
-function formatTrigger(sig) {
-    const src = sig.sourceType || '';
-    const type = sig.signalType || '';
-    const label = [src.replace(/_/g, ' '), type.replace(/_/g, ' ')].filter(Boolean).join(' · ');
-    return { label, title: sig.title || '', url: sig.url || '' };
-}
-
-// ── Price + Chart ─────────────────────────────────────────────────────────────
-async function loadPriceAndChart(ticker, sortInstant, groupKey) {
+// ── Mini chart on card ────────────────────────────────────────────────────────
+async function loadMiniChart(ticker, sortInstant, groupKey) {
     const newsDate = sortInstant ? sortInstant.substring(0, 10) : null;
-    const [priceResult, histResult] = await Promise.allSettled([
+    const [priceRes, histRes] = await Promise.allSettled([
         fetchJson(`/api/price/${encodeURIComponent(ticker)}`),
-        fetchJson(`/api/price/${encodeURIComponent(ticker)}/history?range=6mo`)
+        fetchJson(`/api/price/${encodeURIComponent(ticker)}/history?range=3mo`)
     ]);
 
-    const priceBadge = document.getElementById(`price-${groupKey}`);
-    if (priceResult.status === 'fulfilled' && priceResult.value) {
-        const p = priceResult.value;
+    const badge = document.getElementById(`cprice-${groupKey}`);
+    if (priceRes.status === 'fulfilled' && priceRes.value) {
+        const p = priceRes.value;
         const sign = p.changePct >= 0 ? '+' : '';
-        const color = p.changePct >= 0 ? 'var(--success)' : 'var(--danger)';
-        if (priceBadge) {
-            priceBadge.textContent = `$${p.price.toFixed(2)} (${sign}${p.changePct.toFixed(1)}%)`;
-            priceBadge.style.color = color;
-            priceBadge.title = p.shortName || ticker;
+        if (badge) {
+            badge.textContent = `$${p.price.toFixed(2)} (${sign}${p.changePct.toFixed(1)}%)`;
+            badge.style.color = p.changePct >= 0 ? 'var(--success)' : 'var(--danger)';
         }
-    } else {
-        if (priceBadge) priceBadge.textContent = 'N/A';
+    } else if (badge) { badge.textContent = 'N/A'; }
+
+    const canvas = document.getElementById(`mchart-${groupKey}`);
+    if (!canvas) return;
+    if (histRes.status !== 'fulfilled' || !(histRes.value?.points?.length)) {
+        canvas.parentElement.innerHTML = '<div style="color:var(--muted);font-size:11px;padding-top:6px;">No chart data</div>';
+        return;
+    }
+    const pts = histRes.value.points;
+    const labels = pts.map(p => p.date);
+    const closes = pts.map(p => p.close);
+    const newsIdx = newsDate ? labels.findIndex(d => d >= newsDate) : -1;
+    const id = `mchart-${groupKey}`;
+    if (chartInstances[id]) chartInstances[id].destroy();
+    chartInstances[id] = buildChart(canvas, labels, closes, newsIdx, 10);
+}
+
+// ── Side panel ────────────────────────────────────────────────────────────────
+async function openPanel(group) {
+    selectedGroupKey = group.groupKey;
+    // Highlight selected card
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+    const sel = document.getElementById(`card-${group.groupKey}`);
+    if (sel) sel.classList.add('selected');
+
+    const ticker = validTicker(group.targetTicker);
+    const newsDate = group.sortInstant ? group.sortInstant.substring(0, 10) : null;
+    const statusClass = (group.reviewStatus || 'PENDING').toLowerCase();
+    const statusLabel = { USEFUL: '✓ Confirmed', PENDING: '⏳ Pending', IGNORED: '✗ Ignored' }[group.reviewStatus] || '?';
+
+    document.getElementById('panelTitle').textContent =
+        group.targetCompany || group.title || ticker || 'Unknown';
+    document.getElementById('panelSubtitle').innerHTML =
+        `${ticker ? `<strong style="color:var(--accent)">$${esc(ticker)}</strong> · ` : ''}` +
+        `<span class="status-badge ${statusClass}" style="vertical-align:middle;">${statusLabel}</span>` +
+        `${newsDate ? ` · ${newsDate}` : ''}`;
+
+    // Show panel
+    document.getElementById('panelBody').innerHTML = '<div class="spinner">Loading data…</div>';
+    document.getElementById('panelActions').style.display = 'none';
+    document.getElementById('sidePanel').classList.add('open');
+    document.getElementById('panelBackdrop').classList.add('open');
+    document.getElementById('sidePanel').setAttribute('aria-hidden', 'false');
+
+    if (panelChart) { panelChart.destroy(); panelChart = null; }
+
+    // Fetch price + history + AI in parallel
+    const [priceRes, histRes, aiRes] = await Promise.allSettled([
+        ticker ? fetchJson(`/api/price/${encodeURIComponent(ticker)}`) : Promise.resolve(null),
+        ticker ? fetchJson(`/api/price/${encodeURIComponent(ticker)}/history?range=6mo`) : Promise.resolve(null),
+        fetchJson(`/api/deal-groups/${encodeURIComponent(group.groupKey)}/ai-review/latest`)
+    ]);
+
+    const price  = priceRes.status  === 'fulfilled' ? priceRes.value  : null;
+    const hist   = histRes.status   === 'fulfilled' ? histRes.value   : null;
+    const ai     = aiRes.status     === 'fulfilled' ? aiRes.value     : null;
+
+    // Compute before-news price from history
+    let priceBeforeNews = null;
+    let priceBeforeDate = null;
+    if (hist?.points?.length && newsDate) {
+        const pts = hist.points;
+        const newsIdx = pts.findIndex(p => p.date >= newsDate);
+        if (newsIdx > 0) {
+            priceBeforeNews = pts[newsIdx - 1].close;
+            priceBeforeDate = pts[newsIdx - 1].date;
+        } else if (newsIdx === 0) {
+            priceBeforeNews = pts[0].close;
+            priceBeforeDate = pts[0].date;
+        }
     }
 
-    const canvas = document.getElementById(`chart-${groupKey}`);
-    if (!canvas) return;
-    if (histResult.status === 'fulfilled' && histResult.value && (histResult.value.points || []).length > 0) {
-        const pts = histResult.value.points;
+    const body = document.getElementById('panelBody');
+    body.innerHTML = '';
+
+    // ── Price comparison ──────────────────────────────────────────────────────
+    if (ticker && (price || priceBeforeNews)) {
+        const nowPrice   = price?.price ?? null;
+        const changeSinceNews = (nowPrice && priceBeforeNews)
+            ? ((nowPrice - priceBeforeNews) / priceBeforeNews * 100)
+            : null;
+        const pillClass = changeSinceNews == null ? 'flat'
+                        : changeSinceNews > 0.5 ? 'up'
+                        : changeSinceNews < -0.5 ? 'down' : 'flat';
+        const pillSign = changeSinceNews >= 0 ? '+' : '';
+
+        body.appendChild(el('div', 'panel-section', `
+            <div class="panel-section-label">Price movement</div>
+            <div class="price-compare">
+                <div>
+                    <div class="price-compare-label">Before news</div>
+                    <div class="price-compare-value" style="color:var(--muted);">
+                        ${priceBeforeNews ? `$${priceBeforeNews.toFixed(2)}` : '—'}
+                    </div>
+                    <div class="price-compare-date">${priceBeforeDate || '—'}</div>
+                </div>
+                <div class="price-compare-arrow">→</div>
+                <div>
+                    <div class="price-compare-label">Now</div>
+                    <div class="price-compare-value" style="color:${changeSinceNews >= 0 ? 'var(--success)' : 'var(--danger)'};">
+                        ${nowPrice ? `$${nowPrice.toFixed(2)}` : '—'}
+                    </div>
+                    <div class="price-compare-date">today</div>
+                </div>
+            </div>
+            ${changeSinceNews != null ? `<div style="text-align:center;">
+                <span class="price-change-pill ${pillClass}">${pillSign}${changeSinceNews.toFixed(1)}% since news</span>
+            </div>` : ''}
+        `));
+    }
+
+    // ── Detail chart ──────────────────────────────────────────────────────────
+    if (hist?.points?.length) {
+        const section = el('div', 'panel-section', '<div class="panel-section-label">6-month chart</div>');
+        const wrap = document.createElement('div');
+        wrap.className = 'detail-chart-wrap';
+        const canvas = document.createElement('canvas');
+        wrap.appendChild(canvas);
+        section.appendChild(wrap);
+        body.appendChild(section);
+
+        const pts = hist.points;
         const labels = pts.map(p => p.date);
         const closes = pts.map(p => p.close);
         const newsIdx = newsDate ? labels.findIndex(d => d >= newsDate) : -1;
+        panelChart = buildChart(canvas, labels, closes, newsIdx, 11);
+    }
 
-        const id = `chart-${groupKey}`;
-        if (chartInstances[id]) chartInstances[id].destroy();
-        chartInstances[id] = new Chart(canvas.getContext('2d'), {
-            type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    data: closes,
-                    borderColor: 'var(--accent)',
-                    borderWidth: 1.5,
-                    pointRadius: 0,
-                    fill: true,
-                    backgroundColor: 'rgba(56,214,201,0.07)',
-                    tension: 0.3
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
-                },
-                scales: {
-                    x: {
-                        ticks: { maxTicksLimit: 6, color: 'var(--muted)', font: { size: 10 } },
-                        grid: { color: 'rgba(36,50,68,0.5)' }
-                    },
-                    y: {
-                        ticks: { color: 'var(--muted)', font: { size: 10 }, callback: v => `$${v.toFixed(0)}` },
-                        grid: { color: 'rgba(36,50,68,0.5)' }
-                    }
-                }
-            }
+    // ── AI analysis ──────────────────────────────────────────────────────────
+    if (ai?.verdict) {
+        const verdictClass = `verdict-${ai.verdict}`;
+        body.appendChild(el('div', 'panel-section', `
+            <div class="panel-section-label">AI analysis</div>
+            <div class="ai-block">
+                <div class="ai-verdict-row">
+                    <span class="ai-verdict-label ${verdictClass}">🤖 ${esc(ai.verdict)}</span>
+                    ${ai.confidence ? `<span class="ai-conf">${esc(ai.confidence)} confidence</span>` : ''}
+                </div>
+                ${ai.reason ? `<div class="ai-reason-text">${esc(ai.reason)}</div>` : ''}
+                ${ai.riskFlags?.length ? `<div class="ai-risks-text">⚠️ ${esc(ai.riskFlags.join(', '))}</div>` : ''}
+            </div>
+        `));
+    }
+
+    // ── Deal details ──────────────────────────────────────────────────────────
+    body.appendChild(el('div', 'panel-section', `
+        <div class="panel-section-label">Deal details</div>
+        <div class="meta-grid">
+            ${metaItem('Target', group.targetCompany || '—')}
+            ${metaItem('Ticker', ticker ? `$${ticker}` : '—')}
+            ${metaItem('Buyer', group.buyerCompany || '—')}
+            ${metaItem('Buyer ticker', validTicker(group.buyerTicker) ? `$${group.buyerTicker}` : '—')}
+            ${metaItem('Relevance', group.dealRelevance || '—')}
+            ${metaItem('Tradability', group.tradability || '—')}
+            ${metaItem('Timing', group.dealTiming || '—')}
+            ${metaItem('Priority', group.priority || '—')}
+        </div>
+    `));
+
+    // ── Evidence ──────────────────────────────────────────────────────────────
+    const signals = group.relatedSignals || [];
+    if (signals.length) {
+        const sec = el('div', 'panel-section', '<div class="panel-section-label">Evidence signals</div>');
+        signals.forEach(sig => {
+            const item = document.createElement('div');
+            item.className = 'evidence-item';
+            item.innerHTML = `
+                <div class="evidence-source">${esc(formatTriggerLabel(sig))}</div>
+                <div class="evidence-ev-title">${esc(sig.title || '')}</div>
+                ${sig.url ? `<div class="evidence-ev-link"><a href="${esc(sig.url)}" target="_blank" rel="noopener">${esc(truncate(sig.url, 65))}</a></div>` : ''}`;
+            sec.appendChild(item);
         });
+        body.appendChild(sec);
+    }
 
-        // Draw news line via afterDraw plugin
-        if (newsIdx >= 0) {
-            const chart = chartInstances[id];
-            const originalAfterDraw = chart.options.plugins;
-            Chart.register({
-                id: `news-line-${groupKey}`,
-                afterDraw(c) {
-                    if (c !== chart) return;
-                    const { ctx, chartArea, scales } = c;
-                    const x = scales.x.getPixelForValue(newsIdx);
-                    ctx.save();
-                    ctx.strokeStyle = 'rgba(216,167,62,0.8)';
-                    ctx.lineWidth = 1.5;
-                    ctx.setLineDash([4, 4]);
-                    ctx.beginPath();
-                    ctx.moveTo(x, chartArea.top);
-                    ctx.lineTo(x, chartArea.bottom);
-                    ctx.stroke();
-                    ctx.setLineDash([]);
-                    ctx.fillStyle = 'var(--warning)';
-                    ctx.font = '9px Inter, sans-serif';
-                    ctx.fillText('news', x + 3, chartArea.top + 10);
-                    ctx.restore();
-                }
-            });
-            chart.update();
-        }
-    } else {
-        canvas.parentElement.innerHTML = '<div style="color:var(--muted);font-size:11px;padding-top:6px;">Chart unavailable</div>';
+    // ── Admin action buttons ──────────────────────────────────────────────────
+    if (isAdmin && group.reviewStatus === 'PENDING') {
+        const actions = document.getElementById('panelActions');
+        actions.innerHTML = `
+            <button class="btn-confirm" id="panelConfirm">✓ Confirm</button>
+            <button class="btn-ignore"  id="panelIgnore">✗ Ignore</button>`;
+        actions.style.display = 'flex';
+        document.getElementById('panelConfirm').onclick = () => setReviewStatus(group.groupKey, 'USEFUL');
+        document.getElementById('panelIgnore').onclick  = () => setReviewStatus(group.groupKey, 'IGNORED');
     }
 }
 
-// ── AI review ─────────────────────────────────────────────────────────────────
-async function loadAiReview(groupKey) {
-    const el = document.getElementById(`ai-${groupKey}`);
-    if (!el) return;
-    try {
-        const ai = await fetchJson(`/api/deal-groups/${encodeURIComponent(groupKey)}/ai-review/latest`);
-        if (!ai || !ai.verdict) return;
-        const verdictClass = `verdict-${ai.verdict}`;
-        el.style.display = '';
-        el.innerHTML = `
-            <div class="ai-verdict ${verdictClass}">🤖 ${esc(ai.verdict)}${ai.confidence ? ` · ${esc(ai.confidence)} confidence` : ''}</div>
-            ${ai.reason ? `<div class="ai-reason">${esc(truncate(ai.reason, 250))}</div>` : ''}
-            ${ai.riskFlags && ai.riskFlags.length > 0 ? `<div class="ai-risks">⚠️ ${esc(ai.riskFlags.join(', '))}</div>` : ''}`;
-    } catch { /* AI review unavailable */ }
+function closePanel() {
+    document.getElementById('sidePanel').classList.remove('open');
+    document.getElementById('panelBackdrop').classList.remove('open');
+    document.getElementById('sidePanel').setAttribute('aria-hidden', 'true');
+    document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+    selectedGroupKey = null;
+    if (panelChart) { panelChart.destroy(); panelChart = null; }
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function validTicker(t) {
-    return t && t !== 'UNKNOWN' && t.trim() !== '' ? t : null;
-}
-function truncate(s, n) {
-    if (!s) return '';
-    return s.length > n ? s.substring(0, n - 1) + '…' : s;
-}
-function esc(s) {
-    if (!s) return '';
-    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// ── Chart builder ─────────────────────────────────────────────────────────────
+function buildChart(canvas, labels, closes, newsIdx, tickFontSize) {
+    const chart = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data: closes,
+                borderColor: 'var(--accent)',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: true,
+                backgroundColor: 'rgba(56,214,201,0.07)',
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
+            },
+            scales: {
+                x: {
+                    ticks: { maxTicksLimit: 6, color: 'var(--muted)', font: { size: tickFontSize } },
+                    grid: { color: 'rgba(36,50,68,0.5)' }
+                },
+                y: {
+                    ticks: { color: 'var(--muted)', font: { size: tickFontSize }, callback: v => `$${v.toFixed(0)}` },
+                    grid: { color: 'rgba(36,50,68,0.5)' }
+                }
+            }
+        }
+    });
+
+    if (newsIdx >= 0) {
+        const pluginId = `news-line-${canvas.id || Math.random()}`;
+        Chart.register({
+            id: pluginId,
+            afterDraw(c) {
+                if (c !== chart) return;
+                const { ctx, chartArea, scales } = c;
+                const x = scales.x.getPixelForValue(newsIdx);
+                ctx.save();
+                ctx.strokeStyle = 'rgba(216,167,62,0.85)';
+                ctx.lineWidth = 1.5;
+                ctx.setLineDash([4, 4]);
+                ctx.beginPath(); ctx.moveTo(x, chartArea.top); ctx.lineTo(x, chartArea.bottom); ctx.stroke();
+                ctx.setLineDash([]);
+                ctx.fillStyle = 'var(--warning)';
+                ctx.font = `${tickFontSize}px Inter, sans-serif`;
+                ctx.fillText('news', x + 3, chartArea.top + 12);
+                ctx.restore();
+            }
+        });
+        chart.update();
+    }
+    return chart;
 }
 
 // ── Review actions ────────────────────────────────────────────────────────────
@@ -462,6 +768,26 @@ async function setReviewStatus(groupKey, status) {
     } catch (e) {
         alert('Failed to update: ' + e.message);
     }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function el(tag, cls, html) {
+    const d = document.createElement(tag);
+    d.className = cls;
+    d.innerHTML = html;
+    return d;
+}
+function metaItem(label, value) {
+    return `<div class="meta-item"><div class="meta-item-label">${esc(label)}</div><div class="meta-item-value">${esc(value)}</div></div>`;
+}
+function formatTriggerLabel(sig) {
+    return [sig.sourceType, sig.signalType].filter(Boolean).map(s => s.replace(/_/g,' ')).join(' · ');
+}
+function validTicker(t) { return t && t !== 'UNKNOWN' && t.trim() !== '' ? t : null; }
+function truncate(s, n) { if (!s) return ''; return s.length > n ? s.substring(0, n-1) + '…' : s; }
+function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 // ── Init ──────────────────────────────────────────────────────────────────────
