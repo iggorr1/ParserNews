@@ -159,6 +159,36 @@ class RssCompanyEnrichmentServiceTest {
         assertThat(enrichment.target().publicCompany()).isFalse();
     }
 
+    @Test
+    void foreignBuyerDoesNotStealTargetTickerFromHeadlineWindow() {
+        // "Merck KGaA Agrees to Acquire Bio-Techne (NASDAQ: TECH)" — TECH is ~75 chars after
+        // "Merck KGaA" which is within the 120-char search window. Without the cross-check fix,
+        // TECH would be assigned to the buyer (Merck KGaA) and Bio-Techne gets no ticker.
+        NewsArticleEntity article = article(
+                "Merck KGaA, Darmstadt, Germany, Agrees to Acquire Bio-Techne (NASDAQ: TECH)",
+                "Merck KGaA agreed to acquire Bio-Techne Corporation (NASDAQ: TECH)."
+        );
+        DetectedEventEntity event = event(article, "UNKNOWN");
+        mockTerms("Bio-Techne", "Merck KGaA");
+        // In production, findBestMatch with exact ticker "TECH" returns Bio-Techne regardless
+        // of the company name argument (ticker lookup is by ticker, name is a hint only).
+        when(lookupService.findBestMatch(eq("TECH"), any()))
+                .thenReturn(Optional.of(new SecCompanyLookupService.CompanyLookupMatch(
+                        "842023",
+                        "TECH",
+                        "BIO-TECHNE Corp",
+                        CompanyMatchConfidence.EXACT_TICKER
+                )));
+        when(lookupService.findBestMatch(eq(null), any())).thenReturn(Optional.empty());
+
+        RssCompanyEnrichmentService.CompanyEnrichment enrichment = service().enrich(article, event);
+
+        assertThat(enrichment.target().ticker()).isEqualTo("TECH");
+        assertThat(enrichment.target().cik()).isEqualTo("842023");
+        assertThat(enrichment.buyer().ticker()).isNull();
+        assertThat(enrichment.buyer().cik()).isNull();
+    }
+
     private RssCompanyEnrichmentService service() {
         return new RssCompanyEnrichmentService(lookupService, reviewInsightService, dealTermsExtractionService);
     }

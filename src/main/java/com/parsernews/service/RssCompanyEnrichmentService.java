@@ -46,10 +46,23 @@ public class RssCompanyEnrichmentService {
         CompanyRoleEnrichment target = privateTargetSignal
                 ? new CompanyRoleEnrichment(null, null, false, CompanyMatchConfidence.NONE)
                 : resolveRole(targetTicker, targetCompany);
-        CompanyRoleEnrichment buyer = resolveRole(
-                buyerTicker,
-                buyerCompany
-        );
+        CompanyRoleEnrichment buyer = resolveRole(buyerTicker, buyerCompany);
+
+        // Cross-check: buyer may have grabbed the target's ticker from the headline window
+        // (e.g. "Merck KGaA Agrees to Acquire Bio-Techne (NASDAQ: TECH)" — TECH is within
+        // 120 chars of Merck so it gets assigned to buyer). If the buyer's ticker resolves
+        // to the target company rather than the buyer company, reassign it.
+        if (!privateTargetSignal && buyer.ticker() != null && target.ticker() == null) {
+            boolean buyerTickerBelongsToTarget = companyLookupService
+                    .findBestMatch(buyer.ticker(), targetCompany)
+                    .filter(m -> m.confidence() == CompanyMatchConfidence.EXACT_TICKER
+                            || m.confidence() == CompanyMatchConfidence.EXACT_NAME)
+                    .isPresent();
+            if (buyerTickerBelongsToTarget) {
+                target = resolveRole(buyer.ticker(), targetCompany);
+                buyer = new CompanyRoleEnrichment(null, null, false, CompanyMatchConfidence.NONE);
+            }
+        }
 
         List<String> warnings = new ArrayList<>();
         if (buyer.publicCompany() && !target.publicCompany()) {
