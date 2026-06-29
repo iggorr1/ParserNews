@@ -1351,6 +1351,10 @@
                     <option>IGNORED</option>
                 </select>
             </div>
+            <div class="control" style="align-items:center;">
+                <label for="dedupTickerToggle" style="cursor:pointer;">Dedup by ticker</label>
+                <input type="checkbox" id="dedupTickerToggle" checked style="width:auto;margin:0;">
+            </div>
             <div class="control">
                 <label for="batchAiLimitSelect">AI batch limit</label>
                 <select id="batchAiLimitSelect">
@@ -2048,6 +2052,7 @@
     const signalReviewFilter = document.querySelector("#signalReviewFilter");
     const dealGroupPriorityFilter = document.querySelector("#dealGroupPriorityFilter");
     const dealGroupReviewFilter = document.querySelector("#dealGroupReviewFilter");
+    const dedupTickerToggle = document.querySelector("#dedupTickerToggle");
     const candidateOnlyToggle = document.querySelector("#candidateOnlyToggle");
     const eligibleOnlyToggle = document.querySelector("#eligibleOnlyToggle");
     const autoRefreshToggle = document.querySelector("#autoRefreshToggle");
@@ -2123,6 +2128,7 @@
     signalReviewFilter.addEventListener("change", loadSignals);
     dealGroupPriorityFilter.addEventListener("change", loadDealGroups);
     dealGroupReviewFilter.addEventListener("change", loadDealGroups);
+    dedupTickerToggle.addEventListener("change", renderDealGroups);
     candidateOnlyToggle.addEventListener("change", render);
     eligibleOnlyToggle.addEventListener("change", render);
     autoRefreshToggle.addEventListener("change", toggleAutoRefresh);
@@ -3375,7 +3381,26 @@
             target.innerHTML = `<div class="notice">No deal groups match current filters.</div>`;
             return;
         }
-        target.innerHTML = state.dealGroups.slice(0, 50).map(group => `
+        let groups = state.dealGroups;
+        if (dedupTickerToggle && dedupTickerToggle.checked) {
+            const seen = new Map();
+            const extra = new Map();
+            groups.forEach(g => {
+                const key = g.targetTicker && g.targetTicker !== "UNKNOWN" ? g.targetTicker : null;
+                if (!key) return;
+                if (!seen.has(key)) { seen.set(key, g); extra.set(key, 0); }
+                else extra.set(key, extra.get(key) + 1);
+            });
+            groups = groups.filter(g => {
+                const key = g.targetTicker && g.targetTicker !== "UNKNOWN" ? g.targetTicker : null;
+                return !key || seen.get(key) === g;
+            });
+            groups = groups.map(g => {
+                const key = g.targetTicker && g.targetTicker !== "UNKNOWN" ? g.targetTicker : null;
+                return key && extra.get(key) > 0 ? { ...g, _extraCount: extra.get(key) } : g;
+            });
+        }
+        target.innerHTML = groups.slice(0, 50).map(group => `
             <article class="deal-row ${state.selectedDealGroupKey === group.groupKey ? "selected" : ""}" data-deal-group-key="${escapeAttr(group.groupKey)}">
                 <div>
                     <div class="deal-row-title">${escapeText(group.title || "-")}</div>
@@ -3384,6 +3409,7 @@
                         ${group.buyerTicker ? badge(group.buyerTicker, "neutral") : ""}
                         <span>Target: ${escapeText(group.targetCompany || "Unknown")}</span>
                         ${group.targetTicker ? badge(group.targetTicker, "ok") : ""}
+                        ${group._extraCount ? `<span class="badge disabled">+${group._extraCount} more</span>` : ""}
                     </div>
                     <div class="deal-row-footer" style="margin-top: 10px;">
                         ${group.dealRelevance ? badge(group.dealRelevance, group.tradability || "disabled") : badge("UNKNOWN", "disabled")}
