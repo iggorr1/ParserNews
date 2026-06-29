@@ -6,6 +6,8 @@ import com.parsernews.persistence.DealGroupReviewEntity;
 import com.parsernews.persistence.DealGroupReviewRepository;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.web.SignalInboxController.UnifiedPriority;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -18,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
 public class AutoDealGroupDispatchService {
+    private static final Logger log = LoggerFactory.getLogger(AutoDealGroupDispatchService.class);
     // Verdicts that warrant automatic Telegram notification
     private static final Set<AiReviewVerdict> DISPATCH_VERDICTS = Set.of(
             AiReviewVerdict.GOOD_SIGNAL,
@@ -86,9 +89,11 @@ public class AutoDealGroupDispatchService {
 
     private void doDispatch() {
         if (!openAiSettings.effectiveSettings().enabled() || !openAiSettings.effectiveSettings().configured()) {
+            log.warn("Dispatch skipped: OpenAI not enabled/configured");
             return;
         }
         if (!telegramSettings.effectiveSettings().enabled() || !telegramSettings.effectiveSettings().sendAllowed()) {
+            log.warn("Dispatch skipped: Telegram not enabled/configured");
             return;
         }
 
@@ -102,6 +107,8 @@ public class AutoDealGroupDispatchService {
                 .filter(this::passesQualityGate)
                 .toList();
 
+        log.info("Dispatch run: {} candidate(s) after quality gate", candidates.size());
+
         int aiRan = 0;
         for (DealGroupingService.DealGroupResponse group : candidates) {
             if (alreadyDispatched(group.groupKey())) continue;
@@ -114,11 +121,13 @@ public class AutoDealGroupDispatchService {
                     aiReview = aiReviewService.review(group.groupKey());
                     aiRan++;
                 } catch (Exception e) {
+                    log.warn("AI review failed for {}: {}", group.groupKey(), e.getMessage());
                     continue;
                 }
             }
 
             if (aiReview.verdict() == null || !DISPATCH_VERDICTS.contains(aiReview.verdict())) {
+                log.info("Skipping {} — AI verdict: {}", group.groupKey(), aiReview.verdict());
                 continue;
             }
 
@@ -170,6 +179,9 @@ public class AutoDealGroupDispatchService {
         AlertNotifier.AlertNotificationResult result = alertNotifier.sendWithButtons(message, buttons);
         if (result.sent()) {
             dealGroupReviewService.markTgDispatched(group.groupKey());
+            log.info("Dispatched to Telegram: {} ({})", group.groupKey(), group.targetTicker());
+        } else {
+            log.warn("Telegram send failed for {}", group.groupKey());
         }
     }
 
