@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Confirmed via Telegram — ParserNews</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <style>
         :root {
             --bg: #070b10;
@@ -247,6 +249,37 @@
 
         /* Detail chart */
         .detail-chart-wrap { position: relative; height: 220px; }
+        .chart-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .chart-range-btn {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 4px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: background 0.15s, color 0.15s;
+        }
+        .chart-range-btn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+        .chart-range-btn.active { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+        .chart-reset-btn {
+            margin-left: auto;
+            background: none;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            padding: 4px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+        }
+        .chart-reset-btn:hover { border-color: var(--accent); color: var(--accent); background: none; }
+        .chart-hint { font-size: 11px; color: var(--muted); margin-left: auto; }
 
         /* AI block */
         .ai-block {
@@ -364,6 +397,9 @@ let isAdmin = false;
 let selectedGroupKey = null;
 const chartInstances = {};   // mini charts on cards
 let panelChart = null;       // chart inside side panel
+let panelHistoryPoints = []; // full 6mo data for range switching
+let panelNewsDate = null;    // news date of open group
+let activeRange = '6M';      // current range selection
 
 // ── Filter buttons ────────────────────────────────────────────────────────────
 document.getElementById('filterAll').addEventListener('click', () => setFilter('ALL'));
@@ -609,19 +645,54 @@ async function openPanel(group) {
 
     // ── Detail chart ──────────────────────────────────────────────────────────
     if (hist?.points?.length) {
-        const section = el('div', 'panel-section', '<div class="panel-section-label">6-month chart</div>');
+        panelHistoryPoints = hist.points;
+        panelNewsDate = newsDate;
+        activeRange = '6M';
+
+        const section = document.createElement('div');
+        section.className = 'panel-section';
+
+        // Toolbar: label + range buttons + reset
+        const toolbar = document.createElement('div');
+        toolbar.className = 'chart-toolbar';
+        toolbar.innerHTML = `
+            <span class="panel-section-label" style="margin:0;">Chart</span>
+            ${['1W','2W','1M','3M','6M'].map(r =>
+                `<button class="chart-range-btn${r==='6M'?' active':''}" data-range="${r}">${r}</button>`
+            ).join('')}
+            <button class="chart-reset-btn" id="chartResetZoom">Reset zoom</button>`;
+        section.appendChild(toolbar);
+
+        const hint = document.createElement('div');
+        hint.className = 'chart-hint';
+        hint.textContent = 'Scroll to zoom · Drag to pan';
+        hint.style.cssText = 'font-size:11px;color:var(--muted);text-align:right;margin-top:2px;';
+        section.appendChild(hint);
+
         const wrap = document.createElement('div');
         wrap.className = 'detail-chart-wrap';
+        wrap.id = 'panelChartWrap';
         const canvas = document.createElement('canvas');
+        canvas.id = 'panelChartCanvas';
         wrap.appendChild(canvas);
         section.appendChild(wrap);
         body.appendChild(section);
 
-        const pts = hist.points;
-        const labels = pts.map(p => p.date);
-        const closes = pts.map(p => p.close);
-        const newsIdx = newsDate ? labels.findIndex(d => d >= newsDate) : -1;
-        panelChart = buildChart(canvas, labels, closes, newsIdx, 11);
+        renderPanelChart(canvas, '6M');
+
+        toolbar.querySelectorAll('.chart-range-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                toolbar.querySelectorAll('.chart-range-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                activeRange = btn.dataset.range;
+                const c = document.getElementById('panelChartCanvas');
+                if (c) renderPanelChart(c, activeRange);
+            });
+        });
+
+        document.getElementById('chartResetZoom')?.addEventListener('click', () => {
+            if (panelChart) panelChart.resetZoom();
+        });
     }
 
     // ── AI analysis ──────────────────────────────────────────────────────────
@@ -692,8 +763,41 @@ function closePanel() {
     if (panelChart) { panelChart.destroy(); panelChart = null; }
 }
 
+// ── Panel chart: filter by range then draw ────────────────────────────────────
+function renderPanelChart(canvas, range) {
+    if (panelChart) { panelChart.destroy(); panelChart = null; }
+
+    const pts = filterByRange(panelHistoryPoints, range);
+    if (!pts.length) return;
+
+    const labels = pts.map(p => p.date);
+    const closes = pts.map(p => p.close);
+    const newsIdx = panelNewsDate ? labels.findIndex(d => d >= panelNewsDate) : -1;
+    panelChart = buildChart(canvas, labels, closes, newsIdx, 11, true);
+}
+
+function filterByRange(pts, range) {
+    if (!pts.length) return pts;
+    const days = { '1W': 7, '2W': 14, '1M': 30, '3M': 90, '6M': 180 }[range] ?? 180;
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutStr = cutoff.toISOString().substring(0, 10);
+    return pts.filter(p => p.date >= cutStr);
+}
+
 // ── Chart builder ─────────────────────────────────────────────────────────────
-function buildChart(canvas, labels, closes, newsIdx, tickFontSize) {
+function buildChart(canvas, labels, closes, newsIdx, tickFontSize, enableZoom = false) {
+    const zoomPlugin = enableZoom ? {
+        zoom: {
+            pan: { enabled: true, mode: 'x', threshold: 5 },
+            zoom: {
+                wheel: { enabled: true, speed: 0.08 },
+                pinch: { enabled: true },
+                mode: 'x'
+            }
+        }
+    } : {};
+
     const chart = new Chart(canvas.getContext('2d'), {
         type: 'line',
         data: {
@@ -714,7 +818,8 @@ function buildChart(canvas, labels, closes, newsIdx, tickFontSize) {
             animation: false,
             plugins: {
                 legend: { display: false },
-                tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
+                tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } },
+                ...zoomPlugin
             },
             scales: {
                 x: {
@@ -737,6 +842,7 @@ function buildChart(canvas, labels, closes, newsIdx, tickFontSize) {
                 if (c !== chart) return;
                 const { ctx, chartArea, scales } = c;
                 const x = scales.x.getPixelForValue(newsIdx);
+                if (x < chartArea.left || x > chartArea.right) return;
                 ctx.save();
                 ctx.strokeStyle = 'rgba(216,167,62,0.85)';
                 ctx.lineWidth = 1.5;
