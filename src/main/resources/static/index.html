@@ -2136,7 +2136,7 @@
             fetchJson("/api/articles/candidates?limit=100"),
             fetchJson("/api/alerts/candidates"),
             fetchJson("/api/scan-runs"),
-            postJson("/api/alerts/dry-run"),
+            Promise.resolve(null),
             fetchJson("/api/stats/sources"),
             fetchJson("/api/articles/reviewed?limit=100"),
             fetchJson("/api/sec/status"),
