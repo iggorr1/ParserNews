@@ -832,28 +832,33 @@ function closePanel() {
 // ── Panel chart: fetch intraday or filter daily, then draw ───────────────────
 const INTRADAY_RANGES = { '10M': { interval: '1m', minutes: 10 }, '1H': { interval: '5m', minutes: 60 }, '1D': { interval: '5m', minutes: 390 } };
 
-async function renderPanelChart(canvas, range) {
+async function renderPanelChart(canvasOrIgnored, range) {
     if (panelChart) { panelChart.destroy(); panelChart = null; }
 
     let pts;
     const intradayCfg = INTRADAY_RANGES[range];
 
-    if (intradayCfg && panelTicker) {
-        // show loading state
-        canvas.parentElement.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center;">Loading…</div>';
-        const newWrap = document.createElement('div');
-        newWrap.className = 'detail-chart-wrap';
-        newWrap.id = 'panelChartWrap';
-        const newCanvas = document.createElement('canvas');
-        newCanvas.id = 'panelChartCanvas';
-        newWrap.appendChild(newCanvas);
-        canvas.parentElement.replaceWith(newWrap);
-        canvas = newCanvas;
+    // Always work via the stable wrap ID — avoids stale canvas references
+    function getWrap() { return document.getElementById('panelChartWrap'); }
+    function freshCanvas() {
+        const w = getWrap();
+        if (!w) return null;
+        w.innerHTML = '';
+        const c = document.createElement('canvas');
+        c.id = 'panelChartCanvas';
+        w.appendChild(c);
+        return c;
+    }
+    function showMsg(msg) {
+        const w = getWrap();
+        if (w) w.innerHTML = `<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center;display:flex;align-items:center;justify-content:center;height:100%;">${msg}</div>`;
+    }
 
+    if (intradayCfg && panelTicker) {
+        showMsg('Loading…');
         try {
             const hist = await fetchJson(`/api/price/${encodeURIComponent(panelTicker)}/history?range=1d&interval=${intradayCfg.interval}`);
             pts = hist?.points || [];
-            // filter to last N minutes by ts
             if (pts.length && intradayCfg.minutes < 390) {
                 const nowSec = Date.now() / 1000;
                 const cutSec = nowSec - intradayCfg.minutes * 60;
@@ -864,20 +869,18 @@ async function renderPanelChart(canvas, range) {
         pts = filterByDays(panelHistoryPoints, range);
     }
 
-    if (!pts.length) {
-        const wrap = document.getElementById('panelChartWrap');
-        if (wrap) wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center;">No data for this range</div>';
-        return;
-    }
+    if (!pts.length) { showMsg('No data for this range — market may be closed'); return; }
+
+    const canvas = freshCanvas();
+    if (!canvas) return;
 
     const labels = pts.map(p => p.label || p.date);
     const closes = pts.map(p => p.close);
 
-    // News marker: find closest point to panelNewsTs (intraday) or panelNewsDate (daily)
+    // News marker: closest point at or after news time
     let newsIdx = -1;
     if (intradayCfg && panelNewsTs) {
         newsIdx = pts.findIndex(p => p.ts >= panelNewsTs);
-        if (newsIdx < 0 && panelNewsTs < (pts[pts.length - 1]?.ts ?? 0)) newsIdx = pts.length - 1;
     } else if (panelNewsDate) {
         newsIdx = pts.findIndex(p => (p.label || p.date) >= panelNewsDate);
     }
