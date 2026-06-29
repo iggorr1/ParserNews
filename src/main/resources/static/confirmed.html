@@ -145,6 +145,11 @@
         .verdict-NEEDS_HUMAN_REVIEW { color: var(--warning); }
         .verdict-NOT_TRADABLE   { color: var(--muted); }
         .verdict-FALSE_POSITIVE { color: var(--danger); }
+        .card-actions { display: flex; gap: 8px; margin-top: 4px; }
+        .btn-confirm { background: rgba(56,209,138,0.1); border-color: rgba(56,209,138,0.3); color: var(--success); }
+        .btn-confirm:hover { background: rgba(56,209,138,0.2); border-color: var(--success); }
+        .btn-ignore  { background: rgba(240,114,114,0.1); border-color: rgba(240,114,114,0.3); color: var(--danger); }
+        .btn-ignore:hover  { background: rgba(240,114,114,0.2); border-color: var(--danger); }
     </style>
 </head>
 <body>
@@ -179,6 +184,7 @@
 
 let allGroups = [];
 let currentFilter = 'ALL';
+let isAdmin = false;
 const chartInstances = {};
 
 // ── Filter buttons ────────────────────────────────────────────────────────────
@@ -289,7 +295,12 @@ function buildCard(group) {
             ${triggerText.url ? `<div class="evidence-link"><a href="${esc(triggerText.url)}" target="_blank" rel="noopener">${esc(truncate(triggerText.url, 60))}</a></div>` : ''}
         </div>` : ''}
         ${ticker ? `<div class="chart-wrap"><canvas id="chart-${esc(group.groupKey)}"></canvas></div>` : ''}
-        <div id="ai-${esc(group.groupKey)}" class="ai-section" style="display:none;"></div>`;
+        <div id="ai-${esc(group.groupKey)}" class="ai-section" style="display:none;"></div>
+        ${isAdmin && group.reviewStatus === 'PENDING' ? `
+        <div class="card-actions">
+            <button class="btn-confirm" onclick="setReviewStatus('${esc(group.groupKey)}','USEFUL')">✓ Confirm</button>
+            <button class="btn-ignore"  onclick="setReviewStatus('${esc(group.groupKey)}','IGNORED')">✗ Ignore</button>
+        </div>` : ''}`;
 
     return card;
 }
@@ -429,8 +440,28 @@ function esc(s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// ── Review actions ────────────────────────────────────────────────────────────
+async function setReviewStatus(groupKey, status) {
+    try {
+        const r = await fetch(`/api/deal-groups/${encodeURIComponent(groupKey)}/manual-review`, {
+            method: 'PATCH',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status })
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        await loadData();
+    } catch (e) {
+        alert('Failed to update: ' + e.message);
+    }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
-loadData();
+fetch('/api/me', { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(me => { isAdmin = me.admin; })
+    .catch(() => {})
+    .finally(() => loadData());
 </script>
 </body>
 </html>
