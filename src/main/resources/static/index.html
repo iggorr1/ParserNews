@@ -5118,8 +5118,27 @@
         return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
-    // Auto-load confirmed companies on dashboard load
-    const _origLoadDashboard = typeof loadDashboard !== "undefined" ? loadDashboard : null;
+    // Check current user role and hide admin-only controls for viewer
+    fetch("/api/me").then(r => r.json()).then(me => {
+        if (!me.admin) {
+            // Hide write-action buttons for viewer role
+            const adminOnlyIds = [
+                "scanButton", "scanButtonTop", "dryRunButton", "dryRunButtonTop",
+                "fullRefreshButton", "settingsButton"
+            ];
+            adminOnlyIds.forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = "none";
+            });
+            // Hide Export Review Packet download link (admin only)
+            document.querySelectorAll('a[href*="review-packet"]').forEach(el => el.style.display = "none");
+            // Show viewer banner
+            const banner = document.createElement("div");
+            banner.style.cssText = "background:#1a2a1a;border:1px solid #2d4a2d;color:#7cb87c;padding:6px 14px;border-radius:6px;font-size:12px;display:inline-block;margin-left:8px";
+            banner.textContent = "👁 View-only mode";
+            document.querySelector(".header-actions, .actions")?.prepend(banner);
+        }
+    }).catch(() => {});
 
     loadDashboard();
     loadConfirmedCompanies();
