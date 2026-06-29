@@ -26,9 +26,10 @@ public class StockPriceController {
     @GetMapping("/api/price/{ticker}/history")
     public StockPriceService.PriceHistory history(
             @PathVariable String ticker,
-            @RequestParam(defaultValue = "3mo") String range
+            @RequestParam(defaultValue = "3mo") String range,
+            @RequestParam(required = false) String interval
     ) {
-        return stockPriceService.history(ticker, range)
+        return stockPriceService.history(ticker, range, interval)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND,
                         "Price history not available for ticker: " + ticker));
     }

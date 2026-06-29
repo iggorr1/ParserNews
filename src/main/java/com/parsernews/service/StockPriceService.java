@@ -11,17 +11,24 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class StockPriceService {
     private static final String YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart/";
-    private static final Duration CACHE_TTL = Duration.ofMinutes(5);
+    private static final Duration CACHE_TTL_DAILY   = Duration.ofMinutes(5);
+    private static final Duration CACHE_TTL_INTRADAY = Duration.ofMinutes(1);
+    private static final Set<String> INTRADAY_INTERVALS = Set.of("1m","2m","5m","15m","30m","60m","90m");
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
+    private static final ZoneId MARKET_TZ = ZoneId.of("America/New_York");
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
@@ -39,20 +46,27 @@ public class StockPriceService {
     public Optional<PriceResult> currentPrice(String ticker) {
         if (isUnknown(ticker)) return Optional.empty();
         CachedEntry<PriceResult> cached = priceCache.get(ticker);
-        if (cached != null && !cached.isStale()) return Optional.ofNullable(cached.value);
+        if (cached != null && !cached.isStale(false)) return Optional.ofNullable(cached.value);
         Optional<PriceResult> result = fetchPrice(ticker);
         priceCache.put(ticker, new CachedEntry<>(result.orElse(null)));
         return result;
     }
 
-    public Optional<PriceHistory> history(String ticker, String range) {
+    public Optional<PriceHistory> history(String ticker, String range, String interval) {
         if (isUnknown(ticker)) return Optional.empty();
-        String cacheKey = ticker + ":" + range;
+        String resolvedInterval = resolveInterval(range, interval);
+        String cacheKey = ticker + ":" + range + ":" + resolvedInterval;
+        boolean intraday = INTRADAY_INTERVALS.contains(resolvedInterval);
         CachedEntry<PriceHistory> cached = historyCache.get(cacheKey);
-        if (cached != null && !cached.isStale()) return Optional.ofNullable(cached.value);
-        Optional<PriceHistory> result = fetchHistory(ticker, range);
+        if (cached != null && !cached.isStale(intraday)) return Optional.ofNullable(cached.value);
+        Optional<PriceHistory> result = fetchHistory(ticker, range, resolvedInterval);
         historyCache.put(cacheKey, new CachedEntry<>(result.orElse(null)));
         return result;
+    }
+
+    private String resolveInterval(String range, String interval) {
+        if (interval != null && !interval.isBlank()) return interval;
+        return (range.endsWith("mo") || range.endsWith("y")) ? "1d" : "5m";
     }
 
     private Optional<PriceResult> fetchPrice(String ticker) {
@@ -74,9 +88,9 @@ public class StockPriceService {
         }
     }
 
-    private Optional<PriceHistory> fetchHistory(String ticker, String range) {
+    private Optional<PriceHistory> fetchHistory(String ticker, String range, String interval) {
         try {
-            String interval = range.endsWith("mo") || range.endsWith("y") ? "1d" : "1h";
+            boolean intraday = INTRADAY_INTERVALS.contains(interval);
             String url = YAHOO_BASE + ticker + "?interval=" + interval + "&range=" + range + "&includePrePost=false";
             String body = get(url);
             if (body == null) return Optional.empty();
@@ -97,8 +111,15 @@ public class StockPriceService {
                 long ts = timestamps.get(i).asLong(0);
                 JsonNode closeNode = closes.get(i);
                 if (ts == 0 || closeNode == null || closeNode.isNull()) continue;
-                LocalDate date = Instant.ofEpochSecond(ts).atZone(ZoneOffset.UTC).toLocalDate();
-                points.add(new PricePoint(date, closeNode.asDouble()));
+                if (intraday) {
+                    var dt = Instant.ofEpochSecond(ts).atZone(MARKET_TZ);
+                    String label = dt.format(TIME_FMT);
+                    LocalDate date = dt.toLocalDate();
+                    points.add(new PricePoint(date, closeNode.asDouble(), ts, label));
+                } else {
+                    LocalDate date = Instant.ofEpochSecond(ts).atZone(ZoneOffset.UTC).toLocalDate();
+                    points.add(new PricePoint(date, closeNode.asDouble(), ts, date.toString()));
+                }
             }
 
             return Optional.of(new PriceHistory(
@@ -161,7 +182,7 @@ public class StockPriceService {
     ) {
     }
 
-    public record PricePoint(LocalDate date, double close) {
+    public record PricePoint(LocalDate date, double close, long ts, String label) {
     }
 
     private static class CachedEntry<T> {
@@ -172,8 +193,9 @@ public class StockPriceService {
             this.value = value;
         }
 
-        boolean isStale() {
-            return Instant.now().isAfter(fetchedAt.plus(CACHE_TTL));
+        boolean isStale(boolean intraday) {
+            Duration ttl = intraday ? CACHE_TTL_INTRADAY : CACHE_TTL_DAILY;
+            return Instant.now().isAfter(fetchedAt.plus(ttl));
         }
     }
 }

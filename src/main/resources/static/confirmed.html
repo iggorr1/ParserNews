@@ -421,9 +421,11 @@ let isAdmin = false;
 let selectedGroupKey = null;
 const chartInstances = {};   // mini charts on cards
 let panelChart = null;       // chart inside side panel
-let panelHistoryPoints = []; // full 6mo data for range switching
-let panelNewsDate = null;    // news date of open group
+let panelHistoryPoints = []; // full 6mo daily data for range switching
+let panelNewsDate = null;    // news date (YYYY-MM-DD) of open group
+let panelNewsTs = null;      // news epoch seconds (for intraday marker)
 let panelDirection = 'flat'; // 'up' | 'down' | 'flat'
+let panelTicker = null;      // ticker of open group (for intraday re-fetch)
 let activeRange = '6M';      // current range selection
 
 // ── Filter buttons ────────────────────────────────────────────────────────────
@@ -706,30 +708,31 @@ async function openPanel(group) {
     }
 
     // ── Detail chart ──────────────────────────────────────────────────────────
-    if (hist?.points?.length) {
-        panelHistoryPoints = hist.points;
+    if (hist?.points?.length || ticker) {
+        panelHistoryPoints = hist?.points || [];
         panelNewsDate = newsDate;
+        panelNewsTs = group.sortInstant ? Math.floor(new Date(group.sortInstant).getTime() / 1000) : null;
         panelDirection = direction;
+        panelTicker = ticker;
         activeRange = '6M';
 
         const section = document.createElement('div');
         section.className = 'panel-section';
 
-        // Toolbar: label + range buttons + reset
+        const RANGES = ['10M','1H','1D','1W','1M','3M','6M'];
         const toolbar = document.createElement('div');
         toolbar.className = 'chart-toolbar';
         toolbar.innerHTML = `
             <span class="panel-section-label" style="margin:0;">Chart</span>
-            ${['1W','2W','1M','3M','6M'].map(r =>
+            ${RANGES.map(r =>
                 `<button class="chart-range-btn${r==='6M'?' active':''}" data-range="${r}">${r}</button>`
             ).join('')}
             <button class="chart-reset-btn" id="chartResetZoom">Reset zoom</button>`;
         section.appendChild(toolbar);
 
         const hint = document.createElement('div');
-        hint.className = 'chart-hint';
-        hint.textContent = 'Scroll to zoom · Drag to pan';
         hint.style.cssText = 'font-size:11px;color:var(--muted);text-align:right;margin-top:2px;';
+        hint.textContent = 'Scroll to zoom · Drag to pan';
         section.appendChild(hint);
 
         const wrap = document.createElement('div');
@@ -741,15 +744,15 @@ async function openPanel(group) {
         section.appendChild(wrap);
         body.appendChild(section);
 
-        renderPanelChart(canvas, '6M');
+        await renderPanelChart(canvas, '6M');
 
         toolbar.querySelectorAll('.chart-range-btn').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
                 toolbar.querySelectorAll('.chart-range-btn').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
                 activeRange = btn.dataset.range;
                 const c = document.getElementById('panelChartCanvas');
-                if (c) renderPanelChart(c, activeRange);
+                if (c) await renderPanelChart(c, activeRange);
             });
         });
 
@@ -826,26 +829,69 @@ function closePanel() {
     if (panelChart) { panelChart.destroy(); panelChart = null; }
 }
 
-// ── Panel chart: filter by range then draw ────────────────────────────────────
-function renderPanelChart(canvas, range) {
+// ── Panel chart: fetch intraday or filter daily, then draw ───────────────────
+const INTRADAY_RANGES = { '10M': { interval: '1m', minutes: 10 }, '1H': { interval: '5m', minutes: 60 }, '1D': { interval: '5m', minutes: 390 } };
+
+async function renderPanelChart(canvas, range) {
     if (panelChart) { panelChart.destroy(); panelChart = null; }
 
-    const pts = filterByRange(panelHistoryPoints, range);
-    if (!pts.length) return;
+    let pts;
+    const intradayCfg = INTRADAY_RANGES[range];
 
-    const labels = pts.map(p => p.date);
+    if (intradayCfg && panelTicker) {
+        // show loading state
+        canvas.parentElement.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center;">Loading…</div>';
+        const newWrap = document.createElement('div');
+        newWrap.className = 'detail-chart-wrap';
+        newWrap.id = 'panelChartWrap';
+        const newCanvas = document.createElement('canvas');
+        newCanvas.id = 'panelChartCanvas';
+        newWrap.appendChild(newCanvas);
+        canvas.parentElement.replaceWith(newWrap);
+        canvas = newCanvas;
+
+        try {
+            const hist = await fetchJson(`/api/price/${encodeURIComponent(panelTicker)}/history?range=1d&interval=${intradayCfg.interval}`);
+            pts = hist?.points || [];
+            // filter to last N minutes by ts
+            if (pts.length && intradayCfg.minutes < 390) {
+                const nowSec = Date.now() / 1000;
+                const cutSec = nowSec - intradayCfg.minutes * 60;
+                pts = pts.filter(p => p.ts >= cutSec);
+            }
+        } catch { pts = []; }
+    } else {
+        pts = filterByDays(panelHistoryPoints, range);
+    }
+
+    if (!pts.length) {
+        const wrap = document.getElementById('panelChartWrap');
+        if (wrap) wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:16px;text-align:center;">No data for this range</div>';
+        return;
+    }
+
+    const labels = pts.map(p => p.label || p.date);
     const closes = pts.map(p => p.close);
-    const newsIdx = panelNewsDate ? labels.findIndex(d => d >= panelNewsDate) : -1;
+
+    // News marker: find closest point to panelNewsTs (intraday) or panelNewsDate (daily)
+    let newsIdx = -1;
+    if (intradayCfg && panelNewsTs) {
+        newsIdx = pts.findIndex(p => p.ts >= panelNewsTs);
+        if (newsIdx < 0 && panelNewsTs < (pts[pts.length - 1]?.ts ?? 0)) newsIdx = pts.length - 1;
+    } else if (panelNewsDate) {
+        newsIdx = pts.findIndex(p => (p.label || p.date) >= panelNewsDate);
+    }
+
     panelChart = buildChart(canvas, labels, closes, newsIdx, 11, true, panelDirection);
 }
 
-function filterByRange(pts, range) {
+function filterByDays(pts, range) {
     if (!pts.length) return pts;
     const days = { '1W': 7, '2W': 14, '1M': 30, '3M': 90, '6M': 180 }[range] ?? 180;
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
     const cutStr = cutoff.toISOString().substring(0, 10);
-    return pts.filter(p => p.date >= cutStr);
+    return pts.filter(p => (p.label || p.date) >= cutStr);
 }
 
 // ── Chart builder ─────────────────────────────────────────────────────────────
