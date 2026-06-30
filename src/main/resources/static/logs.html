@@ -169,10 +169,15 @@
         if (search) params.set('search', search);
 
         try {
-            const r = await fetch(`/api/admin/logs?${params}`, { credentials: 'same-origin' });
-            if (r.status === 401 || r.status === 403) {
+            const r = await fetch(`/api/admin/logs?${params}`, { credentials: 'include' });
+            if (r.status === 401) {
                 document.getElementById('log-container').innerHTML =
-                    '<div class="empty">⛔ Access denied — ADMIN role required.</div>';
+                    '<div class="empty">🔐 Not authenticated — <a href="/" style="color:var(--accent)">log in</a> then return here.</div>';
+                return;
+            }
+            if (r.status === 403) {
+                document.getElementById('log-container').innerHTML =
+                    '<div class="empty">⛔ Access denied (403) — ADMIN role required. You may be logged in as a viewer-only user.</div>';
                 return;
             }
             if (!r.ok) throw new Error('HTTP ' + r.status);
