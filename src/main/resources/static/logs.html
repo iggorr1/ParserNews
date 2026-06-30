@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Logs — ParserNews</title>
+    <style>
+        :root {
+            --bg: #070b10; --surface: #0d131b; --surface-2: #121a24;
+            --border: #243244; --text: #edf4f8; --muted: #91a0b4;
+            --accent: #38d6c9; --success: #38d18a; --warning: #d8a73e;
+            --danger: #f07272; --info: #5b9cf6;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg); color: var(--text);
+            font-family: "JetBrains Mono", "Fira Code", "Cascadia Code", monospace;
+            font-size: 12px; line-height: 1.5; min-height: 100vh;
+        }
+        header {
+            background: rgba(8,13,20,0.95);
+            border-bottom: 1px solid var(--border);
+            padding: 14px 20px; display: flex; align-items: center;
+            gap: 16px; position: sticky; top: 0; z-index: 10;
+            backdrop-filter: blur(12px);
+        }
+        header h1 { font-size: 15px; font-weight: 600; letter-spacing: .02em; }
+        header .links { margin-left: auto; display: flex; gap: 12px; }
+        header a { color: var(--accent); text-decoration: none; font-size: 12px; }
+        header a:hover { text-decoration: underline; }
+        .toolbar {
+            display: flex; align-items: center; flex-wrap: wrap;
+            gap: 8px; padding: 10px 20px;
+            background: var(--surface); border-bottom: 1px solid var(--border);
+            position: sticky; top: 49px; z-index: 9;
+        }
+        .toolbar input[type=text] {
+            background: var(--surface-2); border: 1px solid var(--border);
+            color: var(--text); padding: 5px 10px; border-radius: 5px;
+            font-size: 12px; font-family: inherit; width: 220px;
+            outline: none;
+        }
+        .toolbar input[type=text]:focus { border-color: var(--accent); }
+        button {
+            background: var(--surface-2); border: 1px solid var(--border);
+            color: var(--text); padding: 5px 12px; border-radius: 5px;
+            cursor: pointer; font-size: 12px; font-family: inherit;
+            transition: background .15s;
+        }
+        button:hover { background: rgba(56,214,201,0.12); border-color: var(--accent); }
+        button.active { background: rgba(56,214,201,0.15); border-color: var(--accent); color: var(--accent); }
+        button.danger { border-color: var(--danger); color: var(--danger); }
+        button.danger:hover { background: rgba(240,114,114,0.12); }
+        .level-btn[data-level="ERROR"].active { background: rgba(240,114,114,.18); border-color: var(--danger); color: var(--danger); }
+        .level-btn[data-level="WARN"].active  { background: rgba(216,167,62,.18); border-color: var(--warning); color: var(--warning); }
+        .level-btn[data-level="INFO"].active  { background: rgba(56,214,201,.15); border-color: var(--accent); color: var(--accent); }
+        .level-btn[data-level="DEBUG"].active { background: rgba(91,156,246,.15); border-color: var(--info); color: var(--info); }
+        .sep { color: var(--border); font-size: 16px; }
+        .status { color: var(--muted); font-size: 11px; margin-left: auto; }
+        .auto-badge {
+            font-size: 10px; padding: 2px 7px; border-radius: 10px;
+            background: rgba(56,214,201,.15); color: var(--accent);
+            border: 1px solid rgba(56,214,201,.3);
+        }
+        #log-container {
+            padding: 4px 0; overflow-y: auto;
+            height: calc(100vh - 100px);
+        }
+        .log-row {
+            display: grid;
+            grid-template-columns: 80px 46px 140px 1fr;
+            gap: 0 8px;
+            padding: 2px 20px;
+            border-bottom: 1px solid rgba(36,50,68,.3);
+            word-break: break-word;
+        }
+        .log-row:hover { background: var(--surface); }
+        .ts { color: var(--muted); white-space: nowrap; }
+        .lv { font-weight: 700; text-align: center; }
+        .lv.ERROR { color: var(--danger); }
+        .lv.WARN  { color: var(--warning); }
+        .lv.INFO  { color: var(--accent); }
+        .lv.DEBUG { color: var(--info); }
+        .lv.TRACE { color: var(--muted); }
+        .lg { color: #6b82a0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .msg { color: var(--text); }
+        .msg.error { color: #f9a0a0; }
+        .msg.warn  { color: #e8cb80; }
+        .empty {
+            text-align: center; color: var(--muted);
+            padding: 60px 20px; font-size: 13px;
+        }
+        .highlight { background: rgba(216,167,62,.25); border-radius: 2px; }
+    </style>
+</head>
+<body>
+<header>
+    <h1>📋 Application Logs</h1>
+    <span id="auto-badge" class="auto-badge" style="display:none">● LIVE</span>
+    <div class="links">
+        <a href="/confirmed.html">Confirmed</a>
+        <a href="/">Dashboard</a>
+    </div>
+</header>
+
+<div class="toolbar">
+    <input type="text" id="search" placeholder="Search message / logger…">
+    <span class="sep">|</span>
+    <button class="level-btn active" data-level="">ALL</button>
+    <button class="level-btn" data-level="ERROR">ERROR</button>
+    <button class="level-btn" data-level="WARN">WARN</button>
+    <button class="level-btn" data-level="INFO">INFO</button>
+    <button class="level-btn" data-level="DEBUG">DEBUG</button>
+    <span class="sep">|</span>
+    <button id="autoBtn" onclick="toggleAuto()">▶ Auto-refresh</button>
+    <button onclick="loadLogs()">↺ Refresh</button>
+    <button class="danger" onclick="clearLogs()">✕ Clear</button>
+    <span class="sep">|</span>
+    <select id="limitSel" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:5px 8px;border-radius:5px;font-size:12px;font-family:inherit;">
+        <option value="100">Last 100</option>
+        <option value="200" selected>Last 200</option>
+        <option value="500">Last 500</option>
+    </select>
+    <span class="status" id="status">—</span>
+</div>
+
+<div id="log-container">
+    <div class="empty">Loading logs…</div>
+</div>
+
+<script>
+    let activeLevel = '';
+    let autoTimer = null;
+    let lastCount = 0;
+
+    document.querySelectorAll('.level-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            activeLevel = btn.dataset.level;
+            loadLogs();
+        });
+    });
+
+    document.getElementById('search').addEventListener('input', debounce(loadLogs, 300));
+    document.getElementById('limitSel').addEventListener('change', loadLogs);
+
+    function toggleAuto() {
+        if (autoTimer) {
+            clearInterval(autoTimer);
+            autoTimer = null;
+            document.getElementById('autoBtn').textContent = '▶ Auto-refresh';
+            document.getElementById('autoBtn').classList.remove('active');
+            document.getElementById('auto-badge').style.display = 'none';
+        } else {
+            autoTimer = setInterval(loadLogs, 3000);
+            document.getElementById('autoBtn').textContent = '⏸ Auto-refresh';
+            document.getElementById('autoBtn').classList.add('active');
+            document.getElementById('auto-badge').style.display = '';
+            loadLogs();
+        }
+    }
+
+    async function loadLogs() {
+        const search = document.getElementById('search').value.trim();
+        const limit  = document.getElementById('limitSel').value;
+        const params = new URLSearchParams({ limit });
+        if (activeLevel) params.set('level', activeLevel);
+        if (search) params.set('search', search);
+
+        try {
+            const r = await fetch(`/api/admin/logs?${params}`, { credentials: 'same-origin' });
+            if (r.status === 401 || r.status === 403) {
+                document.getElementById('log-container').innerHTML =
+                    '<div class="empty">⛔ Access denied — ADMIN role required.</div>';
+                return;
+            }
+            if (!r.ok) throw new Error('HTTP ' + r.status);
+            const logs = await r.json();
+            render(logs, search);
+            const now = new Date().toLocaleTimeString();
+            document.getElementById('status').textContent =
+                `${logs.length} entries · refreshed ${now}`;
+        } catch (e) {
+            document.getElementById('status').textContent = 'Error: ' + e.message;
+        }
+    }
+
+    function render(logs, search) {
+        if (!logs.length) {
+            document.getElementById('log-container').innerHTML =
+                '<div class="empty">No log entries match the current filters.</div>';
+            return;
+        }
+
+        const wasAtBottom = isAtBottom();
+        const html = logs.map(e => {
+            const time = new Date(e.ts).toLocaleTimeString('en-US', { hour12: false });
+            const msgClass = e.level === 'ERROR' ? 'msg error' : e.level === 'WARN' ? 'msg warn' : 'msg';
+            const msg = search ? highlight(esc(e.message), search) : esc(e.message);
+            const lg  = search ? highlight(esc(e.logger),  search) : esc(e.logger);
+            return `<div class="log-row">
+                <span class="ts">${time}</span>
+                <span class="lv ${e.level}">${e.level}</span>
+                <span class="lg" title="${esc(e.logger)}">${lg}</span>
+                <span class="${msgClass}">${msg}</span>
+            </div>`;
+        }).join('');
+
+        const container = document.getElementById('log-container');
+        container.innerHTML = html;
+
+        // auto-scroll to bottom when new entries arrive
+        if (wasAtBottom || logs.length !== lastCount) {
+            container.scrollTop = container.scrollHeight;
+        }
+        lastCount = logs.length;
+    }
+
+    async function clearLogs() {
+        if (!confirm('Clear all in-memory logs?')) return;
+        await fetch('/api/admin/logs', { method: 'DELETE', credentials: 'same-origin' });
+        loadLogs();
+    }
+
+    function isAtBottom() {
+        const c = document.getElementById('log-container');
+        return c.scrollHeight - c.scrollTop - c.clientHeight < 40;
+    }
+
+    function esc(s) {
+        return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    function highlight(text, search) {
+        if (!search) return text;
+        const re = new RegExp('(' + search.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+        return text.replace(re, '<mark class="highlight">$1</mark>');
+    }
+
+    function debounce(fn, ms) {
+        let t;
+        return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
+    }
+
+    loadLogs();
+</script>
+</body>
+</html>
