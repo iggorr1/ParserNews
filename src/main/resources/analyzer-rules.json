@@ -18,7 +18,11 @@
     { "keyword": "sale to", "score": 8 },
     { "keyword": "merger", "score": 8 },
     { "keyword": "strategic review", "score": 8 },
-    { "keyword": "premium of", "score": 10 }
+    { "keyword": "premium of", "score": 10 },
+    { "keyword": "sc to-t", "score": 35 },
+    { "keyword": "defm14a", "score": 35 },
+    { "keyword": "prem14a", "score": 25 },
+    { "keyword": "sc to-i", "score": 20 }
   ],
   "negativeRules": [
     { "keyword": "non-binding proposal", "score": -20 },

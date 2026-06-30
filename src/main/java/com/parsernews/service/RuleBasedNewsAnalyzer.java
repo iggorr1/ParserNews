@@ -148,6 +148,16 @@ public class RuleBasedNewsAnalyzer {
         if (text.contains("strategic alternatives")) {
             return EventType.STRATEGIC_ALTERNATIVES;
         }
+        // SEC form names in EDGAR filings — map to deal types directly
+        if (text.contains("sc to-t") || text.contains("sc to-t/a")) {
+            return EventType.TENDER_OFFER;
+        }
+        if (text.contains("defm14a") || text.contains("prem14a")) {
+            return EventType.MERGER_CONFIRMED;
+        }
+        if (text.contains("sc to-i") || text.contains("sc to-i/a")) {
+            return EventType.TENDER_OFFER;
+        }
         if (text.contains("tender offer")) {
             return EventType.TENDER_OFFER;
         }
@@ -216,9 +226,13 @@ public class RuleBasedNewsAnalyzer {
                 || text.contains("outstanding shares")
                 || text.contains("will no longer be publicly traded");
 
+        // SEC EDGAR filings are authoritative — treat as confirmed even without full text
+        boolean secFiling = text.contains("sc to-t") || text.contains("defm14a") || text.contains("prem14a");
+
         return (dealCommitment && shareholderConsideration)
                 || (dealCommitment && publicCompanyContext)
-                || eventType == EventType.TAKE_PRIVATE_CONFIRMED;
+                || eventType == EventType.TAKE_PRIVATE_CONFIRMED
+                || (secFiling && (eventType == EventType.TENDER_OFFER || eventType == EventType.MERGER_CONFIRMED));
     }
 
     private boolean isConfirmedDealText(String text) {

@@ -134,17 +134,29 @@ public class RssNewsParser implements NewsSourceParser {
         if (source.isBlank()) {
             source = sourceFromUrl(feedUrl);
         }
+        // Support both RSS 2.0 (<item>) and Atom 1.0 (<entry>)
         NodeList items = document.getElementsByTagName("item");
+        boolean isAtom = items.getLength() == 0;
+        if (isAtom) {
+            items = document.getElementsByTagName("entry");
+        }
         List<NewsEvent> events = new ArrayList<>();
         int limit = Math.min(items.getLength(), settings.maxItemsPerFeed());
 
         for (int index = 0; index < limit; index++) {
             Element item = (Element) items.item(index);
             String headline = cleanText(textOfFirst(item, "title", ""));
-            String body = cleanText(textOfFirst(item, "description", ""));
-            String link = cleanText(textOfFirst(item, "link", feedUrl));
+            String body = cleanText(isAtom
+                    ? textOfFirst(item, "summary", textOfFirst(item, "content", ""))
+                    : textOfFirst(item, "description", ""));
+            String link = isAtom
+                    ? atomLink(item, feedUrl)
+                    : cleanText(textOfFirst(item, "link", feedUrl));
+            String pubDate = isAtom
+                    ? textOfFirst(item, "updated", textOfFirst(item, "published", ""))
+                    : textOfFirst(item, "pubDate", "");
             String articleBody = fetchFullArticleText(link, headline + " " + body).orElse(body);
-            Instant publishedAt = parsePublishedAt(textOfFirst(item, "pubDate", ""));
+            Instant publishedAt = parsePublishedAt(pubDate);
             String companyName = guessCompanyName(headline);
             String ticker = guessTicker(headline + " " + articleBody, companyName);
 
@@ -249,10 +261,21 @@ public class RssNewsParser implements NewsSourceParser {
         }
     }
 
+    private static final java.util.regex.Pattern SEC_FORM_TITLE =
+            java.util.regex.Pattern.compile(
+                    "^(SC TO-T(?:/A)?|SC TO-I(?:/A)?|DEFM14A|PREM14A|DEFC14A|8-K|425|S-4)\\s+-\\s+(.+?)(?:\\s*\\(\\d+\\).*)?$",
+                    java.util.regex.Pattern.CASE_INSENSITIVE);
+
     private String guessCompanyName(String headline) {
         String trimmed = headline.trim();
         if (trimmed.isBlank()) {
             return "Unknown Company";
+        }
+        // SEC EDGAR form titles: "SC TO-T - Company Name (CIK) (date)"
+        Matcher secMatcher = SEC_FORM_TITLE.matcher(trimmed);
+        if (secMatcher.matches()) {
+            String name = secMatcher.group(2).trim();
+            return name.isBlank() ? "Unknown Company" : name;
         }
         // Strip trailing " - Source" or " | Source" suffixes common in Google News headlines
         trimmed = trimmed.replaceAll("\\s+[-|]\\s+[^-|]{2,40}$", "").trim();
@@ -267,6 +290,20 @@ public class RssNewsParser implements NewsSourceParser {
             }
         }
         return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80).trim();
+    }
+
+    private String atomLink(Element entry, String fallback) {
+        NodeList links = entry.getElementsByTagName("link");
+        for (int i = 0; i < links.getLength(); i++) {
+            org.w3c.dom.Node node = links.item(i);
+            if (node instanceof Element link) {
+                String href = link.getAttribute("href");
+                if (href != null && !href.isBlank()) return href.trim();
+                String text = link.getTextContent();
+                if (text != null && !text.isBlank()) return text.trim();
+            }
+        }
+        return fallback;
     }
 
     private String guessTicker(String text, String companyName) {
