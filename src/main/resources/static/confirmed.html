@@ -954,7 +954,20 @@ function buildChart(canvas, labels, closes, newsIdx, tickFontSize, enableZoom = 
             animation: false,
             plugins: {
                 legend: { display: false },
-                tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } },
+                tooltip: {
+                    mode: 'index',
+                    intersect: false,
+                    backgroundColor: 'rgba(13,19,27,0.95)',
+                    borderColor: 'rgba(36,50,68,0.8)',
+                    borderWidth: 1,
+                    titleColor: '#91a0b4',
+                    bodyColor: '#edf4f8',
+                    padding: 8,
+                    callbacks: {
+                        title: ctx => ctx[0]?.label ?? '',
+                        label: ctx => `$${ctx.parsed.y.toFixed(2)}`
+                    }
+                },
                 ...zoomPlugin
             },
             scales: {
@@ -970,24 +983,55 @@ function buildChart(canvas, labels, closes, newsIdx, tickFontSize, enableZoom = 
         }
     });
 
+    // Crosshair — vertical line following the active tooltip point
+    Chart.register({
+        id: `crosshair-${canvas.id || Math.random()}`,
+        afterDraw(c) {
+            if (c !== chart) return;
+            const active = c.tooltip._active;
+            if (!active || !active.length) return;
+            const { ctx, chartArea } = c;
+            const x = active[0].element.x;
+            ctx.save();
+            ctx.strokeStyle = 'rgba(237,244,248,0.18)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x, chartArea.top);
+            ctx.lineTo(x, chartArea.bottom);
+            ctx.stroke();
+            ctx.restore();
+        }
+    });
+
     if (newsIdx >= 0) {
-        const pluginId = `news-line-${canvas.id || Math.random()}`;
         Chart.register({
-            id: pluginId,
+            id: `news-line-${canvas.id || Math.random()}`,
             afterDraw(c) {
                 if (c !== chart) return;
                 const { ctx, chartArea, scales } = c;
                 const x = scales.x.getPixelForValue(newsIdx);
                 if (x < chartArea.left || x > chartArea.right) return;
                 ctx.save();
-                ctx.strokeStyle = 'rgba(216,167,62,0.85)';
+
+                // Vertical dashed line
+                ctx.strokeStyle = 'rgba(216,167,62,0.9)';
                 ctx.lineWidth = 1.5;
                 ctx.setLineDash([4, 4]);
                 ctx.beginPath(); ctx.moveTo(x, chartArea.top); ctx.lineTo(x, chartArea.bottom); ctx.stroke();
                 ctx.setLineDash([]);
-                ctx.fillStyle = 'var(--warning)';
-                ctx.font = `${tickFontSize}px Inter, sans-serif`;
-                ctx.fillText('news', x + 3, chartArea.top + 12);
+
+                // Dot at the news price
+                const priceY = scales.y.getPixelForValue(closes[newsIdx]);
+                ctx.fillStyle = '#d8a73e';
+                ctx.beginPath(); ctx.arc(x, priceY, 5, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#070b10'; ctx.lineWidth = 1.5; ctx.stroke();
+
+                // "news" label — flip left if near right edge
+                ctx.fillStyle = '#d8a73e';
+                ctx.font = `bold ${tickFontSize}px Inter, sans-serif`;
+                const labelX = x + 6 + 34 < chartArea.right ? x + 6 : x - 38;
+                ctx.fillText('news', labelX, chartArea.top + 14);
+
                 ctx.restore();
             }
         });
