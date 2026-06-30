@@ -47,8 +47,16 @@
         }
         header h1 { font-size: 20px; }
         header .subtitle { color: var(--muted); font-size: 13px; }
-        header a { color: var(--accent); text-decoration: none; font-size: 13px; margin-left: auto; }
-        header a:hover { text-decoration: underline; }
+        .app-nav { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+        .app-nav a {
+            color: var(--accent); text-decoration: none; font-size: 13px;
+            padding: 5px 12px; border-radius: 6px;
+            border: 1px solid transparent;
+            transition: border-color .15s, background .15s;
+        }
+        .app-nav a:hover { border-color: var(--border); background: var(--accent-soft); }
+        .app-nav a.logout { color: var(--muted); }
+        .app-nav a.logout:hover { color: var(--danger); border-color: rgba(240,114,114,.3); background: rgba(240,114,114,.08); }
         main { padding: 24px 28px 48px; max-width: 1400px; }
         .topbar {
             display: flex;
@@ -373,7 +381,11 @@
         <h1>📋 Confirmed via Telegram</h1>
         <div class="subtitle">Click a deal to see price chart, AI analysis, and evidence</div>
     </div>
-    <a href="/">← Dashboard</a>
+    <nav class="app-nav">
+        <a href="/">Dashboard</a>
+        <a href="/logs.html">Logs</a>
+        <a href="/logout" class="logout">Logout</a>
+    </nav>
 </header>
 <main>
     <div class="topbar">

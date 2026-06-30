@@ -52,7 +52,19 @@
             border-bottom: 1px solid rgba(36, 50, 68, 0.72);
             padding: 22px 28px;
             backdrop-filter: blur(18px);
+            display: flex;
+            align-items: center;
         }
+        .app-nav { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .app-nav a {
+            color: var(--accent); text-decoration: none; font-size: 13px;
+            padding: 5px 12px; border-radius: 6px;
+            border: 1px solid transparent;
+            transition: border-color .15s, background .15s;
+        }
+        .app-nav a:hover { border-color: var(--border); background: var(--accent-soft); }
+        .app-nav a.logout { color: var(--muted); }
+        .app-nav a.logout:hover { color: var(--danger); border-color: rgba(240,114,114,.3); background: rgba(240,114,114,.08); }
 
         h1 {
             margin: 0 0 5px;
@@ -1068,7 +1080,11 @@
         <h1>ParserNews Monitoring Dashboard</h1>
         <div class="muted">Research-first M&A / takeover news monitoring. No trading, no broker integration.</div>
     </div>
-    <a href="/confirmed.html" style="margin-left:auto;padding:7px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;color:var(--accent);text-decoration:none;font-size:13px;white-space:nowrap;">📋 Confirmed via Telegram</a>
+    <nav class="app-nav">
+        <a href="/confirmed.html">Confirmed</a>
+        <a href="/logs.html">Logs</a>
+        <a href="/logout" class="logout">Logout</a>
+    </nav>
 </header>
 <main>
     <section class="topbar">
