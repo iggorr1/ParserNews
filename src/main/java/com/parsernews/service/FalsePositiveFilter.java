@@ -9,11 +9,15 @@ import java.util.Locale;
 public class FalsePositiveFilter {
     private static final List<String> DEBT_TENDER_TERMS = List.of(
             "senior notes",
+            "senior secured notes",
+            "unsecured notes",
+            "convertible notes",
             "notes due",
             "debt securities",
             "bond",
             "bonds",
             "debentures",
+            "indenture",
             "credit facility",
             "term loan",
             "exchange offer",
@@ -25,6 +29,10 @@ public class FalsePositiveFilter {
             "acquisition of assets",
             "acquires assets",
             "acquires the assets",
+            "acquires minority stake",
+            "acquires minority interest",
+            "minority stake",
+            "strategic investment in",
             "brand acquisition",
             "acquires brand",
             "franchise acquisition",
@@ -49,11 +57,15 @@ public class FalsePositiveFilter {
             "completed acquisition",
             "completes acquisition",
             "private placement",
+            "private placements",
             "public offering",
+            "public offerings",
             "registered direct offering",
+            "registered direct offerings",
             "credit facility",
             "financing agreement",
-            "joint venture"
+            "joint venture",
+            "joint ventures"
     );
 
     public boolean isDebtTenderOffer(String text) {

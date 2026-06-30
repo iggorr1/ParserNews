@@ -36,7 +36,8 @@ class CandidateRecomputeServiceTest {
 
         CandidateRecomputeService.RecomputeSummary summary = service.recomputeCandidates();
 
-        assertThat(event.getCandidateScore()).isEqualTo(90);
+        // "acquired by" + "all-cash transaction" = 2 × 90 = 180
+        assertThat(event.getCandidateScore()).isEqualTo(180);
         assertThat(event.getCandidateStrength()).isEqualTo(CandidateStrength.HIGH);
         assertThat(event.getCandidateReason()).contains("HIGH");
         assertThat(event.isAlertEligible()).isTrue();

@@ -15,8 +15,9 @@ class CandidateScoringServiceTest {
                 "The company will be acquired by Buyer LLC."
         );
 
+        // "merger agreement" + "acquired by" = 2 × 90 = 180
         assertThat(score.strength()).isEqualTo(CandidateStrength.HIGH);
-        assertThat(score.score()).isEqualTo(90);
+        assertThat(score.score()).isEqualTo(180);
         assertThat(score.reason()).contains("HIGH");
     }
 
@@ -38,8 +39,9 @@ class CandidateScoringServiceTest {
                 "The company is exploring sale options after interest from sponsors."
         );
 
+        // "rumor" + "exploring sale" + "interest from" = 3 × 30 = 90, strength stays LOW
         assertThat(score.strength()).isEqualTo(CandidateStrength.LOW);
-        assertThat(score.score()).isEqualTo(30);
+        assertThat(score.score()).isEqualTo(90);
     }
 
     @Test
@@ -72,7 +74,8 @@ class CandidateScoringServiceTest {
                 "The company entered into a definitive agreement."
         );
 
+        // "merger agreement" + "definitive agreement" = 2×90 + "rumor"×10 = 190, HIGH dominates
         assertThat(score.strength()).isEqualTo(CandidateStrength.HIGH);
-        assertThat(score.score()).isEqualTo(90);
+        assertThat(score.score()).isEqualTo(190);
     }
 }

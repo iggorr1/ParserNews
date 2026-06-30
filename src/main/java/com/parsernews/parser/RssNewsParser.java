@@ -3,6 +3,7 @@ package com.parsernews.parser;
 import com.parsernews.config.RssSettings;
 import com.parsernews.model.NewsEvent;
 import com.parsernews.service.RssFeedHealthService;
+import com.parsernews.service.SecCompanyLookupService;
 import com.parsernews.util.ArticleTextCleaner;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -26,6 +27,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Component
@@ -38,19 +40,27 @@ public class RssNewsParser implements NewsSourceParser {
     private final RssSettings settings;
     private final HttpClient httpClient;
     private final RssFeedHealthService healthService;
+    private final SecCompanyLookupService companyLookupService;
 
     @Autowired
-    public RssNewsParser(RssSettings settings, RssFeedHealthService healthService) {
+    public RssNewsParser(RssSettings settings, RssFeedHealthService healthService,
+                         SecCompanyLookupService companyLookupService) {
         this(settings, healthService, HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(settings.timeoutSeconds()))
                 .followRedirects(HttpClient.Redirect.NORMAL)
-                .build());
+                .build(), companyLookupService);
     }
 
     RssNewsParser(RssSettings settings, RssFeedHealthService healthService, HttpClient httpClient) {
+        this(settings, healthService, httpClient, null);
+    }
+
+    RssNewsParser(RssSettings settings, RssFeedHealthService healthService, HttpClient httpClient,
+                  SecCompanyLookupService companyLookupService) {
         this.settings = settings;
         this.healthService = healthService;
         this.httpClient = httpClient;
+        this.companyLookupService = companyLookupService;
     }
 
     @Override
@@ -136,7 +146,7 @@ public class RssNewsParser implements NewsSourceParser {
             String articleBody = fetchFullArticleText(link, headline + " " + body).orElse(body);
             Instant publishedAt = parsePublishedAt(textOfFirst(item, "pubDate", ""));
             String companyName = guessCompanyName(headline);
-            String ticker = guessTicker(headline + " " + articleBody);
+            String ticker = guessTicker(headline + " " + articleBody, companyName);
 
             if (!headline.isBlank()) {
                 events.add(new NewsEvent(
@@ -244,22 +254,38 @@ public class RssNewsParser implements NewsSourceParser {
         if (trimmed.isBlank()) {
             return "Unknown Company";
         }
+        // Strip trailing " - Source" or " | Source" suffixes common in Google News headlines
+        trimmed = trimmed.replaceAll("\\s+[-|]\\s+[^-|]{2,40}$", "").trim();
         String lower = trimmed.toLowerCase(Locale.ROOT);
-        int announcesIndex = lower.indexOf(" announces ");
-        if (announcesIndex > 0) {
-            return trimmed.substring(0, announcesIndex).trim();
-        }
-        int entersIndex = lower.indexOf(" enters ");
-        if (entersIndex > 0) {
-            return trimmed.substring(0, entersIndex).trim();
+        for (String marker : List.of(
+                " announces ", " enters ", " signs ", " reports ",
+                " to be acquired", " agrees to be ", " will be acquired",
+                " completes ", " closes ", " reaches ")) {
+            int idx = lower.indexOf(marker);
+            if (idx > 2) {
+                return trimmed.substring(0, idx).trim();
+            }
         }
         return trimmed.length() <= 80 ? trimmed : trimmed.substring(0, 80).trim();
     }
 
-    private String guessTicker(String text) {
+    private String guessTicker(String text, String companyName) {
         java.util.regex.Matcher matcher = EXCHANGE_TICKER.matcher(text);
         if (matcher.find()) {
             return matcher.group(1).replace(".", "-").toUpperCase(Locale.ROOT);
+        }
+        if (companyLookupService != null
+                && companyName != null
+                && !companyName.isBlank()
+                && !companyName.equals("Unknown Company")
+                && companyName.length() >= 10) {
+            try {
+                return companyLookupService.findBestMatch(null, companyName)
+                        .map(SecCompanyLookupService.CompanyLookupMatch::ticker)
+                        .orElse("UNKNOWN");
+            } catch (Exception ignored) {
+                // SEC lookup unavailable — fall through to UNKNOWN
+            }
         }
         return "UNKNOWN";
     }
