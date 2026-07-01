@@ -4,6 +4,7 @@ import com.parsernews.model.DealRelevance;
 import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.DealGroupReviewEntity;
 import com.parsernews.persistence.DealGroupReviewRepository;
+import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
 import com.parsernews.web.SignalInboxController.UnifiedPriority;
 import org.slf4j.Logger;
@@ -25,6 +26,15 @@ public class AutoDealGroupDispatchService {
     private static final Set<AiReviewVerdict> DISPATCH_VERDICTS = Set.of(
             AiReviewVerdict.GOOD_SIGNAL,
             AiReviewVerdict.NEEDS_HUMAN_REVIEW
+    );
+
+    // Terminal negative verdicts — auto-mark IGNORED so they never re-appear in dispatch runs
+    private static final Set<AiReviewVerdict> TERMINAL_VERDICTS = Set.of(
+            AiReviewVerdict.PRIVATE_COMPANY,
+            AiReviewVerdict.NOT_TRADABLE,
+            AiReviewVerdict.LATE_STAGE_UPDATE,
+            AiReviewVerdict.FALSE_POSITIVE,
+            AiReviewVerdict.DUPLICATE_OR_UPDATE
     );
 
     private static final int MAX_AI_PER_RUN = 3;
@@ -107,9 +117,10 @@ public class AutoDealGroupDispatchService {
                 .filter(this::passesQualityGate)
                 .toList();
 
+        if (candidates.isEmpty()) return;
         log.info("Dispatch run: {} candidate(s) after quality gate", candidates.size());
 
-        int aiRan = 0;
+        int aiRan = 0, dispatched = 0, autoIgnored = 0, pending = 0;
         for (DealGroupingService.DealGroupResponse group : candidates) {
             if (alreadyDispatched(group.groupKey())) continue;
 
@@ -126,14 +137,24 @@ public class AutoDealGroupDispatchService {
                 }
             }
 
-            if (aiReview.verdict() == null || !DISPATCH_VERDICTS.contains(aiReview.verdict())) {
-                log.info("Skipping {} — AI verdict: {}", group.groupKey(), aiReview.verdict());
+            AiReviewVerdict verdict = aiReview.verdict();
+            if (verdict == null || !DISPATCH_VERDICTS.contains(verdict)) {
+                log.debug("Skipping {} — AI verdict: {}", group.groupKey(), verdict);
+                if (TERMINAL_VERDICTS.contains(verdict)) {
+                    dealGroupReviewService.update(group.groupKey(), ManualReviewStatus.IGNORED,
+                            toReason(verdict), "Auto-ignored by dispatch: AI verdict " + verdict);
+                    autoIgnored++;
+                } else {
+                    pending++;
+                }
                 continue;
             }
 
             DealGroupingService.DealGroupResponse fresh = dealGroupingService.group(group.groupKey()).orElse(group);
             dispatchToTelegram(fresh);
+            dispatched++;
         }
+        log.info("Dispatch done — sent: {}, auto-ignored: {}, pending AI: {}", dispatched, autoIgnored, pending);
     }
 
     @Transactional(readOnly = true)
@@ -197,6 +218,17 @@ public class AutoDealGroupDispatchService {
             b.append('\n').append("⚠️ <b>Risks:</b> ").append(String.join(", ", ai.riskFlags()));
         }
         return b.toString();
+    }
+
+    private static ManualReviewReason toReason(AiReviewVerdict verdict) {
+        return switch (verdict) {
+            case PRIVATE_COMPANY -> ManualReviewReason.PRIVATE_COMPANY;
+            case NOT_TRADABLE -> ManualReviewReason.NOT_TRADABLE;
+            case LATE_STAGE_UPDATE -> ManualReviewReason.LATE_STAGE_UPDATE;
+            case FALSE_POSITIVE -> ManualReviewReason.FALSE_POSITIVE;
+            case DUPLICATE_OR_UPDATE -> ManualReviewReason.DUPLICATE_OR_UPDATE;
+            default -> ManualReviewReason.OTHER;
+        };
     }
 
     private String formatPriceSection(String ticker) {
