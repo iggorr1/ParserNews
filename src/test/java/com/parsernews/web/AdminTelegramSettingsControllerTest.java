@@ -15,7 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.not;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -68,7 +68,7 @@ class AdminTelegramSettingsControllerTest {
                 "987...4321"
         ));
 
-        mockMvc.perform(get("/api/admin/telegram-settings").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/admin/telegram-settings").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(true))
                 .andExpect(jsonPath("$.configured").value(true))
@@ -95,7 +95,7 @@ class AdminTelegramSettingsControllerTest {
                 ));
 
         mockMvc.perform(put("/api/admin/telegram-settings")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType("application/json")
                         .content("""
                                 {
@@ -125,7 +125,7 @@ class AdminTelegramSettingsControllerTest {
                 null
         ));
 
-        mockMvc.perform(delete("/api/admin/telegram-settings/runtime").with(httpBasic("tester", "secret")))
+        mockMvc.perform(delete("/api/admin/telegram-settings/runtime").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false))
                 .andExpect(jsonPath("$.configured").value(false))

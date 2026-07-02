@@ -17,7 +17,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -63,7 +63,7 @@ class SecDiscoveryControllerTest {
                 "SEC discovery is disabled."
         ));
 
-        mockMvc.perform(get("/api/sec/discovery/status").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/sec/discovery/status").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false))
                 .andExpect(jsonPath("$.forms[0]").value("8-K"))
@@ -87,7 +87,7 @@ class SecDiscoveryControllerTest {
         ));
 
         mockMvc.perform(post("/api/sec/discovery/scan")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(true))

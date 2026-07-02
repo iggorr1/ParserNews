@@ -50,7 +50,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -162,7 +162,7 @@ class SignalInboxControllerTest {
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(rss));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(sec));
 
-        mockMvc.perform(get("/api/signals").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/signals").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sourceType").value("RSS_NEWS"))
                 .andExpect(jsonPath("$[0].priority").value("HIGH"))
@@ -179,7 +179,7 @@ class SignalInboxControllerTest {
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(sec));
 
         mockMvc.perform(get("/api/signals?sourceType=SEC_FILING&priority=HIGH&reviewStatus=USEFUL")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].sourceType").value("SEC_FILING"))
                 .andExpect(jsonPath("$[0].priority").value("HIGH"))
@@ -194,11 +194,11 @@ class SignalInboxControllerTest {
         when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of(ignored));
         when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of());
 
-        mockMvc.perform(get("/api/signals").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/signals").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
 
-        mockMvc.perform(get("/api/signals?reviewStatus=IGNORED").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/signals?reviewStatus=IGNORED").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].reviewStatus").value("IGNORED"));
     }
@@ -207,7 +207,7 @@ class SignalInboxControllerTest {
     void rssSignalDetailsReturnEvidenceFields() throws Exception {
         when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
 
-        mockMvc.perform(get("/api/signals/RSS_NEWS/1").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/signals/RSS_NEWS/1").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sourceType").value("RSS_NEWS"))
                 .andExpect(jsonPath("$.title").value("Target Enters Definitive Merger Agreement"))
@@ -242,7 +242,7 @@ class SignalInboxControllerTest {
         SecFilingEntity sec = secFiling(SecSignalPriority.HIGH, SecSignalType.TENDER_OFFER);
         when(secFilingRepository.findById(7L)).thenReturn(java.util.Optional.of(sec));
 
-        mockMvc.perform(get("/api/signals/SEC_FILING/7").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/signals/SEC_FILING/7").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sourceType").value("SEC_FILING"))
                 .andExpect(jsonPath("$.companyName").value("MICROSOFT CORP"))
@@ -263,7 +263,7 @@ class SignalInboxControllerTest {
     void signalDetailsReturn404ForUnknownId() throws Exception {
         when(eventRepository.findById(404L)).thenReturn(java.util.Optional.empty());
 
-        mockMvc.perform(get("/api/signals/RSS_NEWS/404").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/signals/RSS_NEWS/404").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isNotFound());
     }
 
@@ -279,7 +279,7 @@ class SignalInboxControllerTest {
         when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rss));
 
         mockMvc.perform(get("/api/signals/RSS_NEWS/1/telegram-preview")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sourceType").value("RSS_NEWS"))
                 .andExpect(jsonPath("$.messageText").value("RSS telegram message"))
@@ -293,7 +293,7 @@ class SignalInboxControllerTest {
         when(secFilingRepository.findById(7L)).thenReturn(java.util.Optional.of(sec));
 
         mockMvc.perform(get("/api/signals/SEC_FILING/7/telegram-preview")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sourceType").value("SEC_FILING"))
                 .andExpect(jsonPath("$.messageText").value("SEC telegram message"))
@@ -306,7 +306,7 @@ class SignalInboxControllerTest {
         when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
 
         mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sent").value(false))
                 .andExpect(jsonPath("$.telegramEnabled").value(false))
@@ -332,7 +332,7 @@ class SignalInboxControllerTest {
         when(eventRepository.findById(1L)).thenReturn(java.util.Optional.of(rssEvent(CandidateStrength.HIGH, true)));
 
         mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sent").value(false))
                 .andExpect(jsonPath("$.telegramEnabled").value(true))
@@ -360,7 +360,7 @@ class SignalInboxControllerTest {
                 .thenReturn(AlertNotifier.AlertNotificationResult.sent("SENT", "Telegram alert message was sent."));
 
         mockMvc.perform(post("/api/signals/RSS_NEWS/1/send-telegram")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sent").value(true))
                 .andExpect(jsonPath("$.telegramEnabled").value(true))

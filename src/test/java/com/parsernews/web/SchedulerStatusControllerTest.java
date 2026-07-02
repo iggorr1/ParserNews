@@ -15,7 +15,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -66,7 +66,7 @@ class SchedulerStatusControllerTest {
                 "Full Refresh runs only when you click the button."
         ));
 
-        mockMvc.perform(get("/api/admin/scheduler-status").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/admin/scheduler-status").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.rssMonitoringEnabled").value(true))
                 .andExpect(jsonPath("$.fullRefreshSchedulerEnabled").value(false))

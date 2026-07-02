@@ -30,7 +30,7 @@ import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.never;
 import static org.mockito.ArgumentMatchers.any;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -107,7 +107,7 @@ class DealGroupControllerTest {
         DealGroupingService.DealGroupResponse group = group();
         when(dealGroupingService.groups(null, null, 50)).thenReturn(List.of(group));
 
-        mockMvc.perform(get("/api/deal-groups").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/deal-groups").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].groupKey").value("target-ticker:APGE"))
                 .andExpect(jsonPath("$[0].targetTicker").value("APGE"))
@@ -121,7 +121,7 @@ class DealGroupControllerTest {
         DealGroupingService.DealGroupResponse group = group();
         when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
 
-        mockMvc.perform(get("/api/deal-groups/target-ticker:APGE").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/deal-groups/target-ticker:APGE").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.groupKey").value("target-ticker:APGE"))
                 .andExpect(jsonPath("$.relatedSignals.length()").value(2));
@@ -131,7 +131,7 @@ class DealGroupControllerTest {
     void dealGroupDetailReturns404ForMissingGroup() throws Exception {
         when(dealGroupingService.group("missing")).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/api/deal-groups/missing").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/deal-groups/missing").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isNotFound());
     }
 
@@ -147,7 +147,7 @@ class DealGroupControllerTest {
         )).thenReturn(new com.parsernews.persistence.DealGroupReviewEntity("target-ticker:APGE"));
 
         mockMvc.perform(patch("/api/deal-groups/target-ticker:APGE/manual-review")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType("application/json")
                         .content("""
                                 {
@@ -174,7 +174,7 @@ class DealGroupControllerTest {
         when(dealGroupingService.formatTelegramPreview(group)).thenReturn("DEAL GROUP SIGNAL\nRSS_NEWS\nSEC_FILING");
 
         mockMvc.perform(get("/api/deal-groups/target-ticker:APGE/telegram-preview")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.groupKey").value("target-ticker:APGE"))
                 .andExpect(jsonPath("$.messageText").value("DEAL GROUP SIGNAL\nRSS_NEWS\nSEC_FILING"))
@@ -187,7 +187,7 @@ class DealGroupControllerTest {
         when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
 
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/send-telegram")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sent").value(false))
                 .andExpect(jsonPath("$.telegramEnabled").value(false))
@@ -214,7 +214,7 @@ class DealGroupControllerTest {
         when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
 
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/send-telegram")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sent").value(false))
                 .andExpect(jsonPath("$.telegramEnabled").value(true))
@@ -244,7 +244,7 @@ class DealGroupControllerTest {
                 .thenReturn(AlertNotifier.AlertNotificationResult.sent("SENT", "Telegram message sent."));
 
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/send-telegram")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.sent").value(true))
                 .andExpect(jsonPath("$.telegramEnabled").value(true))
@@ -262,7 +262,7 @@ class DealGroupControllerTest {
                 .thenReturn(DealGroupAiReviewService.AiReviewResponse.empty(false, false, "No AI review has been saved for this deal group yet."));
 
         mockMvc.perform(get("/api/deal-groups/target-ticker:APGE/ai-review/latest")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.openAiEnabled").value(false))
                 .andExpect(jsonPath("$.message").value("No AI review has been saved for this deal group yet."));
@@ -276,7 +276,7 @@ class DealGroupControllerTest {
                 .thenReturn(DealGroupAiReviewService.AiReviewResponse.empty(false, false, "OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it."));
 
         mockMvc.perform(post("/api/deal-groups/target-ticker:APGE/ai-review")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.openAiEnabled").value(false))
                 .andExpect(jsonPath("$.message").value("OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it."));
@@ -315,7 +315,7 @@ class DealGroupControllerTest {
                 ));
 
         mockMvc.perform(post("/api/deal-groups/ai-review/batch")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType("application/json")
                         .content("""
                                 {
@@ -364,7 +364,7 @@ class DealGroupControllerTest {
                 ));
 
         mockMvc.perform(get("/api/deal-groups/ai-review/batch-candidates?limit=25")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.eligibleCount").value(1))
                 .andExpect(jsonPath("$.candidates[0].included").value(true))
@@ -401,7 +401,7 @@ class DealGroupControllerTest {
                 ));
 
         mockMvc.perform(get("/api/deal-groups/ai-review/summary")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalAiReviewed").value(2))
                 .andExpect(jsonPath("$.totalAiReviewsSaved").value(3))
@@ -416,7 +416,7 @@ class DealGroupControllerTest {
         when(dealGroupingService.groups(null, null, 500)).thenReturn(List.of(group()));
 
         mockMvc.perform(get("/api/deal-groups/export.csv")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().contentType("text/csv;charset=UTF-8"))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(org.hamcrest.Matchers.containsString("groupKey,title,buyerCompany,targetCompany")))
@@ -437,7 +437,7 @@ class DealGroupControllerTest {
                 ));
 
         mockMvc.perform(get("/api/deal-groups/stats")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalGroups").value(4))
                 .andExpect(jsonPath("$.pendingGroups").value(1))

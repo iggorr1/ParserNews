@@ -28,7 +28,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -102,7 +102,7 @@ class SecControllerSecurityTest {
                 "SEC scanner disabled or watchlist empty"
         ));
 
-        mockMvc.perform(get("/api/sec/status").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/sec/status").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false))
                 .andExpect(jsonPath("$.configured").value(false))
@@ -125,7 +125,7 @@ class SecControllerSecurityTest {
                 "SEC scan completed."
         ));
 
-        mockMvc.perform(post("/api/sec/scan").with(httpBasic("tester", "secret")))
+        mockMvc.perform(post("/api/sec/scan").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.savedFilings").value(2))
                 .andExpect(jsonPath("$.duplicatesSkipped").value(1));
@@ -137,7 +137,7 @@ class SecControllerSecurityTest {
                 new SecWatchlistCompanyEntity("320193", "Apple Inc.", "AAPL", "Smoke test", true)
         ));
 
-        mockMvc.perform(get("/api/sec/watchlist").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/sec/watchlist").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].cik").value("320193"))
                 .andExpect(jsonPath("$[0].companyName").value("Apple Inc."))
@@ -151,7 +151,7 @@ class SecControllerSecurityTest {
                 .thenReturn(new SecWatchlistCompanyEntity("789019", "Microsoft Corp.", "MSFT", null, true));
 
         mockMvc.perform(post("/api/sec/watchlist")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"cik":"789019","companyName":"Microsoft Corp.","ticker":"MSFT","enabled":true}
@@ -174,7 +174,7 @@ class SecControllerSecurityTest {
                 )
         ));
 
-        mockMvc.perform(get("/api/sec/company-lookup?q=AAPL").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/sec/company-lookup?q=AAPL").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].cik").value("320193"))
                 .andExpect(jsonPath("$[0].ticker").value("AAPL"))
@@ -188,7 +188,7 @@ class SecControllerSecurityTest {
                 .thenReturn(new SecWatchlistCompanyEntity("320193", "Apple Inc.", "AAPL", "Added from SEC lookup", true));
 
         mockMvc.perform(post("/api/sec/watchlist/from-lookup")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"cik":"320193","companyName":"Apple Inc.","ticker":"AAPL","notes":"Added from SEC lookup","enabled":true}
@@ -204,7 +204,7 @@ class SecControllerSecurityTest {
                 .thenThrow(new SecWatchlistManagerService.DuplicateSecWatchlistCompanyException("SEC watchlist CIK already exists: 320193"));
 
         mockMvc.perform(post("/api/sec/watchlist")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"cik":"320193","companyName":"Apple Inc.","enabled":true}
@@ -218,7 +218,7 @@ class SecControllerSecurityTest {
                 .thenReturn(new SecWatchlistCompanyEntity("320193", "Apple Inc.", "AAPL", null, false));
 
         mockMvc.perform(patch("/api/sec/watchlist/1")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"companyName":"Apple Inc.","ticker":"AAPL","enabled":false}
@@ -226,7 +226,7 @@ class SecControllerSecurityTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.enabled").value(false));
 
-        mockMvc.perform(delete("/api/sec/watchlist/1").with(httpBasic("tester", "secret")))
+        mockMvc.perform(delete("/api/sec/watchlist/1").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isNoContent());
     }
 
@@ -239,7 +239,7 @@ class SecControllerSecurityTest {
                 1
         ));
 
-        mockMvc.perform(post("/api/sec/fetch-documents").with(httpBasic("tester", "secret")))
+        mockMvc.perform(post("/api/sec/fetch-documents").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.attemptedCount").value(2))
                 .andExpect(jsonPath("$.fetchedCount").value(1))
@@ -252,7 +252,7 @@ class SecControllerSecurityTest {
         when(filingRepository.findById(1L)).thenReturn(Optional.of(filing));
 
         mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch("/api/sec/filings/1/manual-review")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"status":"USEFUL","reason":"GOOD_SIGNAL","note":"Looks important"}
@@ -270,7 +270,7 @@ class SecControllerSecurityTest {
         when(filingRepository.findTop200ByManualReviewStatusInOrderByManualReviewedAtDesc(List.of(ManualReviewStatus.USEFUL, ManualReviewStatus.IGNORED)))
                 .thenReturn(List.of(filing));
 
-        mockMvc.perform(get("/api/sec/filings/reviewed").with(httpBasic("tester", "secret")))
+        mockMvc.perform(get("/api/sec/filings/reviewed").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].manualReviewStatus").value("IGNORED"))
                 .andExpect(jsonPath("$[0].manualReviewReason").value("FALSE_POSITIVE"));
@@ -292,7 +292,7 @@ class SecControllerSecurityTest {
         when(filingRepository.findAll()).thenReturn(List.of(filing));
 
         mockMvc.perform(get("/api/sec/filings/export.csv")
-                        .with(httpBasic("tester", "secret")))
+                        .with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(org.hamcrest.Matchers.containsString("secSignalPriority")))
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content().string(org.hamcrest.Matchers.containsString("MICROSOFT CORP")))

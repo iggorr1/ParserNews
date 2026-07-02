@@ -16,7 +16,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -76,7 +76,7 @@ class AdminSourceEvaluationControllerTest {
         ));
 
         mockMvc.perform(post("/api/admin/source-evaluation/preview")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType("application/json")
                         .content("""
                                 {"name":"Test source","url":"https://example.com/rss.xml","maxItems":50}
@@ -94,7 +94,7 @@ class AdminSourceEvaluationControllerTest {
                 .thenThrow(new IllegalArgumentException("Source URL must be a valid HTTPS URL."));
 
         mockMvc.perform(post("/api/admin/source-evaluation/preview")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType("application/json")
                         .content("""
                                 {"name":"Bad","url":"ftp://example.com/rss.xml","maxItems":50}
@@ -122,7 +122,7 @@ class AdminSourceEvaluationControllerTest {
         );
 
         mockMvc.perform(post("/api/admin/source-evaluation/configured")
-                        .with(httpBasic("tester", "secret"))
+                        .with(user("tester").roles("ADMIN", "VIEWER"))
                         .contentType("application/json")
                         .content("""
                                 {"maxItems":20}

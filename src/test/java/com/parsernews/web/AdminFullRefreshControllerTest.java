@@ -20,7 +20,7 @@ import java.time.Instant;
 import java.util.List;
 
 import static org.mockito.Mockito.when;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -65,7 +65,7 @@ class AdminFullRefreshControllerTest {
                 true
         ));
 
-        mockMvc.perform(post("/api/admin/full-refresh").with(httpBasic("tester", "secret")))
+        mockMvc.perform(post("/api/admin/full-refresh").with(user("tester").roles("ADMIN", "VIEWER")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.rssScanSummary.totalRead").value(10))
