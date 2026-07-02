@@ -198,11 +198,13 @@ public class AutoDealGroupDispatchService {
                 AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
         );
         AlertNotifier.AlertNotificationResult result = alertNotifier.sendWithButtons(message, buttons);
+        // Always mark as dispatched to prevent infinite retry loops.
+        // If send failed, log the reason — but don't keep retrying on every scan cycle.
+        dealGroupReviewService.markTgDispatched(group.groupKey());
         if (result.sent()) {
-            dealGroupReviewService.markTgDispatched(group.groupKey());
             log.info("Dispatched to Telegram: {} ({})", group.groupKey(), group.targetTicker());
         } else {
-            log.warn("Telegram send failed for {}", group.groupKey());
+            log.warn("Telegram send failed for {} [{}]: {}", group.groupKey(), result.status(), result.reason());
         }
     }
 
