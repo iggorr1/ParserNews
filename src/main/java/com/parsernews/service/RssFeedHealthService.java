@@ -6,7 +6,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Service
 public class RssFeedHealthService {
@@ -41,6 +44,22 @@ public class RssFeedHealthService {
         return summaries().stream()
                 .filter(s -> s.consecutiveErrors() >= ERROR_THRESHOLD || s.staleSinceHours() >= STALE_HOURS)
                 .toList();
+    }
+
+    /**
+     * Drops health records for feeds that are no longer configured, so removed feeds don't
+     * linger forever as "unhealthy". Returns the number of pruned records.
+     */
+    @Transactional
+    public int pruneUnconfigured(Collection<String> configuredUrls) {
+        Set<String> keep = new HashSet<>(configuredUrls);
+        List<RssFeedHealthEntity> orphans = repository.findAllByOrderByFeedUrlAsc().stream()
+                .filter(e -> !keep.contains(e.getFeedUrl()))
+                .toList();
+        if (!orphans.isEmpty()) {
+            repository.deleteAll(orphans);
+        }
+        return orphans.size();
     }
 
     private RssFeedHealthEntity find(String feedUrl) {

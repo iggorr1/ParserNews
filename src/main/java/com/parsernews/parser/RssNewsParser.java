@@ -5,8 +5,12 @@ import com.parsernews.model.NewsEvent;
 import com.parsernews.service.RssFeedHealthService;
 import com.parsernews.service.SecCompanyLookupService;
 import com.parsernews.util.ArticleTextCleaner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -33,6 +37,7 @@ import java.util.regex.Pattern;
 @Component
 @ConditionalOnProperty(name = "scanner.source", havingValue = "rss")
 public class RssNewsParser implements NewsSourceParser {
+    private static final Logger log = LoggerFactory.getLogger(RssNewsParser.class);
     private static final Pattern EXCHANGE_TICKER = Pattern.compile(
             "(?i)(?:NYSE\\s+American|NYSEAMERICAN|NASDAQ|NYSE|AMEX|OTCQB|OTCQX|OTC|OTCMKTS|TSX|TSXV)\\s*:\\s*([A-Z][A-Z0-9.-]{0,9})"
     );
@@ -63,6 +68,18 @@ public class RssNewsParser implements NewsSourceParser {
         this.companyLookupService = companyLookupService;
     }
 
+    /**
+     * On startup, drop health records for feeds that are no longer in the configured list
+     * (e.g. feeds removed from application.properties), so they don't linger as "unhealthy".
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void pruneStaleFeedHealth() {
+        int pruned = healthService.pruneUnconfigured(settings.urls());
+        if (pruned > 0) {
+            log.info("Pruned {} health record(s) for unconfigured RSS feed(s)", pruned);
+        }
+    }
+
     @Override
     public List<NewsEvent> readNews() {
         List<NewsEvent> events = new ArrayList<>();
@@ -78,8 +95,7 @@ public class RssNewsParser implements NewsSourceParser {
             } catch (IllegalStateException exception) {
                 failedFeeds++;
                 healthService.recordError(url, exception.getMessage());
-                System.err.println("Warning: skipped RSS feed because it could not be read: " + url);
-                System.err.println("Reason: " + exception.getMessage());
+                log.warn("Skipped RSS feed (could not be read): {} — {}", url, exception.getMessage());
             }
         }
 
@@ -97,7 +113,7 @@ public class RssNewsParser implements NewsSourceParser {
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofSeconds(settings.timeoutSeconds()))
                     .header("Accept", "application/rss+xml, application/xml, text/xml")
-                    .header("User-Agent", "ParserNews/1.0 research-news-scanner")
+                    .header("User-Agent", userAgentFor(uri))
                     .GET()
                     .build();
 
@@ -113,6 +129,18 @@ public class RssNewsParser implements NewsSourceParser {
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot read RSS feed " + url, exception);
         }
+    }
+
+    /**
+     * SEC (sec.gov) rejects requests (HTTP 403) whose User-Agent lacks a contact email,
+     * per its fair-access policy. Route SEC hosts through the shared SEC-compliant UA.
+     */
+    private String userAgentFor(URI uri) {
+        String host = uri.getHost();
+        if (host != null && (host.equalsIgnoreCase("sec.gov") || host.toLowerCase(Locale.ROOT).endsWith(".sec.gov"))) {
+            return com.parsernews.service.SecHttpUserAgent.VALUE;
+        }
+        return "ParserNews/1.0 research-news-scanner";
     }
 
     private void validateUri(URI uri) {
@@ -192,7 +220,7 @@ public class RssNewsParser implements NewsSourceParser {
             HttpRequest request = HttpRequest.newBuilder(uri)
                     .timeout(Duration.ofSeconds(settings.timeoutSeconds()))
                     .header("Accept", "text/html, application/xhtml+xml")
-                    .header("User-Agent", "ParserNews/1.0 research-news-scanner")
+                    .header("User-Agent", userAgentFor(uri))
                     .GET()
                     .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
