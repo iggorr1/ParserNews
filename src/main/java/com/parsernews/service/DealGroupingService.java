@@ -147,7 +147,7 @@ public class DealGroupingService {
                 b.append("<i>").append(escapeHtml(truncated)).append("</i>\n");
             }
             String url = firstNonBlank(signal.url(), null);
-            if (url != null) b.append("🔗 ").append(url).append('\n');
+            if (url != null) b.append("🔗 ").append(escapeHtml(url)).append('\n');
         });
 
         // extra signals summary

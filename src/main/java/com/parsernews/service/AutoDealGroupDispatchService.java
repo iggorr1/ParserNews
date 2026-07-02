@@ -214,12 +214,19 @@ public class AutoDealGroupDispatchService {
         if (ai.confidence() != null) b.append(" · ").append(ai.confidence()).append(" confidence");
         if (ai.reason() != null && !ai.reason().isBlank()) {
             String reason = ai.reason().length() > 300 ? ai.reason().substring(0, 297) + "…" : ai.reason();
-            b.append('\n').append("<i>").append(reason).append("</i>");
+            b.append('\n').append("<i>").append(esc(reason)).append("</i>");
         }
         if (ai.riskFlags() != null && !ai.riskFlags().isEmpty()) {
-            b.append('\n').append("⚠️ <b>Risks:</b> ").append(String.join(", ", ai.riskFlags()));
+            String flags = ai.riskFlags().stream().map(AutoDealGroupDispatchService::esc)
+                    .collect(java.util.stream.Collectors.joining(", "));
+            b.append('\n').append("⚠️ <b>Risks:</b> ").append(flags);
         }
         return b.toString();
+    }
+
+    private static String esc(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static ManualReviewReason toReason(AiReviewVerdict verdict) {
@@ -236,7 +243,7 @@ public class AutoDealGroupDispatchService {
     private String formatPriceSection(String ticker) {
         if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) return "";
         return stockPriceService.currentPrice(ticker)
-                .map(p -> "\n\n💰 <b>Price:</b> " + p.formatted() + " | " + p.shortName())
+                .map(p -> "\n\n💰 <b>Price:</b> " + esc(p.formatted()) + " | " + esc(p.shortName()))
                 .orElse("");
     }
 }
