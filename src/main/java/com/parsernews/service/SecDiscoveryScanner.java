@@ -312,8 +312,10 @@ public class SecDiscoveryScanner {
         if (form.equals("SC TO-I") || form.equals("SC TO-T") || containsAny(text, "tender offer", "offer to purchase")) {
             return new SecMetadataSignal(SecSignalType.TENDER_OFFER, SecSignalPriority.HIGH, "Discovery filing indicates tender offer activity.", amendmentWarning);
         }
-        if (containsAny(text, "going private", "go private")) {
-            return new SecMetadataSignal(SecSignalType.GOING_PRIVATE, SecSignalPriority.HIGH, "Discovery filing mentions going-private language.", amendmentWarning);
+        if (form.equals("SC 13E3") || containsAny(text, "going private", "go private")) {
+            // Schedule 13E-3 is filed specifically for going-private transactions (Rule 13e-3),
+            // so treat the form itself as a going-private signal even without the literal phrase.
+            return new SecMetadataSignal(SecSignalType.GOING_PRIVATE, SecSignalPriority.HIGH, "Going-private transaction (Schedule 13E-3 / going-private language).", amendmentWarning);
         }
         if (containsAny(text, "merger agreement", "agreement and plan of merger", "acquisition agreement")) {
             return new SecMetadataSignal(SecSignalType.MERGER_AGREEMENT, SecSignalPriority.HIGH, "Discovery filing mentions merger/acquisition agreement language.", amendmentWarning);

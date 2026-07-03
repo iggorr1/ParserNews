@@ -195,6 +195,26 @@ class SecDiscoveryScannerTest {
     }
 
     @Test
+    void schedule13E3FormIsSignaledAsGoingPrivate() throws Exception {
+        // The title has no "going private" phrase — the SC 13E3 form itself must drive the signal.
+        SecCurrentFilingsClient client = (form, count) -> atom(
+                entry("SC 13E3 - PrivateCo Inc (3333333)", "2026-06-24T12:00:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/3333333/000033333326000001/sc13e3.htm")
+        );
+        SecFilingRepository filingRepository = mock(SecFilingRepository.class);
+        SecDiscoveryRunRepository runRepository = runRepository();
+        when(filingRepository.save(any(SecFilingEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        SecDiscoveryScanner scanner = scanner(settings(true, "SC 13E3", false), client, filingRepository, runRepository);
+
+        scanner.scan();
+
+        verify(filingRepository).save(org.mockito.ArgumentMatchers.argThat(f ->
+                f.getSecSignalType() == com.parsernews.persistence.SecSignalType.GOING_PRIVATE
+                        && f.getSecSignalPriority() == com.parsernews.persistence.SecSignalPriority.HIGH));
+    }
+
+    @Test
     void statusReportsLatestRunAndConfig() {
         SecDiscoveryRunEntity run = new SecDiscoveryRunEntity(java.time.Instant.parse("2026-06-24T12:00:00Z"));
         run.finish("SUCCESS", 4, 2, 1, 2, 0, 0, null);
