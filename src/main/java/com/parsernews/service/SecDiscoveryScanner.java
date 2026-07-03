@@ -23,11 +23,17 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -88,54 +94,57 @@ public class SecDiscoveryScanner {
         int maxPerForm = Math.max(1, settings.maxFilingsPerRun());
 
         try {
+            // Phase 1: fetch every form's current-filings feed concurrently (bounded, no DB work).
+            // EDGAR is the primary, near-real-time source, so cutting the sequential fetch chain
+            // shortens time-to-detection for SEC-sourced deals. DB writes stay single-threaded below.
+            Map<String, String> atomByForm = fetchAtomsInParallel(settings.formList(), maxPerForm, errors);
+
+            // Phase 2: parse + persist sequentially, honoring the total per-run cap.
             for (String form : settings.formList()) {
                 if (scanned >= settings.maxFilingsPerRun()) {
                     break;
                 }
-                int remaining = settings.maxFilingsPerRun() - scanned;
+                String atom = atomByForm.get(form);
+                if (atom == null) {
+                    continue; // fetch failed — already recorded in errors
+                }
+                List<DiscoveredSecFiling> filings;
                 try {
-                    String atom = currentFilingsClient.fetchCurrentFilingsAtom(form, Math.min(maxPerForm, remaining));
-                    List<DiscoveredSecFiling> filings = parseCurrentFeed(form, atom);
-                    for (DiscoveredSecFiling filing : filings) {
-                        if (scanned >= settings.maxFilingsPerRun()) {
-                            break;
-                        }
-                        if (!isFormAllowed(filing.form())) {
-                            skipped++;
-                            continue;
-                        }
-                        scanned++;
-                        if (!seenAccessions.add(filing.accessionNumber())) {
-                            duplicates++;
-                            continue;
-                        }
-                        Optional<SecFilingEntity> existing = filingRepository.findByAccessionNumber(filing.accessionNumber());
-                        if (existing.isPresent()) {
-                            duplicates++;
-                            continue;
-                        }
-                        SecMetadataSignal signal = detectMetadataSignal(filing);
-                        SecFilingEntity entity = toEntity(filing, signal);
-                        entity.updateSecSignal(signal.type(), signal.priority(), signal.summary(), signal.warning());
-                        if (isAmendment(filing.form())) {
-                            entity.markAsAmendment();
-                        }
-                        SecFilingEntity savedEntity = filingRepository.save(entity);
-                        saved++;
-                        if (settings.fetchPrimaryDocument()) {
-                            documentFetcher.fetchDocument(savedEntity.getId());
-                        }
-                    }
-                } catch (java.io.IOException exception) {
-                    errors.add(form + ": " + exception.getMessage());
-                } catch (InterruptedException exception) {
-                    Thread.currentThread().interrupt();
-                    errors.add(form + ": interrupted");
-                    break;
+                    filings = parseCurrentFeed(form, atom);
                 } catch (RuntimeException exception) {
                     errors.add(form + ": " + exception.getMessage());
+                    continue;
                 }
-                sleepConservatively();
+                for (DiscoveredSecFiling filing : filings) {
+                    if (scanned >= settings.maxFilingsPerRun()) {
+                        break;
+                    }
+                    if (!isFormAllowed(filing.form())) {
+                        skipped++;
+                        continue;
+                    }
+                    scanned++;
+                    if (!seenAccessions.add(filing.accessionNumber())) {
+                        duplicates++;
+                        continue;
+                    }
+                    Optional<SecFilingEntity> existing = filingRepository.findByAccessionNumber(filing.accessionNumber());
+                    if (existing.isPresent()) {
+                        duplicates++;
+                        continue;
+                    }
+                    SecMetadataSignal signal = detectMetadataSignal(filing);
+                    SecFilingEntity entity = toEntity(filing, signal);
+                    entity.updateSecSignal(signal.type(), signal.priority(), signal.summary(), signal.warning());
+                    if (isAmendment(filing.form())) {
+                        entity.markAsAmendment();
+                    }
+                    SecFilingEntity savedEntity = filingRepository.save(entity);
+                    saved++;
+                    if (settings.fetchPrimaryDocument()) {
+                        documentFetcher.fetchDocument(savedEntity.getId());
+                    }
+                }
             }
             Instant finishedAt = Instant.now();
             String status = errors.isEmpty() ? "SUCCESS" : saved > 0 ? "PARTIAL_SUCCESS" : "FAILED";
@@ -187,6 +196,44 @@ public class SecDiscoveryScanner {
                 latest.map(this::summaryFromRun).orElse(null),
                 discoveryWarning()
         );
+    }
+
+    // Bounded so we stay well under SEC's ~10 requests/second fair-access limit.
+    private static final int SEC_FETCH_CONCURRENCY = 5;
+
+    /**
+     * Fetches each form's current-filings atom feed in parallel. Returns a map of form -> atom XML
+     * for the forms that fetched successfully; failures are appended to {@code errors}. Only the
+     * network fetch runs concurrently — the caller persists results single-threaded.
+     */
+    private Map<String, String> fetchAtomsInParallel(List<String> forms, int count, List<String> errors) {
+        if (forms.isEmpty()) {
+            return Map.of();
+        }
+        int poolSize = Math.min(SEC_FETCH_CONCURRENCY, forms.size());
+        ExecutorService pool = Executors.newFixedThreadPool(poolSize);
+        try {
+            Map<String, Future<String>> futures = new LinkedHashMap<>();
+            for (String form : forms) {
+                futures.put(form, pool.submit(() -> currentFilingsClient.fetchCurrentFilingsAtom(form, count)));
+            }
+            Map<String, String> atomByForm = new LinkedHashMap<>();
+            for (Map.Entry<String, Future<String>> entry : futures.entrySet()) {
+                String form = entry.getKey();
+                try {
+                    atomByForm.put(form, entry.getValue().get());
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    errors.add(form + ": interrupted");
+                } catch (ExecutionException exception) {
+                    Throwable cause = exception.getCause();
+                    errors.add(form + ": " + (cause != null ? cause.getMessage() : exception.getMessage()));
+                }
+            }
+            return atomByForm;
+        } finally {
+            pool.shutdown();
+        }
     }
 
     List<DiscoveredSecFiling> parseCurrentFeed(String fallbackForm, String atomXml) {
@@ -351,17 +398,6 @@ public class SecDiscoveryScanner {
             return "SEC discovery has no configured forms.";
         }
         return null;
-    }
-
-    private void sleepConservatively() {
-        if (settings.requestDelayMs() <= 0) {
-            return;
-        }
-        try {
-            Thread.sleep(settings.requestDelayMs());
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-        }
     }
 
     private String normalizeForm(String form) {

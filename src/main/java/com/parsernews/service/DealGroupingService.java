@@ -345,10 +345,18 @@ public class DealGroupingService {
     private Comparator<DealGroupResponse> groupComparator() {
         return Comparator
                 .comparingInt((DealGroupResponse group) -> priorityRank(group.priority())).reversed()
-                .thenComparing(group -> group.relatedSignals().stream()
-                        .anyMatch(signal -> signal.sourceType() == SourceType.RSS_NEWS && signal.priority() == UnifiedPriority.HIGH), Comparator.reverseOrder())
+                // SEC-first: within the same priority, SEC filings (the authoritative, often-earliest
+                // source) lead, then RSS HIGH, then recency. This also puts SEC deals ahead in the
+                // AI-review budget when a burst competes for the per-run cap.
+                .thenComparing(group -> hasHighSignal(group, SourceType.SEC_FILING), Comparator.reverseOrder())
+                .thenComparing(group -> hasHighSignal(group, SourceType.RSS_NEWS), Comparator.reverseOrder())
                 .thenComparing(DealGroupResponse::sortInstant, Comparator.nullsLast(Comparator.reverseOrder()))
                 .thenComparing(group -> group.reviewStatus() == ManualReviewStatus.IGNORED);
+    }
+
+    private static boolean hasHighSignal(DealGroupResponse group, SourceType sourceType) {
+        return group.relatedSignals().stream()
+                .anyMatch(signal -> signal.sourceType() == sourceType && signal.priority() == UnifiedPriority.HIGH);
     }
 
     private boolean mentions(String text, String company, String ticker) {
