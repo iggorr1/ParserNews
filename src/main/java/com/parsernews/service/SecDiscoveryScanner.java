@@ -99,20 +99,38 @@ public class SecDiscoveryScanner {
             // shortens time-to-detection for SEC-sourced deals. DB writes stay single-threaded below.
             Map<String, String> atomByForm = fetchAtomsInParallel(settings.formList(), maxPerForm, errors);
 
-            // Phase 2: parse + persist sequentially, honoring the total per-run cap.
+            // Phase 2a: parse every fetched feed once.
+            Map<String, List<DiscoveredSecFiling>> parsedByForm = new LinkedHashMap<>();
+            List<String> candidateAccessions = new ArrayList<>();
             for (String form : settings.formList()) {
-                if (scanned >= settings.maxFilingsPerRun()) {
-                    break;
-                }
                 String atom = atomByForm.get(form);
                 if (atom == null) {
                     continue; // fetch failed — already recorded in errors
                 }
-                List<DiscoveredSecFiling> filings;
                 try {
-                    filings = parseCurrentFeed(form, atom);
+                    List<DiscoveredSecFiling> filings = parseCurrentFeed(form, atom);
+                    parsedByForm.put(form, filings);
+                    for (DiscoveredSecFiling filing : filings) {
+                        candidateAccessions.add(filing.accessionNumber());
+                    }
                 } catch (RuntimeException exception) {
                     errors.add(form + ": " + exception.getMessage());
+                }
+            }
+
+            // Phase 2b: one batch existence query instead of one findByAccessionNumber per filing —
+            // EDGAR returns the same recent filings every 20s poll, so this avoids ~100 wasted lookups.
+            Set<String> existingAccessions = candidateAccessions.isEmpty()
+                    ? Set.of()
+                    : filingRepository.findExistingAccessionNumbers(candidateAccessions);
+
+            // Phase 2c: persist new filings, honoring the total per-run cap.
+            for (String form : settings.formList()) {
+                if (scanned >= settings.maxFilingsPerRun()) {
+                    break;
+                }
+                List<DiscoveredSecFiling> filings = parsedByForm.get(form);
+                if (filings == null) {
                     continue;
                 }
                 for (DiscoveredSecFiling filing : filings) {
@@ -128,8 +146,7 @@ public class SecDiscoveryScanner {
                         duplicates++;
                         continue;
                     }
-                    Optional<SecFilingEntity> existing = filingRepository.findByAccessionNumber(filing.accessionNumber());
-                    if (existing.isPresent()) {
+                    if (existingAccessions.contains(filing.accessionNumber())) {
                         duplicates++;
                         continue;
                     }
