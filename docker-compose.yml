@@ -64,5 +64,16 @@ services:
     volumes:
       - ./output:/app/output
 
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel --config /etc/cloudflared/config.yml run
+    depends_on:
+      - parsernews
+    volumes:
+      - ./cloudflared/config.yml:/etc/cloudflared/config.yml:ro
+      - ${CLOUDFLARED_TUNNEL_CREDENTIALS}:/etc/cloudflared/creds.json:ro
+
 volumes:
   parsernews-postgres-data:

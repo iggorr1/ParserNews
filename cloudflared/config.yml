@@ -1,0 +1,11 @@
+# Cloudflare Tunnel config for the containerized connector (docker-compose service "cloudflared").
+# Reuses the existing locally-managed tunnel credentials (bind-mounted read-only, never committed).
+# Unlike the host config.yml (~/.cloudflared/config.yml), the ingress service points at the
+# parsernews container over the compose network instead of localhost.
+tunnel: 68b21f2e-3e57-4c16-94c6-6efa80753c55
+credentials-file: /etc/cloudflared/creds.json
+
+ingress:
+  - hostname: parsernews.wwwho.lol
+    service: http://parsernews:8080
+  - service: http_status:404
