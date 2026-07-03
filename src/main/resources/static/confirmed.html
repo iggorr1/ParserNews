@@ -878,10 +878,24 @@ async function renderPanelChart(canvasOrIgnored, range) {
             }
         } catch { pts = []; }
     } else {
+        if (!panelHistoryPoints.length && panelTicker) {
+            // History wasn't available when the panel opened (e.g. a transient price-source hiccup);
+            // fetch on demand so switching range recovers instead of showing a stale "No data".
+            showMsg('Loading…');
+            try {
+                const hist = await fetchJson(`/api/price/${encodeURIComponent(panelTicker)}/history?range=6mo`);
+                panelHistoryPoints = hist?.points || [];
+            } catch { /* leave empty — handled below */ }
+        }
         pts = filterByDays(panelHistoryPoints, range);
     }
 
-    if (!pts.length) { showMsg('No data for this range — market may be closed'); return; }
+    if (!pts.length) {
+        showMsg(intradayCfg
+            ? 'No intraday data — market may be closed'
+            : 'No price history available for this ticker');
+        return;
+    }
 
     const canvas = freshCanvas();
     if (!canvas) return;

@@ -48,7 +48,9 @@ public class StockPriceService {
         CachedEntry<PriceResult> cached = priceCache.get(ticker);
         if (cached != null && !cached.isStale(false)) return Optional.ofNullable(cached.value);
         Optional<PriceResult> result = fetchPrice(ticker);
-        priceCache.put(ticker, new CachedEntry<>(result.orElse(null)));
+        // Only cache successes — caching a transient Yahoo failure (more likely now that scanning
+        // polls prices frequently) would pin the ticker to "no data" for the whole TTL.
+        result.ifPresent(value -> priceCache.put(ticker, new CachedEntry<>(value)));
         return result;
     }
 
@@ -60,7 +62,9 @@ public class StockPriceService {
         CachedEntry<PriceHistory> cached = historyCache.get(cacheKey);
         if (cached != null && !cached.isStale(intraday)) return Optional.ofNullable(cached.value);
         Optional<PriceHistory> result = fetchHistory(ticker, range, resolvedInterval);
-        historyCache.put(cacheKey, new CachedEntry<>(result.orElse(null)));
+        // Only cache successes — see currentPrice: a cached empty result would show a spurious
+        // "No data for this range" until the TTL expired even though Yahoo has the data.
+        result.ifPresent(value -> historyCache.put(cacheKey, new CachedEntry<>(value)));
         return result;
     }
 
