@@ -1383,6 +1383,10 @@
                 <strong id="actionScanStatus">-</strong>
                 <span class="muted">Latest scan</span>
             </div>
+            <div class="action-stat">
+                <strong id="actionLatency" title="Median time from news publish to detection (feed lag + poll interval)">-</strong>
+                <span class="muted">Detect latency</span>
+            </div>
         </div>
         <div class="actions" style="margin-top: 12px;">
             <button id="reviewHighButton" type="button">Review HIGH candidates</button>
@@ -2227,7 +2231,8 @@
             fetchJson("/api/admin/scheduler-status"),
             fetchJson("/api/admin/openai-settings"),
             fetchJson("/api/deal-groups/ai-review/summary"),
-            fetchJson("/api/admin/telegram-settings")
+            fetchJson("/api/admin/telegram-settings"),
+            fetchJson("/api/latency")
         ]);
         assignResult(results[0], "status", null, "System status");
         assignResult(results[1], "articles", [], "Latest articles");
@@ -2248,6 +2253,7 @@
         assignResult(results[16], "openAiSettings", null, "OpenAI settings", {silentStatuses: [403]});
         assignResult(results[17], "dealGroupAiReviewSummary", null, "AI review summary");
         assignResult(results[18], "telegramSettings", null, "Telegram settings", {silentStatuses: [403]});
+        assignResult(results[19], "latency", null, "Detection latency");
         if (!state.selectedDealGroupKey && state.dealGroups.length > 0) {
             state.selectedDealGroupKey = state.dealGroups[0].groupKey;
             state.dealGroupDetails = state.dealGroups[0];
@@ -3365,6 +3371,29 @@
         document.querySelector("#actionLikelyDealCount").textContent = String(likelyDeals);
         document.querySelector("#actionNeedsReviewCount").textContent = String(needsReview);
         document.querySelector("#actionScanStatus").textContent = latestScanStatus;
+        renderLatency();
+    }
+
+    function renderLatency() {
+        const el = document.querySelector("#actionLatency");
+        if (!el) return;
+        const stats = state.latency;
+        if (!stats || !stats.sampleSize) {
+            el.textContent = "-";
+            el.title = "No dated samples yet";
+            return;
+        }
+        el.textContent = formatDuration(stats.medianSeconds);
+        el.title = `Median ${formatDuration(stats.medianSeconds)} · p90 ${formatDuration(stats.p90Seconds)} `
+            + `· fastest ${formatDuration(stats.fastestSeconds)} (n=${stats.sampleSize}). `
+            + `Time from news publish to detection (feed lag + poll interval).`;
+    }
+
+    function formatDuration(seconds) {
+        if (seconds == null) return "-";
+        if (seconds < 60) return `${seconds}s`;
+        if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+        return `${(seconds / 3600).toFixed(1)}h`;
     }
 
     function renderSchedulerStatus() {
