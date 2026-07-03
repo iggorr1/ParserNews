@@ -74,7 +74,10 @@ public class StockPriceService {
             JsonNode meta = fetchMeta(ticker, "1d");
             if (meta == null) return Optional.empty();
             double price = meta.path("regularMarketPrice").asDouble(0);
-            double prevClose = meta.path("previousClose").asDouble(price);
+            // Yahoo's chart meta omits "previousClose" and instead provides "chartPreviousClose";
+            // without this fallback prevClose defaults to price and every change reads 0.0%.
+            double prevClose = meta.path("previousClose")
+                    .asDouble(meta.path("chartPreviousClose").asDouble(price));
             double changePct = prevClose > 0 ? (price - prevClose) / prevClose * 100 : 0;
             return Optional.of(new PriceResult(
                     ticker.toUpperCase(Locale.ROOT),
