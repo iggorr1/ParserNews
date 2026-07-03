@@ -2244,10 +2244,10 @@
         assignResult(results[12], "signals", [], "Signal inbox");
         assignResult(results[13], "dealGroups", [], "Deal groups");
         assignResult(results[14], "dealGroupStats", null, "Deal group stats");
-        assignResult(results[15], "schedulerStatus", null, "Scheduler status");
-        assignResult(results[16], "openAiSettings", null, "OpenAI settings");
+        assignResult(results[15], "schedulerStatus", null, "Scheduler status", {silentStatuses: [403]});
+        assignResult(results[16], "openAiSettings", null, "OpenAI settings", {silentStatuses: [403]});
         assignResult(results[17], "dealGroupAiReviewSummary", null, "AI review summary");
-        assignResult(results[18], "telegramSettings", null, "Telegram settings");
+        assignResult(results[18], "telegramSettings", null, "Telegram settings", {silentStatuses: [403]});
         if (!state.selectedDealGroupKey && state.dealGroups.length > 0) {
             state.selectedDealGroupKey = state.dealGroups[0].groupKey;
             state.dealGroupDetails = state.dealGroups[0];
@@ -2792,18 +2792,30 @@
 
     async function readJsonResponse(response, label) {
         if (!response.ok) {
+            if (response.status === 401) {
+                // Session expired or not signed in — the API returns 401 for XHR.
+                window.location.href = "/login.html";
+            }
             const text = await response.text();
-            throw new Error(`${response.status} ${response.statusText}${text ? ": " + text : ""}`);
+            const error = new Error(`${response.status} ${response.statusText}${text ? ": " + text : ""}`);
+            error.status = response.status;
+            throw error;
         }
         return response.json();
     }
 
-    function assignResult(result, key, fallback, label) {
+    function assignResult(result, key, fallback, label, options) {
         if (result.status === "fulfilled") {
             state[key] = result.value;
         } else {
             state[key] = fallback;
-            showError(label, result.reason.message);
+            // Suppress expected errors (e.g. 403 on admin-only endpoints while in view-only mode)
+            // so the dashboard doesn't show raw error banners the viewer can't act on.
+            const status = result.reason && result.reason.status;
+            const silent = options && options.silentStatuses && options.silentStatuses.includes(status);
+            if (!silent) {
+                showError(label, result.reason.message);
+            }
         }
     }
 
