@@ -87,6 +87,22 @@ class DealTermsExtractionServiceTest {
     }
 
     @Test
+    void extractsHyphenatedPerSharePriceAndInfersCash() {
+        // Google-News-style title with hyphenated "$3.15-Per-Share" — previously the price regex
+        // and cash detection both missed the hyphen, leaving the deal unclassified.
+        NewsArticleEntity article = article(
+                "Open Lending to Be Acquired by ANV Group in $3.15-Per-Share Tender Offer and Merger",
+                "Open Lending to Be Acquired by ANV Group in $3.15-Per-Share Tender Offer and Merger"
+        );
+        DetectedEventEntity event = event(article, CandidateStrength.HIGH, ReviewStatus.HIGH_PRIORITY_SIGNAL);
+
+        DealTermsExtractionService.DealTerms terms = service.extract(article, event, likelyDeal());
+
+        assertThat(terms.offerPrice()).isEqualByComparingTo(new BigDecimal("3.15"));
+        assertThat(terms.paymentType()).isEqualTo(PaymentType.CASH);
+    }
+
+    @Test
     void lawFirmAlertDoesNotGetHighConfidence() {
         NewsArticleEntity article = article(
                 "Shareholder Alert: Law Firm Investigates Proposed Merger",

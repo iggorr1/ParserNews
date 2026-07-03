@@ -84,7 +84,7 @@ public class DealRelevanceService {
         boolean publicTarget = hasPublicTargetSignal(article, event, lower, privateTargetSignal, publicBuyer);
         boolean cash = dealTerms.paymentType() == PaymentType.CASH || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
         boolean stock = dealTerms.paymentType() == PaymentType.STOCK || dealTerms.paymentType() == PaymentType.CASH_AND_STOCK;
-        boolean perShare = lower.contains("per share") || lower.contains("a share");
+        boolean perShare = lower.contains("per share") || lower.contains("per-share") || lower.contains("a share");
         boolean takePrivate = containsAny(lower, "take private", "going private", "privately held", "private equity");
         boolean reverseTakeover = containsReverseTakeover(lower);
         boolean dealHeadlineCue = NewsTextPatterns.hasDealHeadlineCue(article.getHeadline());

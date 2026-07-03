@@ -6,7 +6,7 @@ import java.util.regex.Pattern;
 final class NewsTextPatterns {
     static final String ROUNDUP_AGGREGATOR_WARNING = "roundup/aggregator article, not primary source";
     private static final Pattern PER_SHARE_PRICE = Pattern.compile(
-            "(?i)(?:\\$|€|£)\\s*\\d+(?:\\.\\d+)?\\s*(?:per share|a share)"
+            "(?i)(?:\\$|€|£)\\s*\\d+(?:\\.\\d+)?[\\s-]*(?:per[\\s-]?share|a share)"
     );
 
     private NewsTextPatterns() {

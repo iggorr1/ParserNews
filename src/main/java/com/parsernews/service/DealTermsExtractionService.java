@@ -19,8 +19,13 @@ import java.util.regex.Pattern;
 
 @Service
 public class DealTermsExtractionService {
+    // Accepts hyphenated phrasing too: "$3.15 per share" and "$3.15-Per-Share" both match.
     private static final Pattern OFFER_PRICE = Pattern.compile(
-            "(?i)([$€£])\\s?([0-9]+(?:\\.[0-9]{1,4})?)\\s*(?:per share|a share|in cash)"
+            "(?i)([$€£])\\s?([0-9]+(?:\\.[0-9]{1,4})?)[\\s-]*(?:per[\\s-]?share|a share|in cash)"
+    );
+    // A dollar/euro/pound amount quoted per share is, by definition, cash consideration.
+    private static final Pattern PER_SHARE_CASH = Pattern.compile(
+            "(?i)[$€£]\\s?[0-9]+(?:\\.[0-9]{1,4})?[\\s-]*per[\\s-]?share"
     );
     private static final Pattern RAISES_OFFER_TO_ACQUIRE = Pattern.compile(
             "(?i)^(.+?)\\s+raises\\s+(?:its\\s+)?offer\\s+to\\s+acquire\\s+(.+?)(?:\\s+to\\s+[$€£]|\\s+for\\s+[$€£]|\\s+in\\s+|\\s+-\\s+|:|$)"
@@ -160,7 +165,8 @@ public class DealTermsExtractionService {
         boolean cash = lower.contains("all-cash")
                 || lower.contains("in cash")
                 || lower.contains("cash consideration")
-                || lower.contains("per share in cash");
+                || lower.contains("per share in cash")
+                || PER_SHARE_CASH.matcher(lower).find();
         boolean stock = lower.contains("stock-for-stock")
                 || lower.contains("shares of")
                 || lower.contains("one share")
