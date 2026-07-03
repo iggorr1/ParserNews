@@ -6,10 +6,14 @@ import com.parsernews.persistence.AiReviewConfidence;
 import com.parsernews.persistence.AiReviewVerdict;
 import com.parsernews.persistence.ManualReviewReason;
 import com.parsernews.persistence.ManualReviewStatus;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.http.client.ClientHttpRequestFactoryBuilder;
+import org.springframework.boot.http.client.ClientHttpRequestFactorySettings;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -19,8 +23,22 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
     private final RestClient restClient;
     private final ObjectMapper objectMapper;
 
-    public HttpOpenAiAnalysisClient(RestClient.Builder restClientBuilder, ObjectMapper objectMapper) {
-        this.restClient = restClientBuilder.baseUrl("https://api.openai.com").build();
+    public HttpOpenAiAnalysisClient(
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper,
+            @Value("${openai.connect-timeout-seconds:10}") long connectTimeoutSeconds,
+            @Value("${openai.read-timeout-seconds:45}") long readTimeoutSeconds
+    ) {
+        // Without explicit timeouts the RestClient can hang indefinitely if OpenAI stalls, which
+        // would block the dispatch pipeline (it holds a run guard). A read timeout turns a hung
+        // call into a normal "AI review failed" that the caller already handles and skips past.
+        ClientHttpRequestFactorySettings settings = ClientHttpRequestFactorySettings.defaults()
+                .withConnectTimeout(Duration.ofSeconds(connectTimeoutSeconds))
+                .withReadTimeout(Duration.ofSeconds(readTimeoutSeconds));
+        this.restClient = restClientBuilder
+                .baseUrl("https://api.openai.com")
+                .requestFactory(ClientHttpRequestFactoryBuilder.detect().build(settings))
+                .build();
         this.objectMapper = objectMapper;
     }
 
