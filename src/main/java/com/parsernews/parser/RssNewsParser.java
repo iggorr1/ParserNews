@@ -31,6 +31,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -38,6 +42,8 @@ import java.util.regex.Pattern;
 @ConditionalOnProperty(name = "scanner.source", havingValue = "rss")
 public class RssNewsParser implements NewsSourceParser {
     private static final Logger log = LoggerFactory.getLogger(RssNewsParser.class);
+    // Max feeds fetched in parallel. Bounded to avoid many simultaneous requests to the same host.
+    private static final int FEED_FETCH_CONCURRENCY = 8;
     private static final Pattern EXCHANGE_TICKER = Pattern.compile(
             "(?i)(?:NYSE\\s+American|NYSEAMERICAN|NASDAQ|NYSE|AMEX|OTCQB|OTCQX|OTC|OTCMKTS|TSX|TSXV)\\s*:\\s*([A-Z][A-Z0-9.-]{0,9})"
     );
@@ -82,27 +88,69 @@ public class RssNewsParser implements NewsSourceParser {
 
     @Override
     public List<NewsEvent> readNews() {
-        List<NewsEvent> events = new ArrayList<>();
-        int failedFeeds = 0;
+        List<String> urls = settings.urls();
+        if (urls.isEmpty()) {
+            return new ArrayList<>();
+        }
 
-        for (String url : settings.urls()) {
-            try {
-                List<NewsEvent> feedEvents = readFeed(url);
-                events.addAll(feedEvents);
-                healthService.recordSuccess(url);
-            } catch (IllegalArgumentException exception) {
-                throw new IllegalStateException("Invalid RSS feed configuration: " + url, exception);
-            } catch (IllegalStateException exception) {
-                failedFeeds++;
-                healthService.recordError(url, exception.getMessage());
-                log.warn("Skipped RSS feed (could not be read): {} — {}", url, exception.getMessage());
+        // Fetch feeds concurrently — a sequential loop over ~35 feeds (each with its own network
+        // round-trip plus optional full-article fetches) dominated scan duration. Bounded pool so
+        // we don't fire many simultaneous requests at the same host (e.g. PRNewswire) and trip
+        // rate limits. Distinct feeds still overlap, cutting wall-clock time by roughly the pool size.
+        int poolSize = Math.min(FEED_FETCH_CONCURRENCY, urls.size());
+        ExecutorService pool = Executors.newFixedThreadPool(poolSize);
+        try {
+            List<Future<List<NewsEvent>>> futures = new ArrayList<>(urls.size());
+            for (String url : urls) {
+                futures.add(pool.submit(() -> readFeedRecordingHealth(url)));
             }
-        }
 
-        if (events.isEmpty() && failedFeeds == settings.urls().size()) {
-            throw new IllegalStateException("All configured RSS feeds failed.");
+            List<NewsEvent> events = new ArrayList<>();
+            int failedFeeds = 0;
+            for (Future<List<NewsEvent>> future : futures) {
+                try {
+                    List<NewsEvent> feedEvents = future.get();
+                    if (feedEvents == null) {
+                        failedFeeds++;
+                    } else {
+                        events.addAll(feedEvents);
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException("Interrupted while reading RSS feeds", exception);
+                } catch (ExecutionException exception) {
+                    // Only a genuine config error (invalid feed URL) propagates out of a task.
+                    Throwable cause = exception.getCause();
+                    throw (cause instanceof RuntimeException re) ? re : new IllegalStateException(cause);
+                }
+            }
+
+            if (events.isEmpty() && failedFeeds == urls.size()) {
+                throw new IllegalStateException("All configured RSS feeds failed.");
+            }
+            return events;
+        } finally {
+            pool.shutdown();
         }
-        return events;
+    }
+
+    /**
+     * Reads one feed and records its health. Returns the feed's events, or {@code null} if the
+     * feed could not be read (already recorded as an error). An invalid feed configuration is a
+     * programming/config error and is rethrown so it surfaces rather than being silently skipped.
+     */
+    private List<NewsEvent> readFeedRecordingHealth(String url) {
+        try {
+            List<NewsEvent> feedEvents = readFeed(url);
+            healthService.recordSuccess(url);
+            return feedEvents;
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalStateException("Invalid RSS feed configuration: " + url, exception);
+        } catch (IllegalStateException exception) {
+            healthService.recordError(url, exception.getMessage());
+            log.warn("Skipped RSS feed (could not be read): {} — {}", url, exception.getMessage());
+            return null;
+        }
     }
 
     private List<NewsEvent> readFeed(String url) {

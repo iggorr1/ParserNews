@@ -37,7 +37,9 @@ public class AutoDealGroupDispatchService {
             AiReviewVerdict.DUPLICATE_OR_UPDATE
     );
 
-    private static final int MAX_AI_PER_RUN = 3;
+    // Max AI reviews per dispatch run. Caps OpenAI cost and per-run duration, but too low a
+    // value starves throughput during a burst of deals (extras wait for the next poll cycle).
+    private final int maxAiPerRun;
     private static final double MIN_PRICE_USD = 0.50;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -59,8 +61,10 @@ public class AutoDealGroupDispatchService {
             AlertNotifier alertNotifier,
             StockPriceService stockPriceService,
             OpenAiRuntimeSettingsService openAiSettings,
-            TelegramRuntimeSettingsService telegramSettings
+            TelegramRuntimeSettingsService telegramSettings,
+            @org.springframework.beans.factory.annotation.Value("${auto.dispatch.max-ai-per-run:5}") int maxAiPerRun
     ) {
+        this.maxAiPerRun = maxAiPerRun;
         this.dealGroupingService = dealGroupingService;
         this.aiReviewService = aiReviewService;
         this.dealGroupReviewService = dealGroupReviewService;
@@ -127,7 +131,7 @@ public class AutoDealGroupDispatchService {
             DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
             boolean hasReview = aiReview.verdict() != null && aiReview.verdict() != AiReviewVerdict.UNKNOWN;
 
-            if (!hasReview && aiRan < MAX_AI_PER_RUN) {
+            if (!hasReview && aiRan < maxAiPerRun) {
                 try {
                     aiReview = aiReviewService.review(group.groupKey());
                     aiRan++;
