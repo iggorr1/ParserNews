@@ -523,6 +523,9 @@ class DealGroupControllerTest {
                 List.of("https://example.test/rss", "https://sec.gov/test"),
                 List.of("RSS signal is alert eligible", "Multiple related signals found for this deal"),
                 Instant.parse("2026-06-20T12:01:00Z")
+        ,
+                null,
+                null
         );
     }
 }

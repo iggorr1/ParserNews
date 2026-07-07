@@ -203,7 +203,9 @@ public class DealGroupingService {
                 group.relatedSignals(),
                 group.evidenceUrls(),
                 group.warnings(),
-                group.sortInstant()
+                group.sortInstant(),
+                group.offerPrice(),
+                group.offerCurrency()
         );
     }
 
@@ -270,7 +272,9 @@ public class DealGroupingService {
                 relevance.tradability(),
                 stage.dealStage(),
                 stage.dealTiming(),
-                alertEligibility.eligible()
+                alertEligibility.eligible(),
+                terms.offerPrice(),
+                terms.offerCurrency()
         );
     }
 
@@ -472,7 +476,9 @@ public class DealGroupingService {
             Tradability tradability,
             DealStage dealStage,
             DealTiming dealTiming,
-            boolean alertEligible
+            boolean alertEligible,
+            java.math.BigDecimal offerPrice,
+            String offerCurrency
     ) {
         Instant sortInstant() {
             return publishedAt != null ? publishedAt : discoveredAt;
@@ -523,6 +529,8 @@ public class DealGroupingService {
         private ManualReviewStatus reviewStatus = ManualReviewStatus.PENDING;
         private ManualReviewReason reviewReason;
         private Instant sortInstant;
+        private java.math.BigDecimal offerPrice;
+        private String offerCurrency;
         private final List<RelatedSignalResponse> relatedSignals = new ArrayList<>();
         private final Set<String> evidenceUrls = new LinkedHashSet<>();
         private final Set<String> warnings = new LinkedHashSet<>();
@@ -602,6 +610,12 @@ public class DealGroupingService {
                 reviewReason = signal.reviewReason();
                 sortInstant = signal.sortInstant();
             }
+            // Carry the offer price from whichever RSS signal has it (a later, richer article may
+            // supply the price even if it doesn't become the primary signal).
+            if (offerPrice == null && signal.offerPrice() != null) {
+                offerPrice = signal.offerPrice();
+                offerCurrency = signal.offerCurrency();
+            }
         }
 
         private void mergePrimary(SecDealSignal signal) {
@@ -659,7 +673,9 @@ public class DealGroupingService {
                     List.copyOf(relatedSignals),
                     List.copyOf(evidenceUrls),
                     List.copyOf(warnings),
-                    sortInstant
+                    sortInstant,
+                    offerPrice,
+                    offerCurrency
             );
         }
 
@@ -734,7 +750,9 @@ public class DealGroupingService {
             List<RelatedSignalResponse> relatedSignals,
             List<String> evidenceUrls,
             List<String> warnings,
-            Instant sortInstant
+            Instant sortInstant,
+            java.math.BigDecimal offerPrice,
+            String offerCurrency
     ) {
     }
 

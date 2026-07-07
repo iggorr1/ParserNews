@@ -357,6 +357,9 @@ class ReviewPacketServiceTest {
                 List.of("https://example.test/apge"),
                 List.of("RSS signal is alert eligible"),
                 Instant.parse("2026-06-20T12:00:00Z")
+        ,
+                null,
+                null
         );
     }
 }

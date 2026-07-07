@@ -471,6 +471,9 @@ class DealGroupAiReviewServiceTest {
                 List.of("https://example.test/" + groupKey),
                 warnings,
                 Instant.parse("2026-06-20T12:00:00Z")
+        ,
+                null,
+                null
         );
     }
 
@@ -523,6 +526,9 @@ class DealGroupAiReviewServiceTest {
                 List.of("https://example.test/news"),
                 List.of(),
                 Instant.parse("2026-06-20T12:00:00Z")
+        ,
+                null,
+                null
         );
     }
 }

@@ -200,7 +200,7 @@ public class AutoDealGroupDispatchService {
         DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
         String message = dealGroupingService.formatTelegramPreview(group)
                 + formatAiSection(aiReview)
-                + formatPriceSection(group.targetTicker());
+                + formatPriceSection(group);
         List<AlertNotifier.InlineButton> buttons = List.of(
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
                 AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
@@ -248,10 +248,25 @@ public class AutoDealGroupDispatchService {
         };
     }
 
-    private String formatPriceSection(String ticker) {
+    private String formatPriceSection(DealGroupingService.DealGroupResponse group) {
+        String ticker = group.targetTicker();
         if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) return "";
         return stockPriceService.currentPrice(ticker)
-                .map(p -> "\n\n💰 <b>Price:</b> " + esc(p.formatted()) + " | " + esc(p.shortName()))
+                .map(p -> "\n\n💰 <b>Price:</b> " + esc(p.formatted()) + " | " + esc(p.shortName())
+                        + formatSpread(group.offerPrice(), p.price()))
                 .orElse("");
+    }
+
+    /**
+     * Merger-arbitrage spread: how much the offer price sits above the current market price,
+     * i.e. the return remaining if the deal closes at the announced terms. Shown only when the
+     * deal reported a per-share offer price.
+     */
+    private static String formatSpread(java.math.BigDecimal offerPrice, double currentPrice) {
+        if (offerPrice == null || currentPrice <= 0) return "";
+        double offer = offerPrice.doubleValue();
+        double spreadPct = (offer - currentPrice) / currentPrice * 100.0;
+        String sign = spreadPct >= 0 ? "+" : "";
+        return String.format("\n📈 <b>Spread:</b> %s%.1f%% (offer %.2f vs %.2f)", sign, spreadPct, offer, currentPrice);
     }
 }

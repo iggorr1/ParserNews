@@ -683,14 +683,20 @@ async function openPanel(group) {
     const dirColor  = direction === 'up' ? 'var(--success)' : direction === 'down' ? 'var(--danger)' : 'var(--muted)';
     const pillSign  = changeSinceNews != null && changeSinceNews >= 0 ? '+' : '';
 
+    // Merger-arb spread: return remaining if the deal closes at the announced per-share offer.
+    const offerPrice = group.offerPrice != null ? Number(group.offerPrice) : null;
+    const spreadPct = (offerPrice && nowPrice) ? ((offerPrice - nowPrice) / nowPrice * 100) : null;
+
     if (ticker && nowPrice) {
         const dayChange = price?.changePct ?? null;
         const daySign   = dayChange != null && dayChange >= 0 ? '+' : '';
+        const spreadSign = spreadPct != null && spreadPct >= 0 ? '+' : '';
         priceHero.style.display = 'flex';
         priceHero.innerHTML = `
             <span class="panel-price-now" style="color:${dirColor};">$${nowPrice.toFixed(2)}</span>
             ${dayChange != null ? `<span class="panel-price-change" style="color:${dayChange >= 0 ? 'var(--success)' : 'var(--danger)'};">${daySign}${dayChange.toFixed(2)}% today</span>` : ''}
-            ${changeSinceNews != null ? `<span class="panel-price-label">${pillSign}${changeSinceNews.toFixed(1)}% since news</span>` : ''}`;
+            ${changeSinceNews != null ? `<span class="panel-price-label">${pillSign}${changeSinceNews.toFixed(1)}% since news</span>` : ''}
+            ${spreadPct != null ? `<span class="panel-price-label" style="color:var(--accent);" title="Offer $${offerPrice.toFixed(2)} vs current $${nowPrice.toFixed(2)} — return if the deal closes at the announced price">📈 ${spreadSign}${spreadPct.toFixed(1)}% spread to offer</span>` : ''}`;
     }
 
     if (ticker && (nowPrice || priceBeforeNews)) {
