@@ -170,9 +170,13 @@ public class AutoDealGroupDispatchService {
     }
 
     private boolean passesQualityGate(DealGroupingService.DealGroupResponse group) {
-        // Skip if deal type unknown/null AND tradability not HIGH
+        // HIGH-priority groups carry a strong M&A signal (a clear "to be acquired" headline, or a
+        // SEC tender-offer/going-private filing that has no RSS-derived relevance at all). Let those
+        // through to AI review — the AI verdict is the real filter — instead of dropping them here.
+        // Only apply the deterministic relevance/tradability gate to lower-priority candidates.
+        boolean highPriority = group.priority() == UnifiedPriority.HIGH;
         boolean unknownRelevance = group.dealRelevance() == null || group.dealRelevance() == DealRelevance.UNKNOWN;
-        if (unknownRelevance && group.tradability() != com.parsernews.model.Tradability.HIGH) {
+        if (!highPriority && unknownRelevance && group.tradability() != com.parsernews.model.Tradability.HIGH) {
             return false;
         }
         // Skip penny stocks (price < $0.50) when ticker is known
