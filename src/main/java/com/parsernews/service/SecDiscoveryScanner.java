@@ -158,7 +158,7 @@ public class SecDiscoveryScanner {
                     }
                     SecFilingEntity savedEntity = filingRepository.save(entity);
                     saved++;
-                    if (settings.fetchPrimaryDocument()) {
+                    if (settings.fetchPrimaryDocument() && isPriceRelevantForm(filing.form())) {
                         documentFetcher.fetchDocument(savedEntity.getId());
                     }
                 }
@@ -452,6 +452,15 @@ public class SecDiscoveryScanner {
 
     private String joinErrors(List<String> errors) {
         return errors == null || errors.isEmpty() ? null : String.join("; ", errors);
+    }
+
+    // Forms that state a clean per-share offer price worth fetching the document for (tender offers,
+    // merger proxies, going-private). Excludes high-volume/low-price-signal forms like 8-K, 425, S-4.
+    private static final Set<String> PRICE_RELEVANT_FORMS = Set.of(
+            "SC TO-T", "SC TO-I", "DEFM14A", "PREM14A", "SC 13E3", "SC 14D9");
+
+    private boolean isPriceRelevantForm(String form) {
+        return PRICE_RELEVANT_FORMS.contains(baseForm(form));
     }
 
     public record SecDiscoverySummary(

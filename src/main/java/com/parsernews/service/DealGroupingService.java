@@ -31,6 +31,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
@@ -167,6 +168,28 @@ public class DealGroupingService {
     private String firstNonBlank(String... values) {
         for (String v : values) {
             if (v != null && !v.isBlank()) return v;
+        }
+        return null;
+    }
+
+    // First "$X.XX per share / per-share / in cash" figure — for tender offers and merger proxies
+    // this is the offer price (usually stated near the top of the document). Package-private for tests.
+    private static final Pattern PER_SHARE_USD = Pattern.compile(
+            "(?i)\\$\\s?([0-9]+(?:\\.[0-9]{1,4})?)[\\s-]*(?:per[\\s-]?share|a share|in cash)");
+
+    static java.math.BigDecimal extractPerShareUsd(String... texts) {
+        for (String text : texts) {
+            if (text == null || text.isBlank()) {
+                continue;
+            }
+            Matcher matcher = PER_SHARE_USD.matcher(text);
+            if (matcher.find()) {
+                try {
+                    return new java.math.BigDecimal(matcher.group(1));
+                } catch (NumberFormatException ignored) {
+                    // fall through to next text
+                }
+            }
         }
         return null;
     }
@@ -631,6 +654,15 @@ public class DealGroupingService {
                 reviewStatus = signal.reviewStatus();
                 reviewReason = signal.reviewReason();
                 sortInstant = signal.sortInstant();
+            }
+            // Tender-offer/merger filings state the per-share price in the document text (carried
+            // here as searchText). Pull it so the merger-arb spread works for SEC-sourced deals too.
+            if (offerPrice == null) {
+                java.math.BigDecimal price = extractPerShareUsd(signal.searchText(), signal.title());
+                if (price != null) {
+                    offerPrice = price;
+                    offerCurrency = "USD";
+                }
             }
         }
 
