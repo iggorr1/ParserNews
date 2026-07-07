@@ -40,6 +40,9 @@ public class AutoDealGroupDispatchService {
     // Max AI reviews per dispatch run. Caps OpenAI cost and per-run duration, but too low a
     // value starves throughput during a burst of deals (extras wait for the next poll cycle).
     private final int maxAiPerRun;
+    // Deals whose news is older than this are stale — already priced in — so they are auto-ignored
+    // (never sent to Telegram, and cleared out of the PENDING queue).
+    private final int maxDealAgeDays;
     private static final double MIN_PRICE_USD = 0.50;
 
     private final AtomicBoolean running = new AtomicBoolean(false);
@@ -62,9 +65,11 @@ public class AutoDealGroupDispatchService {
             StockPriceService stockPriceService,
             OpenAiRuntimeSettingsService openAiSettings,
             TelegramRuntimeSettingsService telegramSettings,
-            @org.springframework.beans.factory.annotation.Value("${auto.dispatch.max-ai-per-run:5}") int maxAiPerRun
+            @org.springframework.beans.factory.annotation.Value("${auto.dispatch.max-ai-per-run:5}") int maxAiPerRun,
+            @org.springframework.beans.factory.annotation.Value("${auto.dispatch.max-deal-age-days:14}") int maxDealAgeDays
     ) {
         this.maxAiPerRun = maxAiPerRun;
+        this.maxDealAgeDays = maxDealAgeDays;
         this.dealGroupingService = dealGroupingService;
         this.aiReviewService = aiReviewService;
         this.dealGroupReviewService = dealGroupReviewService;
@@ -89,6 +94,29 @@ public class AutoDealGroupDispatchService {
                initialDelayString = "${auto.dispatch.initial-delay-ms:120000}")
     public void scheduledDispatch() {
         autoDispatch();
+    }
+
+    /**
+     * Periodically clears stale news out of the PENDING queue: any deal group whose announcement
+     * is older than the freshness threshold is auto-ignored. This both cleans up the existing
+     * backlog and keeps old news from lingering in the dashboard/pipeline views.
+     */
+    @Scheduled(fixedDelayString = "${auto.dispatch.stale-sweep-delay-ms:3600000}",
+               initialDelayString = "${auto.dispatch.stale-sweep-initial-delay-ms:60000}")
+    public void sweepStaleDeals() {
+        java.time.Instant cutoff = java.time.Instant.now().minus(java.time.Duration.ofDays(maxDealAgeDays));
+        int swept = 0;
+        for (DealGroupingService.DealGroupResponse group : dealGroupingService.groups(ManualReviewStatus.PENDING, null, 500)) {
+            if (group.sortInstant() != null && group.sortInstant().isBefore(cutoff)) {
+                dealGroupReviewService.update(group.groupKey(), ManualReviewStatus.IGNORED,
+                        ManualReviewReason.OTHER,
+                        "Auto-ignored: stale news (older than " + maxDealAgeDays + " days)");
+                swept++;
+            }
+        }
+        if (swept > 0) {
+            log.info("Stale sweep — auto-ignored {} deal group(s) older than {} days", swept, maxDealAgeDays);
+        }
     }
 
     public void autoDispatch() {
@@ -124,9 +152,20 @@ public class AutoDealGroupDispatchService {
         if (candidates.isEmpty()) return;
         log.info("Dispatch run: {} candidate(s) after quality gate", candidates.size());
 
-        int aiRan = 0, dispatched = 0, autoIgnored = 0, pending = 0;
+        int aiRan = 0, dispatched = 0, autoIgnored = 0, pending = 0, staleIgnored = 0;
+        java.time.Instant staleCutoff = java.time.Instant.now().minus(java.time.Duration.ofDays(maxDealAgeDays));
         for (DealGroupingService.DealGroupResponse group : candidates) {
             if (alreadyDispatched(group.groupKey())) continue;
+
+            // Freshness gate — stale announcements are already priced in. Auto-ignore them so they
+            // don't reach Telegram and drop out of the PENDING queue (this also cleans up old news).
+            if (group.sortInstant() != null && group.sortInstant().isBefore(staleCutoff)) {
+                dealGroupReviewService.update(group.groupKey(), ManualReviewStatus.IGNORED,
+                        ManualReviewReason.OTHER,
+                        "Auto-ignored by dispatch: stale news (older than " + maxDealAgeDays + " days)");
+                staleIgnored++;
+                continue;
+            }
 
             DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
             boolean hasReview = aiReview.verdict() != null && aiReview.verdict() != AiReviewVerdict.UNKNOWN;
@@ -158,7 +197,8 @@ public class AutoDealGroupDispatchService {
             dispatchToTelegram(fresh);
             dispatched++;
         }
-        log.info("Dispatch done — sent: {}, auto-ignored: {}, pending AI: {}", dispatched, autoIgnored, pending);
+        log.info("Dispatch done — sent: {}, auto-ignored: {}, stale-ignored: {}, pending AI: {}",
+                dispatched, autoIgnored, staleIgnored, pending);
     }
 
     @Transactional(readOnly = true)
