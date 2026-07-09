@@ -12,6 +12,7 @@ import org.springframework.context.annotation.Configuration;
         RssSettings.class,
         SafetySettings.class,
         SecDiscoverySettings.class,
+        SecFullTextSearchSettings.class,
         SecScannerSettings.class,
         TelegramAlertSettings.class
 })
