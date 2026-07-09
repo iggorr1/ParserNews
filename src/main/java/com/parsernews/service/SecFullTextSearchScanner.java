@@ -34,9 +34,14 @@ public class SecFullTextSearchScanner {
     private static final Pattern DISPLAY_NAME = Pattern.compile(
             "^(.*?)\\s*(?:\\(([A-Z0-9.\\-]+)\\)\\s*)?\\(CIK\\s*(\\d+)\\)", Pattern.CASE_INSENSITIVE);
 
+    // Fits the document_text_snippet column (varchar 4000). The deal price is stated near the top
+    // of a press release, so the first few thousand characters are enough for the AI to extract it.
+    private static final int DOC_SNIPPET_MAX = 3900;
+
     private final SecFullTextSearchSettings settings;
     private final SecFullTextSearchClient client;
     private final SecFilingRepository filingRepository;
+    private final SecDocumentClient documentClient;
     private final ObjectMapper objectMapper;
 
     private volatile java.time.Instant lastRunAt;
@@ -46,11 +51,13 @@ public class SecFullTextSearchScanner {
             SecFullTextSearchSettings settings,
             SecFullTextSearchClient client,
             SecFilingRepository filingRepository,
+            SecDocumentClient documentClient,
             ObjectMapper objectMapper
     ) {
         this.settings = settings;
         this.client = client;
         this.filingRepository = filingRepository;
+        this.documentClient = documentClient;
         this.objectMapper = objectMapper;
     }
 
@@ -63,13 +70,14 @@ public class SecFullTextSearchScanner {
         LocalDate start = end.minusDays(settings.lookbackDays());
         List<String> errors = new ArrayList<>();
 
-        // Dedup across queries by accession (the same 8-K can match several phrases).
-        Map<String, DiscoveredFtsFiling> byAccession = new LinkedHashMap<>();
+        // Collect every hit (a filing can match multiple phrases and returns one hit per document:
+        // the main 8-K plus its EX-99 press release), grouped by accession.
+        Map<String, List<DiscoveredFtsFiling>> hitsByAccession = new LinkedHashMap<>();
         for (String query : settings.queryList()) {
             try {
                 String json = client.search(query, settings.forms(), start, end);
                 for (DiscoveredFtsFiling filing : parseHits(json, query)) {
-                    byAccession.putIfAbsent(filing.accessionNumber(), filing);
+                    hitsByAccession.computeIfAbsent(filing.accessionNumber(), k -> new ArrayList<>()).add(filing);
                 }
             } catch (java.io.IOException | RuntimeException exception) {
                 errors.add(query + ": " + exception.getMessage());
@@ -79,6 +87,21 @@ public class SecFullTextSearchScanner {
                 break;
             }
             sleepConservatively();
+        }
+
+        // One filing per accession: use a real form hit (8-K) for the metadata, but fetch the
+        // EX-99 press release document — that is where the "$X per share" deal price lives.
+        Map<String, DiscoveredFtsFiling> byAccession = new LinkedHashMap<>();
+        for (Map.Entry<String, List<DiscoveredFtsFiling>> entry : hitsByAccession.entrySet()) {
+            List<DiscoveredFtsFiling> hits = entry.getValue();
+            DiscoveredFtsFiling rep = hits.stream()
+                    .filter(h -> !h.form().toUpperCase(Locale.ROOT).startsWith("EX"))
+                    .findFirst().orElse(hits.get(0));
+            String priceDoc = hits.stream()
+                    .filter(h -> h.form().toUpperCase(Locale.ROOT).startsWith("EX-99"))
+                    .map(DiscoveredFtsFiling::primaryDocument)
+                    .findFirst().orElse(rep.primaryDocument());
+            byAccession.put(entry.getKey(), rep.withDocument(priceDoc));
         }
 
         int found = byAccession.size();
@@ -101,6 +124,9 @@ public class SecFullTextSearchScanner {
                     changed = true;
                     upgraded++;
                 }
+                if (needsDocumentText(entity) && attachDocumentText(entity, filing)) {
+                    changed = true;
+                }
                 if (changed) {
                     filingRepository.save(entity);
                 }
@@ -118,6 +144,7 @@ public class SecFullTextSearchScanner {
                     filing.summary());
             entity.setTicker(filing.ticker());
             entity.updateSecSignal(filing.signalType(), SecSignalPriority.HIGH, filing.summary(), null);
+            attachDocumentText(entity, filing);
             filingRepository.save(entity);
             created++;
         }
@@ -177,6 +204,58 @@ public class SecFullTextSearchScanner {
                     summary));
         }
         return results;
+    }
+
+    /**
+     * Fetches the matched filing document (for a price-phrase query this is the press release that
+     * states "$X per share") and stores its cleaned text so the AI review can extract the offer
+     * price. Best-effort: a fetch failure leaves the deal intact, just without document context.
+     */
+    // Re-fetch when we have no text or only the useless EDGAR filing-index page (a leftover from the
+    // form-based document fetcher, which resolves to the index rather than the primary document).
+    private static boolean needsDocumentText(SecFilingEntity entity) {
+        String snippet = entity.getDocumentTextSnippet();
+        return snippet == null || snippet.isBlank() || snippet.contains("EDGAR Filing Documents");
+    }
+
+    private boolean attachDocumentText(SecFilingEntity entity, DiscoveredFtsFiling filing) {
+        if (filing.primaryDocument() == null || filing.primaryDocument().isBlank()) {
+            return false;
+        }
+        String url = buildDocumentUrl(filing.cik(), filing.accessionNumber(), filing.primaryDocument());
+        try {
+            String cleaned = stripHtml(documentClient.fetchDocumentText(url));
+            if (cleaned.isBlank()) {
+                return false;
+            }
+            entity.attachDocumentText(url, cleaned.length() > DOC_SNIPPET_MAX
+                    ? cleaned.substring(0, DOC_SNIPPET_MAX) : cleaned);
+            return true;
+        } catch (java.io.IOException | RuntimeException exception) {
+            log.debug("EFTS document fetch failed for {}: {}", url, exception.getMessage());
+            return false;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
+    }
+
+    private static String stripHtml(String raw) {
+        if (raw == null) {
+            return "";
+        }
+        return raw.replaceAll("(?is)<script.*?</script>", " ")
+                .replaceAll("(?is)<style.*?</style>", " ")
+                .replaceAll("(?s)<[^>]+>", " ")
+                .replace("&#160;", " ").replace("&nbsp;", " ").replace("&amp;", "&")
+                .replaceAll("\\s+", " ")
+                .trim();
+    }
+
+    private static String buildDocumentUrl(String cik, String accession, String document) {
+        String cikNoZeros = cik == null ? "" : cik.replaceFirst("^0+", "");
+        String accNoDashes = accession == null ? "" : accession.replace("-", "");
+        return "https://www.sec.gov/Archives/edgar/data/" + cikNoZeros + "/" + accNoDashes + "/" + document;
     }
 
     private static SecSignalType signalFor(String query) {
@@ -249,6 +328,10 @@ public class SecFullTextSearchScanner {
             SecSignalType signalType,
             String summary
     ) {
+        DiscoveredFtsFiling withDocument(String document) {
+            return new DiscoveredFtsFiling(cik, companyName, ticker, form, filingDate,
+                    accessionNumber, document, filingUrl, signalType, summary);
+        }
     }
 
     public record FtsSummary(boolean enabled, int found, int created, int upgraded, List<String> errors) {

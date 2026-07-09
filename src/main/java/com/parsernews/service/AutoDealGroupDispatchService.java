@@ -240,7 +240,7 @@ public class AutoDealGroupDispatchService {
         DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
         String message = dealGroupingService.formatTelegramPreview(group)
                 + formatAiSection(aiReview)
-                + formatPriceSection(group);
+                + formatPriceSection(group, aiReview == null ? null : aiReview.offerPrice());
         List<AlertNotifier.InlineButton> buttons = List.of(
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
                 AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
@@ -288,12 +288,15 @@ public class AutoDealGroupDispatchService {
         };
     }
 
-    private String formatPriceSection(DealGroupingService.DealGroupResponse group) {
+    private String formatPriceSection(DealGroupingService.DealGroupResponse group, java.math.BigDecimal aiOfferPrice) {
         String ticker = group.targetTicker();
         if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) return "";
+        // Prefer the deterministic offer price from the deal terms; fall back to the AI-extracted
+        // price (used for SEC-sourced deals where the price is in the filing, not the headline).
+        java.math.BigDecimal offerPrice = group.offerPrice() != null ? group.offerPrice() : aiOfferPrice;
         return stockPriceService.currentPrice(ticker)
                 .map(p -> "\n\n💰 <b>Price:</b> " + esc(p.formatted()) + " | " + esc(p.shortName())
-                        + formatSpread(group.offerPrice(), p.price()))
+                        + formatSpread(offerPrice, p.price()))
                 .orElse("");
     }
 

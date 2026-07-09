@@ -61,7 +61,8 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
                     structured.suggestedReviewReason(),
                     structured.reason(),
                     structured.riskFlags() == null ? List.of() : structured.riskFlags(),
-                    outputText
+                    outputText,
+                    structured.offerPricePerShare()
             );
         } catch (RestClientException exception) {
             throw new IllegalStateException("OpenAI request failed: " + safeMessage(exception), exception);
@@ -100,6 +101,7 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
                         "suggestedReviewStatus", Map.of("type", "string", "enum", enumNames(ManualReviewStatus.values())),
                         "suggestedReviewReason", Map.of("type", "string", "enum", enumNames(ManualReviewReason.values())),
                         "reason", Map.of("type", "string"),
+                        "offerPricePerShare", Map.of("type", List.of("number", "null")),
                         "riskFlags", Map.of(
                                 "type", "array",
                                 "items", Map.of("type", "string")
@@ -112,6 +114,7 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
                         "suggestedReviewStatus",
                         "suggestedReviewReason",
                         "reason",
+                        "offerPricePerShare",
                         "riskFlags"
                 )
         );
@@ -150,6 +153,7 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
             ManualReviewStatus suggestedReviewStatus,
             ManualReviewReason suggestedReviewReason,
             String reason,
+            java.math.BigDecimal offerPricePerShare,
             List<String> riskFlags
     ) {
     }

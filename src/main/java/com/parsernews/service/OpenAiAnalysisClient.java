@@ -18,7 +18,8 @@ public interface OpenAiAnalysisClient {
             ManualReviewReason suggestedReviewReason,
             String reason,
             List<String> riskFlags,
-            String rawJson
+            String rawJson,
+            java.math.BigDecimal offerPricePerShare
     ) {
     }
 }

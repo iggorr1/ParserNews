@@ -286,6 +286,14 @@ public class SecFilingEntity {
         );
     }
 
+    /** Lightweight: store fetched document text for downstream analysis without touching the signal. */
+    public void attachDocumentText(String documentUrl, String snippet) {
+        this.documentUrl = documentUrl;
+        this.documentTextSnippet = snippet;
+        this.documentFetchedAt = Instant.now();
+        this.documentFetchStatus = "FETCHED";
+    }
+
     public void markDocumentFetchFailed(String documentUrl, String signalReason) {
         this.documentUrl = documentUrl;
         this.documentFetchedAt = Instant.now();

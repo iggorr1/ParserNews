@@ -79,7 +79,8 @@ class DealGroupAiReviewServiceTest {
                 "Public target with cash acquisition evidence.",
                 List.of("verify offer terms"),
                 "{\"verdict\":\"GOOD_SIGNAL\"}"
-        ));
+        ,
+                null));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         DealGroupAiReviewService service = service(true, "test-key");
 
@@ -117,7 +118,8 @@ class DealGroupAiReviewServiceTest {
                 "Target appears private/LLC and not directly tradable.",
                 List.of("private company target", "no public target ticker"),
                 "{\"verdict\":\"NOT_TRADABLE\"}"
-        ));
+        ,
+                null));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         DealGroupAiReviewService service = service(true, "test-key");
 
@@ -150,7 +152,8 @@ class DealGroupAiReviewServiceTest {
                 "Runtime key was used.",
                 List.of(),
                 "{}"
-        ));
+        ,
+                null));
         when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
         OpenAiRuntimeSettingsService runtimeSettings = new OpenAiRuntimeSettingsService(
                 new OpenAiAnalysisSettings(false, "", "gpt-4.1-mini", 12000)
@@ -160,7 +163,8 @@ class DealGroupAiReviewServiceTest {
                 runtimeSettings,
                 client,
                 dealGroupingService,
-                repository
+                repository,
+                mock(com.parsernews.persistence.SecFilingRepository.class)
         );
 
         DealGroupAiReviewService.AiReviewResponse response = service.review("target-ticker:APGE");
@@ -183,7 +187,8 @@ class DealGroupAiReviewServiceTest {
                 "Looks useful.",
                 "verify offer",
                 "{}"
-        );
+        ,
+                null);
         when(repository.findTopByGroupKeyOrderByCreatedAtDesc("target-ticker:APGE")).thenReturn(Optional.of(entity));
 
         DealGroupAiReviewService.AiReviewResponse response = service(true, "test-key").latest("target-ticker:APGE");
@@ -336,7 +341,8 @@ class DealGroupAiReviewServiceTest {
                 "Older review should be ignored.",
                 "",
                 "{}"
-        );
+        ,
+                null);
         DealGroupAiReviewEntity latestGood = new DealGroupAiReviewEntity(
                 "good-group",
                 "gpt-4.1-mini",
@@ -349,7 +355,8 @@ class DealGroupAiReviewServiceTest {
                 "Latest good public target signal.",
                 "",
                 "{}"
-        );
+        ,
+                null);
         DealGroupAiReviewEntity notTradable = new DealGroupAiReviewEntity(
                 "private-group",
                 "gpt-4.1-mini",
@@ -362,7 +369,8 @@ class DealGroupAiReviewServiceTest {
                 "Private target.",
                 "",
                 "{}"
-        );
+        ,
+                null);
         setCreatedAt(oldGood, "2026-06-20T12:00:00Z");
         setCreatedAt(latestGood, "2026-06-20T12:05:00Z");
         setCreatedAt(notTradable, "2026-06-20T12:03:00Z");
@@ -392,7 +400,8 @@ class DealGroupAiReviewServiceTest {
                 new OpenAiRuntimeSettingsService(new OpenAiAnalysisSettings(enabled, apiKey, "gpt-4.1-mini", 12000)),
                 client,
                 dealGroupingService,
-                repository
+                repository,
+                mock(com.parsernews.persistence.SecFilingRepository.class)
         );
     }
 
@@ -406,7 +415,8 @@ class DealGroupAiReviewServiceTest {
                 "Public target with useful deal evidence.",
                 List.of(),
                 "{\"verdict\":\"GOOD_SIGNAL\"}"
-        );
+        ,
+                null);
     }
 
     private DealGroupingService.DealGroupResponse groupWithSignals(

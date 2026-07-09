@@ -16,7 +16,7 @@ class SecFullTextSearchScannerTest {
     private SecFullTextSearchScanner scanner() {
         SecFullTextSearchSettings settings = new SecFullTextSearchSettings(true, null, null, 3, 30, 0, null);
         return new SecFullTextSearchScanner(settings, mock(SecFullTextSearchClient.class),
-                mock(SecFilingRepository.class), new ObjectMapper());
+                mock(SecFilingRepository.class), mock(SecDocumentClient.class), new ObjectMapper());
     }
 
     @Test
@@ -66,7 +66,7 @@ class SecFullTextSearchScannerTest {
     void disabledScanReturnsWithoutSearching() {
         SecFullTextSearchSettings disabled = new SecFullTextSearchSettings(false, null, null, 3, 30, 0, null);
         SecFullTextSearchScanner s = new SecFullTextSearchScanner(disabled, mock(SecFullTextSearchClient.class),
-                mock(SecFilingRepository.class), new ObjectMapper());
+                mock(SecFilingRepository.class), mock(SecDocumentClient.class), new ObjectMapper());
 
         SecFullTextSearchScanner.FtsSummary summary = s.scan();
 

@@ -36,17 +36,20 @@ public class DealGroupAiReviewService {
     private final OpenAiAnalysisClient openAiAnalysisClient;
     private final DealGroupingService dealGroupingService;
     private final DealGroupAiReviewRepository repository;
+    private final com.parsernews.persistence.SecFilingRepository secFilingRepository;
 
     public DealGroupAiReviewService(
             OpenAiRuntimeSettingsService settingsService,
             OpenAiAnalysisClient openAiAnalysisClient,
             DealGroupingService dealGroupingService,
-            DealGroupAiReviewRepository repository
+            DealGroupAiReviewRepository repository,
+            com.parsernews.persistence.SecFilingRepository secFilingRepository
     ) {
         this.settingsService = settingsService;
         this.openAiAnalysisClient = openAiAnalysisClient;
         this.dealGroupingService = dealGroupingService;
         this.repository = repository;
+        this.secFilingRepository = secFilingRepository;
     }
 
     @Transactional(readOnly = true)
@@ -260,7 +263,8 @@ public class DealGroupAiReviewService {
                 nullSafe(result.suggestedReviewReason(), ManualReviewReason.OTHER),
                 result.reason(),
                 String.join("; ", result.riskFlags() == null ? List.of() : result.riskFlags()),
-                result.rawJson()
+                result.rawJson(),
+                result.offerPricePerShare()
         ));
         return saved;
     }
@@ -427,6 +431,13 @@ public class DealGroupAiReviewService {
                 Judge only whether this Deal Group is a useful M&A research signal for human review:
                 public target, tradable target, cash or fixed-price offer, and early enough signal.
                 Do not give buy/sell/investment advice. Do not recommend trading.
+
+                offerPricePerShare: the per-share cash price the TARGET's shareholders will receive
+                (e.g. "$18.50 per share in cash" -> 18.50). This is the price for the company being
+                ACQUIRED, not the acquirer. Return null when: the company in this signal is the buyer,
+                the consideration is not a fixed cash-per-share amount (all-stock, undisclosed), or the
+                number is anything else (a dividend, earnings/EPS, a historical price). Never guess.
+
                 Return only the requested structured JSON.
                 """;
     }
@@ -458,6 +469,10 @@ public class DealGroupAiReviewService {
                     .append("  relatedReason=").append(signal.relatedReason()).append('\n');
             if (signal.sourceType() == SourceType.SEC_FILING) {
                 builder.append("  note=SEC filing evidence; verify if this is early deal evidence or later filing update.\n");
+                secFilingRepository.findById(signal.id())
+                        .map(com.parsernews.persistence.SecFilingEntity::getDocumentTextSnippet)
+                        .filter(text -> text != null && !text.isBlank())
+                        .ifPresent(text -> builder.append("  documentText=").append(truncate(text, 6000)).append('\n'));
             }
         }
         return builder.toString();
@@ -490,6 +505,7 @@ public class DealGroupAiReviewService {
                 entity.getSuggestedReviewReason(),
                 entity.getReason(),
                 riskFlags(entity.getRiskFlags()),
+                entity.getOfferPrice(),
                 entity.getCreatedAt()
         );
     }
@@ -519,6 +535,7 @@ public class DealGroupAiReviewService {
             ManualReviewReason suggestedReviewReason,
             String reason,
             List<String> riskFlags,
+            java.math.BigDecimal offerPrice,
             Instant createdAt
     ) {
         public static AiReviewResponse empty(boolean enabled, boolean configured, String message) {
@@ -537,6 +554,7 @@ public class DealGroupAiReviewService {
                     null,
                     null,
                     List.of(),
+                    null,
                     null
             );
         }

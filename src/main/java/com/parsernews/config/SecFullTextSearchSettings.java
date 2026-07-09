@@ -22,7 +22,8 @@ public record SecFullTextSearchSettings(
 ) {
     // High-precision M&A phrases. Semicolon-separated so the phrases themselves can contain commas.
     private static final String DEFAULT_QUERIES =
-            "definitive agreement to acquire;agreement and plan of merger;to be acquired by;commence a tender offer";
+            "definitive agreement to acquire;agreement and plan of merger;to be acquired by;"
+            + "commence a tender offer;per share in cash";
     private static final String DEFAULT_FORMS = "8-K";
 
     public SecFullTextSearchSettings {

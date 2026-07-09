@@ -54,6 +54,9 @@ public class DealGroupAiReviewEntity {
     @Column(length = 32)
     private String promptVersion;
 
+    @Column(precision = 12, scale = 4)
+    private java.math.BigDecimal offerPrice;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -71,7 +74,8 @@ public class DealGroupAiReviewEntity {
             ManualReviewReason suggestedReviewReason,
             String reason,
             String riskFlags,
-            String rawJson
+            String rawJson,
+            java.math.BigDecimal offerPrice
     ) {
         this.groupKey = groupKey;
         this.model = model;
@@ -84,6 +88,11 @@ public class DealGroupAiReviewEntity {
         this.reason = truncate(reason, 4000);
         this.riskFlags = truncate(riskFlags, 2048);
         this.rawJson = truncate(rawJson, 10000);
+        this.offerPrice = offerPrice;
+    }
+
+    public java.math.BigDecimal getOfferPrice() {
+        return offerPrice;
     }
 
     public Long getId() {

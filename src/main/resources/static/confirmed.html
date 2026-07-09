@@ -684,7 +684,9 @@ async function openPanel(group) {
     const pillSign  = changeSinceNews != null && changeSinceNews >= 0 ? '+' : '';
 
     // Merger-arb spread: return remaining if the deal closes at the announced per-share offer.
-    const offerPrice = group.offerPrice != null ? Number(group.offerPrice) : null;
+    // Prefer the deterministic deal-terms price; fall back to the AI-extracted price (SEC deals).
+    const offerPrice = group.offerPrice != null ? Number(group.offerPrice)
+        : (ai && ai.offerPrice != null ? Number(ai.offerPrice) : null);
     const spreadPct = (offerPrice && nowPrice) ? ((offerPrice - nowPrice) / nowPrice * 100) : null;
 
     if (ticker && nowPrice) {
