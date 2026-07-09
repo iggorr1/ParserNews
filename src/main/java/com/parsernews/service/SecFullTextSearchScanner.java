@@ -39,6 +39,9 @@ public class SecFullTextSearchScanner {
     private final SecFilingRepository filingRepository;
     private final ObjectMapper objectMapper;
 
+    private volatile java.time.Instant lastRunAt;
+    private volatile FtsSummary lastSummary;
+
     public SecFullTextSearchScanner(
             SecFullTextSearchSettings settings,
             SecFullTextSearchClient client,
@@ -88,10 +91,18 @@ public class SecFullTextSearchScanner {
                 // EFTS confirmed by content that this one is an M&A deal — upgrade it to HIGH so it
                 // reaches dispatch, instead of skipping it as a duplicate.
                 SecFilingEntity entity = existing.get();
+                boolean changed = false;
+                if (entity.getTicker() == null && filing.ticker() != null) {
+                    entity.setTicker(filing.ticker());
+                    changed = true;
+                }
                 if (entity.getSecSignalPriority() != SecSignalPriority.HIGH) {
                     entity.updateSecSignal(filing.signalType(), SecSignalPriority.HIGH, filing.summary(), null);
-                    filingRepository.save(entity);
+                    changed = true;
                     upgraded++;
+                }
+                if (changed) {
+                    filingRepository.save(entity);
                 }
                 continue;
             }
@@ -105,6 +116,7 @@ public class SecFullTextSearchScanner {
                     filing.filingUrl(),
                     filing.signalType().name(),
                     filing.summary());
+            entity.setTicker(filing.ticker());
             entity.updateSecSignal(filing.signalType(), SecSignalPriority.HIGH, filing.summary(), null);
             filingRepository.save(entity);
             created++;
@@ -113,7 +125,18 @@ public class SecFullTextSearchScanner {
             log.info("EFTS scan — found: {}, new: {}, upgraded: {}, errors: {}",
                     found, created, upgraded, errors.size());
         }
-        return new FtsSummary(true, found, created, upgraded, errors);
+        FtsSummary summary = new FtsSummary(true, found, created, upgraded, errors);
+        lastRunAt = java.time.Instant.now();
+        lastSummary = summary;
+        return summary;
+    }
+
+    /** Last EFTS run for observability (null timestamp until the first run). */
+    public FtsStatus status() {
+        return new FtsStatus(settings.enabled(), lastRunAt, lastSummary);
+    }
+
+    public record FtsStatus(boolean enabled, java.time.Instant lastRunAt, FtsSummary lastSummary) {
     }
 
     List<DiscoveredFtsFiling> parseHits(String json, String query) {

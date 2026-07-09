@@ -25,6 +25,9 @@ public class SecFilingEntity {
     @Column(nullable = false)
     private String companyName;
 
+    @Column(length = 32)
+    private String ticker;
+
     @Column(nullable = false, length = 32)
     private String form;
 
@@ -130,6 +133,14 @@ public class SecFilingEntity {
 
     public String getCompanyName() {
         return companyName;
+    }
+
+    public String getTicker() {
+        return ticker;
+    }
+
+    public void setTicker(String ticker) {
+        this.ticker = ticker;
     }
 
     public String getForm() {

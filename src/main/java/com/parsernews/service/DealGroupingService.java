@@ -307,6 +307,7 @@ public class DealGroupingService {
                 filing.getCompanyName() + " " + filing.getForm(),
                 firstNonBlank(filing.getDocumentUrl(), filing.getFilingUrl()),
                 filing.getCompanyName(),
+                filing.getTicker(),
                 filing.getCik(),
                 filing.getForm(),
                 filing.getFilingDate(),
@@ -513,6 +514,7 @@ public class DealGroupingService {
             String title,
             String url,
             String companyName,
+            String ticker,
             String cik,
             String form,
             LocalDate filingDate,
@@ -646,6 +648,7 @@ public class DealGroupingService {
                 targetCompany = signal.companyName();
                 targetCik = firstNonBlankStatic(targetCik, signal.cik());
             }
+            targetTicker = firstNonBlankStatic(targetTicker, signal.ticker());
             if (shouldReplacePrimary(signal.priority(), signal.sortInstant())) {
                 primarySignalSourceType = SourceType.SEC_FILING;
                 primarySignalId = signal.id();
