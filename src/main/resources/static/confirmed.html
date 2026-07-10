@@ -608,7 +608,12 @@ async function loadMiniChart(ticker, sortInstant, groupKey) {
     const pts = histRes.value.points;
     const labels = pts.map(p => p.date);
     const closes = pts.map(p => p.close);
-    const newsIdx = newsDate ? labels.findIndex(d => d >= newsDate) : -1;
+    let newsIdx = newsDate ? labels.findIndex(d => d >= newsDate) : -1;
+    // Fresh same-day deal: the news is on/after the latest daily bar (which lags by a day), so
+    // findIndex misses it — pin the marker to the right edge instead of hiding it.
+    if (newsIdx === -1 && newsDate && labels.length && labels[labels.length - 1] <= newsDate) {
+        newsIdx = labels.length - 1;
+    }
     const id = `mchart-${groupKey}`;
     if (chartInstances[id]) chartInstances[id].destroy();
     chartInstances[id] = buildChart(canvas, labels, closes, newsIdx, 10);
@@ -917,6 +922,11 @@ async function renderPanelChart(canvasOrIgnored, range) {
         newsIdx = pts.findIndex(p => p.ts >= panelNewsTs);
     } else if (panelNewsDate) {
         newsIdx = pts.findIndex(p => (p.label || p.date) >= panelNewsDate);
+    }
+    // Fresh deal whose news is on/after the latest bar: pin the marker to the right edge.
+    if (newsIdx === -1 && !intradayCfg && panelNewsDate && pts.length
+            && (pts[pts.length - 1].label || pts[pts.length - 1].date) <= panelNewsDate) {
+        newsIdx = pts.length - 1;
     }
 
     panelChart = buildChart(canvas, labels, closes, newsIdx, 11, true, panelDirection);
