@@ -321,8 +321,11 @@ public class SecDiscoveryScanner {
             return new SecMetadataSignal(SecSignalType.MERGER_AGREEMENT, SecSignalPriority.HIGH, "Discovery filing mentions merger/acquisition agreement language.", amendmentWarning);
         }
         if (form.equals("DEFM14A") || form.equals("PREM14A") || form.equals("SC 14D9")) {
+            // Definitive/preliminary merger proxy and tender-offer response — these are confirmed
+            // public-company M&A actions with a real spread while the deal is open, so treat them as
+            // HIGH (was MEDIUM, which the dispatch gate dropped, missing real deals like LiveRamp).
             String warning = amendmentWarning != null ? amendmentWarning : "Review timing and transaction context.";
-            return new SecMetadataSignal(SecSignalType.DEFINITIVE_PROXY, SecSignalPriority.MEDIUM, "Discovery filing form can contain M&A proxy or response material.", warning);
+            return new SecMetadataSignal(SecSignalType.DEFINITIVE_PROXY, SecSignalPriority.HIGH, "Definitive/preliminary M&A proxy or tender-offer response filing.", warning);
         }
         if (form.equals("425") || form.equals("S-4") || containsAny(text, "business combination")) {
             return new SecMetadataSignal(SecSignalType.BUSINESS_COMBINATION, SecSignalPriority.MEDIUM, "Discovery filing form can indicate merger/business-combination communications.", amendmentWarning);
