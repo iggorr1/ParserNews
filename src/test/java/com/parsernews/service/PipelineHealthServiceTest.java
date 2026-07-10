@@ -42,7 +42,8 @@ class PipelineHealthServiceTest {
         SecFullTextSearchScanner scanner = mock(SecFullTextSearchScanner.class);
         when(scanner.status()).thenReturn(efts);
 
-        return new PipelineHealthService(feedHealth, latency, repo, scanner);
+        return new PipelineHealthService(feedHealth, latency, repo, scanner,
+                mock(com.parsernews.persistence.DealGroupReviewRepository.class));
     }
 
     @Test

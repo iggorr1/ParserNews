@@ -25,17 +25,20 @@ public class PipelineHealthService {
     private final LatencyService latencyService;
     private final NewsArticleRepository articleRepository;
     private final SecFullTextSearchScanner ftsScanner;
+    private final com.parsernews.persistence.DealGroupReviewRepository reviewRepository;
 
     public PipelineHealthService(
             RssFeedHealthService feedHealthService,
             LatencyService latencyService,
             NewsArticleRepository articleRepository,
-            SecFullTextSearchScanner ftsScanner
+            SecFullTextSearchScanner ftsScanner,
+            com.parsernews.persistence.DealGroupReviewRepository reviewRepository
     ) {
         this.feedHealthService = feedHealthService;
         this.latencyService = latencyService;
         this.articleRepository = articleRepository;
         this.ftsScanner = ftsScanner;
+        this.reviewRepository = reviewRepository;
     }
 
     @Transactional(readOnly = true)
@@ -45,6 +48,7 @@ public class PipelineHealthService {
         checks.add(dataFreshnessCheck());
         checks.add(latencyCheck());
         checks.add(eftsCheck());
+        checks.add(precisionCheck());
 
         List<String> warnings = checks.stream()
                 .filter(c -> !c.ok())
@@ -101,6 +105,29 @@ public class PipelineHealthService {
                     ? ", upgraded " + status.lastSummary().upgraded() + ", errors " + errors
                     : "");
         return new Check("efts", ok, detail);
+    }
+
+    /**
+     * Signal quality: of the dispatched deals the user has actually reviewed, what fraction were
+     * marked Useful. Informational (never flips overall status) — it is a quality gauge, not an
+     * outage. A low number over a decent sample means the dispatch bar is sending too much noise.
+     */
+    private Check precisionCheck() {
+        int useful = 0;
+        int ignored = 0;
+        int pending = 0;
+        for (com.parsernews.persistence.DealGroupReviewEntity review
+                : reviewRepository.findByTgDispatchedAtIsNotNullOrderByTgDispatchedAtDesc()) {
+            switch (review.getManualReviewStatus()) {
+                case USEFUL -> useful++;
+                case IGNORED -> ignored++;
+                default -> pending++;
+            }
+        }
+        int reviewed = useful + ignored;
+        String precision = reviewed == 0 ? "n/a" : Math.round(100.0 * useful / reviewed) + "%";
+        return new Check("precision", true,
+                precision + " useful (" + useful + " useful / " + ignored + " ignored, " + pending + " unreviewed)");
     }
 
     public record PipelineHealth(String status, List<Check> checks, List<String> warnings) {
