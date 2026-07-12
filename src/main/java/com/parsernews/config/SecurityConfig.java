@@ -41,6 +41,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(HttpMethod.GET, "/error", "/login.html").permitAll()
+                        // Read-only data export for external consumers — gated by its own API key
+                        // inside the controller, not by the session login.
+                        .requestMatchers(HttpMethod.GET, "/api/export/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/logs.html").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/**").hasRole("ADMIN")
