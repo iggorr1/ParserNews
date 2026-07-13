@@ -75,9 +75,37 @@ public class StockPriceService {
 
     private Optional<PriceResult> fetchPrice(String ticker) {
         try {
-            JsonNode meta = fetchMeta(ticker, "1d");
-            if (meta == null) return Optional.empty();
+            // Ask for pre/post-market data and 1-minute bars so we can return the price closest to
+            // NOW, not just the regular-session snapshot. Outside regular hours regularMarketPrice
+            // freezes at the last close; the last pre/post bar (when present) is fresher. Fall back
+            // to daily granularity if the 1-minute range is unavailable.
+            JsonNode node = fetchChartResult(ticker, "1m", true);
+            if (node == null) node = fetchChartResult(ticker, "1d", true);
+            if (node == null) return Optional.empty();
+            JsonNode meta = node.path("meta");
+
             double price = meta.path("regularMarketPrice").asDouble(0);
+            long asOfEpoch = meta.path("regularMarketTime").asLong(0);
+
+            // Prefer the most recent actually-traded bar (includes pre/post-market) when it is newer
+            // than the regular-market stamp — that is the closest price to the moment of the request.
+            JsonNode timestamps = node.path("timestamp");
+            JsonNode closes = node.path("indicators").path("quote").path(0).path("close");
+            if (timestamps.isArray() && closes.isArray()) {
+                for (int i = timestamps.size() - 1; i >= 0; i--) {
+                    JsonNode close = closes.get(i);
+                    long ts = timestamps.get(i).asLong(0);
+                    if (close != null && !close.isNull() && ts > 0) {
+                        if (ts >= asOfEpoch || asOfEpoch == 0) {
+                            price = close.asDouble();
+                            asOfEpoch = ts;
+                        }
+                        break;
+                    }
+                }
+            }
+            if (price <= 0) return Optional.empty();
+
             // Yahoo's chart meta omits "previousClose" and instead provides "chartPreviousClose";
             // without this fallback prevClose defaults to price and every change reads 0.0%.
             double prevClose = meta.path("previousClose")
@@ -88,10 +116,24 @@ public class StockPriceService {
                     meta.path("shortName").asText(ticker),
                     price,
                     meta.path("currency").asText("USD"),
-                    changePct
+                    changePct,
+                    asOfEpoch > 0 ? Instant.ofEpochSecond(asOfEpoch) : null
             ));
         } catch (Exception e) {
             return Optional.empty();
+        }
+    }
+
+    /** Fetches the first chart result node (meta + timestamp/close arrays), or null on failure. */
+    private JsonNode fetchChartResult(String ticker, String interval, boolean prePost) {
+        String url = YAHOO_BASE + ticker + "?interval=" + interval + "&range=1d&includePrePost=" + prePost;
+        String body = get(url);
+        if (body == null) return null;
+        try {
+            JsonNode resultNode = objectMapper.readTree(body).path("chart").path("result");
+            return resultNode.isArray() && !resultNode.isEmpty() ? resultNode.get(0) : null;
+        } catch (Exception e) {
+            return null;
         }
     }
 
@@ -140,16 +182,6 @@ public class StockPriceService {
         }
     }
 
-    private JsonNode fetchMeta(String ticker, String range) throws Exception {
-        String url = YAHOO_BASE + ticker + "?interval=1d&range=" + range + "&includePrePost=false";
-        String body = get(url);
-        if (body == null) return null;
-        JsonNode root = objectMapper.readTree(body);
-        JsonNode resultNode = root.path("chart").path("result");
-        if (!resultNode.isArray() || resultNode.isEmpty()) return null;
-        return resultNode.get(0).path("meta");
-    }
-
     private String get(String url) {
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
@@ -173,7 +205,8 @@ public class StockPriceService {
             String shortName,
             double price,
             String currency,
-            double changePct
+            double changePct,
+            Instant asOf
     ) {
         public String formatted() {
             String sign = changePct >= 0 ? "+" : "";

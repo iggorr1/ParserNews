@@ -106,11 +106,13 @@ public class ExportController {
 
         Double currentPrice = null;
         Double spreadPct = null;
+        Instant priceAsOf = null;
         boolean realTicker = ticker != null && !ticker.isBlank() && !"UNKNOWN".equalsIgnoreCase(ticker);
         if (withPrice && realTicker) {
             var priced = stockPriceService.currentPrice(ticker);
             if (priced.isPresent()) {
                 currentPrice = priced.get().price();
+                priceAsOf = priced.get().asOf();
                 if (offerPrice != null && currentPrice > 0) {
                     spreadPct = offerPrice.subtract(BigDecimal.valueOf(currentPrice))
                             .divide(BigDecimal.valueOf(currentPrice), 6, RoundingMode.HALF_UP)
@@ -138,6 +140,7 @@ public class ExportController {
                 offerPrice,
                 group.offerCurrency(),
                 currentPrice,
+                priceAsOf,
                 spreadPct,
                 ai == null ? null : (ai.verdict() == null ? null : ai.verdict().name()),
                 ai == null ? null : (ai.confidence() == null ? null : ai.confidence().name()),
@@ -206,6 +209,7 @@ public class ExportController {
             BigDecimal offerPrice,
             String offerCurrency,
             Double currentPrice,
+            Instant priceAsOf,
             Double spreadPct,
             String aiVerdict,
             String aiConfidence,
