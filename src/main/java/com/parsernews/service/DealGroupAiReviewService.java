@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class DealGroupAiReviewService {
-    static final String PROMPT_VERSION = "v2";
+    static final String PROMPT_VERSION = "v3";
 
     private static final String DISABLED_MESSAGE = "OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it.";
     private static final String MISSING_KEY_MESSAGE = "OpenAI AI Review is enabled but OPENAI_API_KEY is missing.";
@@ -37,19 +37,22 @@ public class DealGroupAiReviewService {
     private final DealGroupingService dealGroupingService;
     private final DealGroupAiReviewRepository repository;
     private final com.parsernews.persistence.SecFilingRepository secFilingRepository;
+    private final SecCompanyLookupService secCompanyLookupService;
 
     public DealGroupAiReviewService(
             OpenAiRuntimeSettingsService settingsService,
             OpenAiAnalysisClient openAiAnalysisClient,
             DealGroupingService dealGroupingService,
             DealGroupAiReviewRepository repository,
-            com.parsernews.persistence.SecFilingRepository secFilingRepository
+            com.parsernews.persistence.SecFilingRepository secFilingRepository,
+            SecCompanyLookupService secCompanyLookupService
     ) {
         this.settingsService = settingsService;
         this.openAiAnalysisClient = openAiAnalysisClient;
         this.dealGroupingService = dealGroupingService;
         this.repository = repository;
         this.secFilingRepository = secFilingRepository;
+        this.secCompanyLookupService = secCompanyLookupService;
     }
 
     @Transactional(readOnly = true)
@@ -252,6 +255,17 @@ public class DealGroupAiReviewService {
                 prompt(),
                 truncate(evidence(group), settings.maxInputChars())
         );
+
+        // Resolve each AI-identified party to a ticker via the authoritative SEC company_tickers
+        // list (by name only — never trust the grouping's ticker, which is what may be wrong).
+        SecCompanyLookupService.CompanyLookupMatch targetMatch = resolveByName(result.targetCompany());
+        SecCompanyLookupService.CompanyLookupMatch acquirerMatch = resolveByName(result.acquirerCompany());
+        String targetTicker = targetMatch == null ? null : targetMatch.ticker();
+        String acquirerTicker = acquirerMatch == null ? null : acquirerMatch.ticker();
+        String tickerConfidence = targetMatch != null && targetMatch.publicCompanyEvidence()
+                ? "RESOLVED"
+                : (targetTicker != null ? "PARTIAL" : "UNVERIFIED");
+
         DealGroupAiReviewEntity saved = repository.save(new DealGroupAiReviewEntity(
                 group.groupKey(),
                 settings.model(),
@@ -264,7 +278,12 @@ public class DealGroupAiReviewService {
                 result.reason(),
                 String.join("; ", result.riskFlags() == null ? List.of() : result.riskFlags()),
                 result.rawJson(),
-                result.offerPricePerShare()
+                result.offerPricePerShare(),
+                result.targetCompany(),
+                result.acquirerCompany(),
+                targetTicker,
+                acquirerTicker,
+                tickerConfidence
         ));
         return saved;
     }
@@ -432,6 +451,13 @@ public class DealGroupAiReviewService {
                 public target, tradable target, cash or fixed-price offer, and early enough signal.
                 Do not give buy/sell/investment advice. Do not recommend trading.
 
+                targetCompany: the exact legal/common name of the company being ACQUIRED (the target
+                whose shareholders receive the offer). acquirerCompany: the name of the BUYER making
+                the offer. Read the evidence carefully — the grouping's target/buyer labels are often
+                swapped or wrong. Use the full name as written in the filing/headline (e.g. "Destination
+                XL Group, Inc."), not a ticker. Return null for either side only if the evidence does
+                not name it. These names are used to look up the correct tickers, so precision matters.
+
                 offerPricePerShare: the per-share cash price the TARGET's shareholders will receive
                 (e.g. "$18.50 per share in cash" -> 18.50). This is the price for the company being
                 ACQUIRED, not the acquirer. Return null when: the company in this signal is the buyer,
@@ -489,6 +515,14 @@ public class DealGroupAiReviewService {
         return value == null ? fallback : value;
     }
 
+    /** Resolves a company name to its SEC ticker/CIK by name only (no ticker hint), or null. */
+    private SecCompanyLookupService.CompanyLookupMatch resolveByName(String companyName) {
+        if (companyName == null || companyName.isBlank()) {
+            return null;
+        }
+        return secCompanyLookupService.findBestMatch(null, companyName).orElse(null);
+    }
+
     private AiReviewResponse response(boolean enabled, boolean configured, String message, DealGroupAiReviewEntity entity) {
         return new AiReviewResponse(
                 enabled,
@@ -506,6 +540,11 @@ public class DealGroupAiReviewService {
                 entity.getReason(),
                 riskFlags(entity.getRiskFlags()),
                 entity.getOfferPrice(),
+                entity.getTargetCompany(),
+                entity.getAcquirerCompany(),
+                entity.getTargetTicker(),
+                entity.getAcquirerTicker(),
+                entity.getTickerConfidence(),
                 entity.getCreatedAt()
         );
     }
@@ -536,6 +575,11 @@ public class DealGroupAiReviewService {
             String reason,
             List<String> riskFlags,
             java.math.BigDecimal offerPrice,
+            String targetCompany,
+            String acquirerCompany,
+            String targetTicker,
+            String acquirerTicker,
+            String tickerConfidence,
             Instant createdAt
     ) {
         public static AiReviewResponse empty(boolean enabled, boolean configured, String message) {
@@ -554,6 +598,11 @@ public class DealGroupAiReviewService {
                     null,
                     null,
                     List.of(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
                     null,
                     null
             );

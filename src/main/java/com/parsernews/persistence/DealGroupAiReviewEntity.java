@@ -57,6 +57,21 @@ public class DealGroupAiReviewEntity {
     @Column(precision = 12, scale = 4)
     private java.math.BigDecimal offerPrice;
 
+    @Column(length = 512)
+    private String targetCompany;
+
+    @Column(length = 512)
+    private String acquirerCompany;
+
+    @Column(length = 32)
+    private String targetTicker;
+
+    @Column(length = 32)
+    private String acquirerTicker;
+
+    @Column(length = 16)
+    private String tickerConfidence;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -75,7 +90,12 @@ public class DealGroupAiReviewEntity {
             String reason,
             String riskFlags,
             String rawJson,
-            java.math.BigDecimal offerPrice
+            java.math.BigDecimal offerPrice,
+            String targetCompany,
+            String acquirerCompany,
+            String targetTicker,
+            String acquirerTicker,
+            String tickerConfidence
     ) {
         this.groupKey = groupKey;
         this.model = model;
@@ -89,10 +109,35 @@ public class DealGroupAiReviewEntity {
         this.riskFlags = truncate(riskFlags, 2048);
         this.rawJson = truncate(rawJson, 10000);
         this.offerPrice = offerPrice;
+        this.targetCompany = truncate(targetCompany, 512);
+        this.acquirerCompany = truncate(acquirerCompany, 512);
+        this.targetTicker = truncate(targetTicker, 32);
+        this.acquirerTicker = truncate(acquirerTicker, 32);
+        this.tickerConfidence = truncate(tickerConfidence, 16);
     }
 
     public java.math.BigDecimal getOfferPrice() {
         return offerPrice;
+    }
+
+    public String getTargetCompany() {
+        return targetCompany;
+    }
+
+    public String getAcquirerCompany() {
+        return acquirerCompany;
+    }
+
+    public String getTargetTicker() {
+        return targetTicker;
+    }
+
+    public String getAcquirerTicker() {
+        return acquirerTicker;
+    }
+
+    public String getTickerConfidence() {
+        return tickerConfidence;
     }
 
     public Long getId() {

@@ -8,6 +8,8 @@ import com.parsernews.web.SignalInboxController.UnifiedPriority;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -67,14 +69,43 @@ public class ExportController {
         return new ExportResponse(Instant.now(), deals.size(), deals);
     }
 
+    /**
+     * Forces a fresh AI re-extraction of a single deal (re-identifies target/acquirer and re-resolves
+     * their tickers via SEC), then returns the corrected deal. The teammate's analytics calls this
+     * when it spots a bad ticker or a target/acquirer mismatch and wants us to try again.
+     */
+    @PostMapping("/api/export/deals/{groupKey}/recheck")
+    public ExportDeal recheck(
+            @RequestHeader(value = "X-API-Key", required = false) String key,
+            @PathVariable String groupKey,
+            @RequestParam(defaultValue = "false") boolean withPrice
+    ) {
+        requireKey(key);
+        try {
+            aiReviewService.review(groupKey);
+        } catch (IllegalArgumentException notFound) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, notFound.getMessage());
+        }
+        DealGroupingService.DealGroupResponse group = dealGroupingService.group(groupKey)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Deal group not found: " + groupKey));
+        return toExportDeal(group, withPrice);
+    }
+
     private ExportDeal toExportDeal(DealGroupingService.DealGroupResponse group, boolean withPrice) {
         DealGroupAiReviewService.AiReviewResponse ai = aiReviewService.latest(group.groupKey());
         BigDecimal offerPrice = group.offerPrice() != null ? group.offerPrice()
                 : (ai != null ? ai.offerPrice() : null);
 
+        // Prefer the AI-identified parties and the SEC-resolved ticker over the grouping's values,
+        // which are the ones that were reported wrong (swapped sides / wrong ticker).
+        String targetCompany = firstNonBlank(ai == null ? null : ai.targetCompany(), group.targetCompany());
+        String acquirerCompany = firstNonBlank(ai == null ? null : ai.acquirerCompany(), group.buyerCompany());
+        String acquirerTicker = ai == null ? null : ai.acquirerTicker();
+        String tickerConfidence = ai == null ? null : ai.tickerConfidence();
+        String ticker = firstNonBlank(ai == null ? null : ai.targetTicker(), group.targetTicker());
+
         Double currentPrice = null;
         Double spreadPct = null;
-        String ticker = group.targetTicker();
         boolean realTicker = ticker != null && !ticker.isBlank() && !"UNKNOWN".equalsIgnoreCase(ticker);
         if (withPrice && realTicker) {
             var priced = stockPriceService.currentPrice(ticker);
@@ -94,10 +125,12 @@ public class ExportController {
                 group.groupKey(),
                 group.primarySignalSourceType() == null ? null : group.primarySignalSourceType().name(),
                 group.title(),
-                group.targetCompany(),
+                targetCompany,
                 realTicker ? ticker : null,
+                tickerConfidence,
                 group.targetCik(),
-                group.buyerCompany(),
+                acquirerCompany,
+                acquirerTicker,
                 group.priority() == null ? null : group.priority().name(),
                 group.dealRelevance() == null ? null : group.dealRelevance().name(),
                 group.dealStage() == null ? null : group.dealStage().name(),
@@ -113,6 +146,13 @@ public class ExportController {
                 group.sortInstant(),
                 group.evidenceUrls()
         );
+    }
+
+    private static String firstNonBlank(String preferred, String fallback) {
+        if (preferred != null && !preferred.isBlank()) {
+            return preferred;
+        }
+        return fallback == null || fallback.isBlank() ? null : fallback;
     }
 
     private void requireKey(String provided) {
@@ -155,8 +195,10 @@ public class ExportController {
             String title,
             String targetCompany,
             String targetTicker,
+            String tickerConfidence,
             String targetCik,
             String buyerCompany,
+            String acquirerTicker,
             String priority,
             String dealRelevance,
             String dealStage,

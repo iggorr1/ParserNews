@@ -62,7 +62,9 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
                     structured.reason(),
                     structured.riskFlags() == null ? List.of() : structured.riskFlags(),
                     outputText,
-                    structured.offerPricePerShare()
+                    structured.offerPricePerShare(),
+                    structured.targetCompany(),
+                    structured.acquirerCompany()
             );
         } catch (RestClientException exception) {
             throw new IllegalStateException("OpenAI request failed: " + safeMessage(exception), exception);
@@ -101,6 +103,8 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
                         "suggestedReviewStatus", Map.of("type", "string", "enum", enumNames(ManualReviewStatus.values())),
                         "suggestedReviewReason", Map.of("type", "string", "enum", enumNames(ManualReviewReason.values())),
                         "reason", Map.of("type", "string"),
+                        "targetCompany", Map.of("type", List.of("string", "null")),
+                        "acquirerCompany", Map.of("type", List.of("string", "null")),
                         "offerPricePerShare", Map.of("type", List.of("number", "null")),
                         "riskFlags", Map.of(
                                 "type", "array",
@@ -114,6 +118,8 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
                         "suggestedReviewStatus",
                         "suggestedReviewReason",
                         "reason",
+                        "targetCompany",
+                        "acquirerCompany",
                         "offerPricePerShare",
                         "riskFlags"
                 )
@@ -154,6 +160,8 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
             ManualReviewReason suggestedReviewReason,
             String reason,
             java.math.BigDecimal offerPricePerShare,
+            String targetCompany,
+            String acquirerCompany,
             List<String> riskFlags
     ) {
     }

@@ -19,7 +19,9 @@ public interface OpenAiAnalysisClient {
             String reason,
             List<String> riskFlags,
             String rawJson,
-            java.math.BigDecimal offerPricePerShare
+            java.math.BigDecimal offerPricePerShare,
+            String targetCompany,
+            String acquirerCompany
     ) {
     }
 }

@@ -40,10 +40,18 @@ public class SecurityConfig {
         return http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(requests -> requests
-                        .requestMatchers(HttpMethod.GET, "/error", "/login.html").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/login.html").permitAll()
+                        // Permit the error dispatch for every method. A controller that throws e.g.
+                        // 401 triggers an internal forward to /error preserving the method; if POST
+                        // /error is not permitted it gets redirected to login (302) instead of
+                        // rendering the real status (breaks the API-key 401 on POST /api/export/**).
+                        .requestMatchers("/error").permitAll()
                         // Read-only data export for external consumers — gated by its own API key
                         // inside the controller, not by the session login.
                         .requestMatchers(HttpMethod.GET, "/api/export/**").permitAll()
+                        // POST /api/export/deals/{key}/recheck — gated by the same X-API-Key in the
+                        // controller, so it must bypass the ADMIN-only rule for POST /api/** below.
+                        .requestMatchers(HttpMethod.POST, "/api/export/**").permitAll()
                         .requestMatchers(HttpMethod.GET, "/logs.html").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.POST, "/api/**").hasRole("ADMIN")
