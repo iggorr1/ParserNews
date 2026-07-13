@@ -75,7 +75,91 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
         }
     }
 
+    @Override
+    public PriceVerificationResult verifyOfferPrice(
+            String model,
+            String apiKey,
+            String evidence,
+            java.math.BigDecimal candidatePrice,
+            String targetCompany
+    ) {
+        try {
+            String input = "TARGET (company being acquired): " + (targetCompany == null ? "unknown" : targetCompany)
+                    + "\nCANDIDATE per-share offer price to verify: "
+                    + (candidatePrice == null ? "none extracted yet" : candidatePrice.toPlainString())
+                    + "\n\nEVIDENCE:\n" + evidence;
+            JsonNode response = restClient.post()
+                    .uri("/v1/responses")
+                    .header("Authorization", "Bearer " + apiKey)
+                    .body(requestBody(model, priceVerifierPrompt(), input, "offer_price_verification", priceVerifierSchema()))
+                    .retrieve()
+                    .body(JsonNode.class);
+            String outputText = outputText(response);
+            OpenAiPriceVerification v = objectMapper.readValue(outputText, OpenAiPriceVerification.class);
+            return new PriceVerificationResult(
+                    v.status(),
+                    v.verifiedPrice(),
+                    v.currency(),
+                    v.basis(),
+                    v.quote(),
+                    v.note(),
+                    outputText
+            );
+        } catch (RestClientException exception) {
+            throw new IllegalStateException("OpenAI price-verify request failed: " + safeMessage(exception), exception);
+        } catch (RuntimeException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new IllegalStateException("OpenAI price-verify response could not be parsed: " + safeMessage(exception), exception);
+        }
+    }
+
+    private String priceVerifierPrompt() {
+        return """
+                You are a meticulous fact-checker verifying ONE number: the per-share cash offer price
+                that the TARGET's shareholders will receive in this M&A deal. You are given a candidate
+                price extracted by an earlier pass; independently confirm or correct it from the evidence.
+
+                Rules:
+                - Find the exact per-share cash consideration for the company being ACQUIRED (the target),
+                  not the acquirer, not a dividend, not EPS/earnings, not a 52-week or historical price.
+                - "quote" MUST be the exact sentence (verbatim) from the evidence stating the price. If no
+                  such sentence exists, quote must be empty.
+                - status: VERIFIED if the candidate equals the price the evidence supports; CORRECTED if a
+                  different value is correct (put it in verifiedPrice); NOT_A_CASH_PRICE if the deal is
+                  all-stock / undisclosed / not a fixed cash-per-share amount; NO_EVIDENCE if the evidence
+                  does not state any offer price.
+                - basis: PER_SHARE, PER_ADS, PER_UNIT, or UNKNOWN. Watch for per-ADS vs per-share on
+                  foreign targets — that is a common error.
+                - verifiedPrice: the correct numeric per-share cash price, or null if none applies.
+                - Never guess. If unsure, prefer NO_EVIDENCE with null verifiedPrice.
+                Return only the requested structured JSON.
+                """;
+    }
+
+    private Map<String, Object> priceVerifierSchema() {
+        return Map.of(
+                "type", "object",
+                "additionalProperties", false,
+                "properties", Map.of(
+                        "status", Map.of("type", "string",
+                                "enum", List.of("VERIFIED", "CORRECTED", "NOT_A_CASH_PRICE", "NO_EVIDENCE")),
+                        "verifiedPrice", Map.of("type", List.of("number", "null")),
+                        "currency", Map.of("type", List.of("string", "null")),
+                        "basis", Map.of("type", "string",
+                                "enum", List.of("PER_SHARE", "PER_ADS", "PER_UNIT", "UNKNOWN")),
+                        "quote", Map.of("type", "string"),
+                        "note", Map.of("type", "string")
+                ),
+                "required", List.of("status", "verifiedPrice", "currency", "basis", "quote", "note")
+        );
+    }
+
     private Map<String, Object> requestBody(String model, String prompt, String input) {
+        return requestBody(model, prompt, input, "deal_group_ai_review", schema());
+    }
+
+    private Map<String, Object> requestBody(String model, String prompt, String input, String schemaName, Map<String, Object> schema) {
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", model);
         body.put("store", false);
@@ -85,9 +169,9 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
         ));
         body.put("text", Map.of("format", Map.of(
                 "type", "json_schema",
-                "name", "deal_group_ai_review",
+                "name", schemaName,
                 "strict", true,
-                "schema", schema()
+                "schema", schema
         )));
         return body;
     }
@@ -163,6 +247,16 @@ public class HttpOpenAiAnalysisClient implements OpenAiAnalysisClient {
             String targetCompany,
             String acquirerCompany,
             List<String> riskFlags
+    ) {
+    }
+
+    private record OpenAiPriceVerification(
+            String status,
+            java.math.BigDecimal verifiedPrice,
+            String currency,
+            String basis,
+            String quote,
+            String note
     ) {
     }
 }

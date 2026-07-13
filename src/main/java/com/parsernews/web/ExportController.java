@@ -93,8 +93,20 @@ public class ExportController {
 
     private ExportDeal toExportDeal(DealGroupingService.DealGroupResponse group, boolean withPrice) {
         DealGroupAiReviewService.AiReviewResponse ai = aiReviewService.latest(group.groupKey());
-        BigDecimal offerPrice = group.offerPrice() != null ? group.offerPrice()
-                : (ai != null ? ai.offerPrice() : null);
+
+        // Result of the AI-check price-verification pass.
+        String priceStatus = ai == null ? null : ai.priceStatus();
+        String priceQuote = ai == null ? null : ai.priceQuote();
+        // Prefer the verified/corrected price when the check confirmed it; otherwise fall back to the
+        // deterministic deal-terms price, then the first-pass AI price.
+        BigDecimal offerPrice;
+        if (ai != null && ai.verifiedOfferPrice() != null
+                && ("VERIFIED".equals(priceStatus) || "CORRECTED".equals(priceStatus))) {
+            offerPrice = ai.verifiedOfferPrice();
+        } else {
+            offerPrice = group.offerPrice() != null ? group.offerPrice()
+                    : (ai != null ? ai.offerPrice() : null);
+        }
 
         // Prefer the AI-identified parties and the SEC-resolved ticker over the grouping's values,
         // which are the ones that were reported wrong (swapped sides / wrong ticker).
@@ -139,6 +151,8 @@ public class ExportController {
                 group.dealTiming() == null ? null : group.dealTiming().name(),
                 offerPrice,
                 group.offerCurrency(),
+                priceStatus,
+                priceQuote,
                 currentPrice,
                 priceAsOf,
                 spreadPct,
@@ -208,6 +222,8 @@ public class ExportController {
             String dealTiming,
             BigDecimal offerPrice,
             String offerCurrency,
+            String priceStatus,
+            String priceQuote,
             Double currentPrice,
             Instant priceAsOf,
             Double spreadPct,

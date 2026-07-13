@@ -72,6 +72,15 @@ public class DealGroupAiReviewEntity {
     @Column(length = 16)
     private String tickerConfidence;
 
+    @Column(length = 24)
+    private String priceStatus;
+
+    @Column(precision = 12, scale = 4)
+    private java.math.BigDecimal verifiedOfferPrice;
+
+    @Column(length = 1024)
+    private String priceQuote;
+
     @Column(nullable = false)
     private Instant createdAt = Instant.now();
 
@@ -95,7 +104,10 @@ public class DealGroupAiReviewEntity {
             String acquirerCompany,
             String targetTicker,
             String acquirerTicker,
-            String tickerConfidence
+            String tickerConfidence,
+            String priceStatus,
+            java.math.BigDecimal verifiedOfferPrice,
+            String priceQuote
     ) {
         this.groupKey = groupKey;
         this.model = model;
@@ -114,6 +126,9 @@ public class DealGroupAiReviewEntity {
         this.targetTicker = truncate(targetTicker, 32);
         this.acquirerTicker = truncate(acquirerTicker, 32);
         this.tickerConfidence = truncate(tickerConfidence, 16);
+        this.priceStatus = truncate(priceStatus, 24);
+        this.verifiedOfferPrice = verifiedOfferPrice;
+        this.priceQuote = truncate(priceQuote, 1024);
     }
 
     public java.math.BigDecimal getOfferPrice() {
@@ -138,6 +153,18 @@ public class DealGroupAiReviewEntity {
 
     public String getTickerConfidence() {
         return tickerConfidence;
+    }
+
+    public String getPriceStatus() {
+        return priceStatus;
+    }
+
+    public java.math.BigDecimal getVerifiedOfferPrice() {
+        return verifiedOfferPrice;
+    }
+
+    public String getPriceQuote() {
+        return priceQuote;
     }
 
     public Long getId() {

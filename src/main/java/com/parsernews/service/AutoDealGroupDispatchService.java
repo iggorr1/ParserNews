@@ -240,7 +240,7 @@ public class AutoDealGroupDispatchService {
         DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
         String message = dealGroupingService.formatTelegramPreview(group)
                 + formatAiSection(aiReview)
-                + formatPriceSection(group, aiReview == null ? null : aiReview.offerPrice());
+                + formatPriceSection(group, aiReview);
         List<AlertNotifier.InlineButton> buttons = List.of(
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
                 AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
@@ -288,16 +288,43 @@ public class AutoDealGroupDispatchService {
         };
     }
 
-    private String formatPriceSection(DealGroupingService.DealGroupResponse group, java.math.BigDecimal aiOfferPrice) {
+    private String formatPriceSection(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse ai) {
         String ticker = group.targetTicker();
         if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) return "";
-        // Prefer the deterministic offer price from the deal terms; fall back to the AI-extracted
-        // price (used for SEC-sourced deals where the price is in the filing, not the headline).
-        java.math.BigDecimal offerPrice = group.offerPrice() != null ? group.offerPrice() : aiOfferPrice;
+        String priceStatus = ai == null ? null : ai.priceStatus();
+        // Prefer the AI-check verified/corrected price; else the deterministic deal-terms price; else
+        // the first-pass AI-extracted price (SEC-sourced deals carry the price in the filing).
+        java.math.BigDecimal offerPrice;
+        if (ai != null && ai.verifiedOfferPrice() != null
+                && ("VERIFIED".equals(priceStatus) || "CORRECTED".equals(priceStatus))) {
+            offerPrice = ai.verifiedOfferPrice();
+        } else {
+            offerPrice = group.offerPrice() != null ? group.offerPrice() : (ai == null ? null : ai.offerPrice());
+        }
+        String check = formatPriceCheck(ai);
         return stockPriceService.currentPrice(ticker)
                 .map(p -> "\n\n💰 <b>Price:</b> " + esc(p.formatted()) + " | " + esc(p.shortName())
-                        + formatSpread(offerPrice, p.price()))
+                        + formatSpread(offerPrice, p.price()) + check)
                 .orElse("");
+    }
+
+    /** Human-readable line for the price-verification pass, so a reader sees whether to trust the spread. */
+    private String formatPriceCheck(DealGroupAiReviewService.AiReviewResponse ai) {
+        if (ai == null || ai.priceStatus() == null) return "";
+        String status = ai.priceStatus();
+        String label = switch (status) {
+            case "VERIFIED" -> "✅ Price check: verified";
+            case "CORRECTED" -> "✏️ Price check: corrected to " + ai.verifiedOfferPrice();
+            case "NOT_A_CASH_PRICE" -> "ℹ️ Price check: no fixed cash-per-share price";
+            case "NO_EVIDENCE" -> "⚠️ Price check: no price found in evidence";
+            default -> "⚠️ Price check: UNVERIFIED";
+        };
+        StringBuilder b = new StringBuilder("\n").append(label);
+        if (ai.priceQuote() != null && !ai.priceQuote().isBlank()) {
+            String q = ai.priceQuote().length() > 200 ? ai.priceQuote().substring(0, 197) + "…" : ai.priceQuote();
+            b.append("\n<i>“").append(esc(q)).append("”</i>");
+        }
+        return b.toString();
     }
 
     /**

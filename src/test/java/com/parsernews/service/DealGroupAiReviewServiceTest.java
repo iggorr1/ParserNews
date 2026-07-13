@@ -99,6 +99,71 @@ class DealGroupAiReviewServiceTest {
     }
 
     @Test
+    void priceCheckVerifiedIsSavedWhenNumberIsPresentInEvidence() {
+        DealGroupAiReviewEntity saved = runReviewWithPriceCheck(
+                "AbbVie agrees to acquire Apogee for $18.50 per share in cash",
+                new java.math.BigDecimal("18.50"),
+                new OpenAiAnalysisClient.PriceVerificationResult(
+                        "VERIFIED", null, "USD", "PER_SHARE",
+                        "...to acquire Apogee for $18.50 per share in cash...", "", "{}"));
+
+        assertThat(saved.getPriceStatus()).isEqualTo("VERIFIED");
+        assertThat(saved.getVerifiedOfferPrice()).isEqualByComparingTo("18.50");
+        assertThat(saved.getPriceQuote()).contains("18.50 per share");
+    }
+
+    @Test
+    void priceCheckCorrectsThePriceWhenCheckerReturnsADifferentValue() {
+        DealGroupAiReviewEntity saved = runReviewWithPriceCheck(
+                "AbbVie agrees to acquire Apogee for $17.00 per share in cash",
+                new java.math.BigDecimal("18.50"),
+                new OpenAiAnalysisClient.PriceVerificationResult(
+                        "CORRECTED", new java.math.BigDecimal("17.00"), "USD", "PER_SHARE",
+                        "...for $17.00 per share in cash...", "first pass misread the number", "{}"));
+
+        assertThat(saved.getPriceStatus()).isEqualTo("CORRECTED");
+        assertThat(saved.getVerifiedOfferPrice()).isEqualByComparingTo("17.00");
+    }
+
+    @Test
+    void priceCheckDowngradesToUnverifiedWhenNumberIsNotInEvidence() {
+        // Checker claims VERIFIED, but 18.50 does not appear anywhere in the evidence — the
+        // deterministic guard must not trust it.
+        DealGroupAiReviewEntity saved = runReviewWithPriceCheck(
+                "AbbVie agrees to acquire Apogee",
+                new java.math.BigDecimal("18.50"),
+                new OpenAiAnalysisClient.PriceVerificationResult(
+                        "VERIFIED", null, "USD", "PER_SHARE", "", "", "{}"));
+
+        assertThat(saved.getPriceStatus()).isEqualTo("UNVERIFIED");
+        assertThat(saved.getVerifiedOfferPrice()).isNull();
+    }
+
+    private DealGroupAiReviewEntity runReviewWithPriceCheck(
+            String title,
+            java.math.BigDecimal candidatePrice,
+            OpenAiAnalysisClient.PriceVerificationResult verification
+    ) {
+        DealGroupingService.DealGroupResponse group = group(
+                "target-ticker:APGE", title, "AbbVie Inc.", "Apogee Therapeutics",
+                "ABBV", "APGE", DealRelevance.PUBLIC_CASH_ACQUISITION, Tradability.HIGH);
+        when(dealGroupingService.group("target-ticker:APGE")).thenReturn(Optional.of(group));
+        when(client.reviewDealGroup(any(), any(), any(), any())).thenReturn(new OpenAiAnalysisClient.AiReviewResult(
+                AiReviewVerdict.GOOD_SIGNAL, AiReviewConfidence.HIGH, true,
+                ManualReviewStatus.USEFUL, ManualReviewReason.GOOD_SIGNAL,
+                "Public target with cash acquisition evidence.", List.of(), "{}",
+                candidatePrice, "Apogee Therapeutics", "AbbVie Inc."));
+        when(client.verifyOfferPrice(any(), any(), any(), any(), any())).thenReturn(verification);
+        when(repository.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        service(true, "test-key").review("target-ticker:APGE");
+
+        ArgumentCaptor<DealGroupAiReviewEntity> captor = ArgumentCaptor.forClass(DealGroupAiReviewEntity.class);
+        verify(repository).save(captor.capture());
+        return captor.getValue();
+    }
+
+    @Test
     void mockOpenAiNotTradableForMdaBlueCanyonIsSaved() {
         DealGroupingService.DealGroupResponse group = group(
                 "names:mda-space:blue-canyon-technologies",
@@ -195,6 +260,9 @@ class DealGroupAiReviewServiceTest {
                 "verify offer",
                 "{}"
         ,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,
@@ -359,6 +427,9 @@ class DealGroupAiReviewServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 null);
         DealGroupAiReviewEntity latestGood = new DealGroupAiReviewEntity(
                 "good-group",
@@ -378,6 +449,9 @@ class DealGroupAiReviewServiceTest {
                 null,
                 null,
                 null,
+                null,
+                null,
+                null,
                 null);
         DealGroupAiReviewEntity notTradable = new DealGroupAiReviewEntity(
                 "private-group",
@@ -392,6 +466,9 @@ class DealGroupAiReviewServiceTest {
                 "",
                 "{}"
         ,
+                null,
+                null,
+                null,
                 null,
                 null,
                 null,

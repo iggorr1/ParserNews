@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 
 @Service
 public class DealGroupAiReviewService {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(DealGroupAiReviewService.class);
     static final String PROMPT_VERSION = "v3";
 
     private static final String DISABLED_MESSAGE = "OpenAI AI Review is disabled. Enable OPENAI_ANALYSIS_ENABLED=true to use it.";
@@ -249,11 +250,12 @@ public class DealGroupAiReviewService {
             DealGroupingService.DealGroupResponse group,
             OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings
     ) {
+        String evidence = truncate(evidence(group), settings.maxInputChars());
         OpenAiAnalysisClient.AiReviewResult result = openAiAnalysisClient.reviewDealGroup(
                 settings.model(),
                 settings.apiKey(),
                 prompt(),
-                truncate(evidence(group), settings.maxInputChars())
+                evidence
         );
 
         // Resolve each AI-identified party to a ticker via the authoritative SEC company_tickers
@@ -265,6 +267,11 @@ public class DealGroupAiReviewService {
         String tickerConfidence = targetMatch != null && targetMatch.publicCompanyEvidence()
                 ? "RESOLVED"
                 : (targetTicker != null ? "PARTIAL" : "UNVERIFIED");
+
+        // Second "AI check" pass: independently verify (or correct) the offer price and ground it in
+        // an exact quote. Runs only when we already have a candidate price (nothing to check otherwise).
+        java.math.BigDecimal candidatePrice = group.offerPrice() != null ? group.offerPrice() : result.offerPricePerShare();
+        PriceCheck priceCheck = verifyPrice(settings, evidence, candidatePrice, result.targetCompany());
 
         DealGroupAiReviewEntity saved = repository.save(new DealGroupAiReviewEntity(
                 group.groupKey(),
@@ -283,9 +290,62 @@ public class DealGroupAiReviewService {
                 result.acquirerCompany(),
                 targetTicker,
                 acquirerTicker,
-                tickerConfidence
+                tickerConfidence,
+                priceCheck.status(),
+                priceCheck.verifiedPrice(),
+                priceCheck.quote()
         ));
         return saved;
+    }
+
+    /**
+     * Runs the price-verification pass and applies a deterministic hallucination guard: a VERIFIED or
+     * CORRECTED number must actually appear in the source text, otherwise it is downgraded to
+     * UNVERIFIED. Best-effort — a verifier failure never fails the review.
+     */
+    private PriceCheck verifyPrice(
+            OpenAiRuntimeSettingsService.EffectiveOpenAiSettings settings,
+            String evidence,
+            java.math.BigDecimal candidatePrice,
+            String targetCompany
+    ) {
+        if (candidatePrice == null) {
+            return new PriceCheck(null, null, null);
+        }
+        try {
+            OpenAiAnalysisClient.PriceVerificationResult v = openAiAnalysisClient.verifyOfferPrice(
+                    settings.model(), settings.apiKey(), evidence, candidatePrice, targetCompany);
+            if (v == null || v.status() == null) {
+                return new PriceCheck("UNVERIFIED", null, null);
+            }
+            String status = v.status();
+            java.math.BigDecimal verified = switch (status) {
+                case "VERIFIED" -> candidatePrice;
+                case "CORRECTED" -> v.verifiedPrice();
+                default -> null; // NOT_A_CASH_PRICE / NO_EVIDENCE
+            };
+            // Hallucination guard: the confirmed/corrected number must be present in the source text.
+            if ((status.equals("VERIFIED") || status.equals("CORRECTED"))
+                    && (verified == null || !numberAppearsIn(evidence, verified))) {
+                return new PriceCheck("UNVERIFIED", null, v.quote());
+            }
+            return new PriceCheck(status, verified, v.quote());
+        } catch (RuntimeException exception) {
+            log.warn("Price verification failed: {}", exception.getMessage());
+            return new PriceCheck("UNVERIFIED", null, null);
+        }
+    }
+
+    private boolean numberAppearsIn(String text, java.math.BigDecimal value) {
+        if (text == null || value == null) {
+            return false;
+        }
+        String stripped = value.stripTrailingZeros().toPlainString();
+        String twoDp = value.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+        return text.contains(stripped) || text.contains(twoDp);
+    }
+
+    private record PriceCheck(String status, java.math.BigDecimal verifiedPrice, String quote) {
     }
 
     private BatchCandidatePreviewItem evaluateBatchCandidate(
@@ -545,6 +605,9 @@ public class DealGroupAiReviewService {
                 entity.getTargetTicker(),
                 entity.getAcquirerTicker(),
                 entity.getTickerConfidence(),
+                entity.getPriceStatus(),
+                entity.getVerifiedOfferPrice(),
+                entity.getPriceQuote(),
                 entity.getCreatedAt()
         );
     }
@@ -580,6 +643,9 @@ public class DealGroupAiReviewService {
             String targetTicker,
             String acquirerTicker,
             String tickerConfidence,
+            String priceStatus,
+            java.math.BigDecimal verifiedOfferPrice,
+            String priceQuote,
             Instant createdAt
     ) {
         public static AiReviewResponse empty(boolean enabled, boolean configured, String message) {
@@ -598,6 +664,9 @@ public class DealGroupAiReviewService {
                     null,
                     null,
                     List.of(),
+                    null,
+                    null,
+                    null,
                     null,
                     null,
                     null,
