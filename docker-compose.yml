@@ -8,7 +8,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-parsernews}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-parsernews}
     ports:
+      # A native PostgreSQL 18 service on the Windows host also binds 5432, so connections to the
+      # host's 5432 from outside can land on that server instead of this container. 5433 maps to
+      # this container unambiguously — use it for anything connecting from another machine.
       - "5432:5432"
+      - "5433:5432"
     volumes:
       - parsernews-postgres-data:/var/lib/postgresql/data
     healthcheck:
