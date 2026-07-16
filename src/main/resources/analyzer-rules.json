@@ -31,6 +31,9 @@
   ],
   "negativeRules": [
     { "keyword": "non-binding proposal", "score": -20 },
+    { "keyword": "class action", "score": -40 },
+    { "keyword": "shareholder alert", "score": -40 },
+    { "keyword": "law firm", "score": -35 },
     { "keyword": "rumor", "score": -25 },
     { "keyword": "speculation", "score": -25 },
     { "keyword": "asset acquisition", "score": -30 },

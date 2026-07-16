@@ -22,7 +22,8 @@ class AdminCandidateControllerTest {
                 1
         );
         when(service.recomputeCandidates()).thenReturn(summary);
-        AdminCandidateController controller = new AdminCandidateController(service);
+        AdminCandidateController controller = new AdminCandidateController(
+                service, mock(com.parsernews.service.EventReanalysisService.class));
 
         CandidateRecomputeService.RecomputeSummary response = controller.recomputeCandidates();
 

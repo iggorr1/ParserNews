@@ -159,7 +159,7 @@ public class EventPersistenceService {
         return NewsSourceType.OTHER;
     }
 
-    private DetectedEventType mapEventType(EventType eventType) {
+    static DetectedEventType mapEventType(EventType eventType) {
         return switch (eventType) {
             case TAKE_PRIVATE_CONFIRMED -> DetectedEventType.GOING_PRIVATE;
             case TAKE_PRIVATE_RUMOR, ACQUISITION_RUMOR -> DetectedEventType.PROPOSAL;
@@ -175,7 +175,7 @@ public class EventPersistenceService {
         };
     }
 
-    private ReviewStatus mapReviewStatus(EventStatus status) {
+    static ReviewStatus mapReviewStatus(EventStatus status) {
         return ReviewStatus.valueOf(status.name());
     }
 

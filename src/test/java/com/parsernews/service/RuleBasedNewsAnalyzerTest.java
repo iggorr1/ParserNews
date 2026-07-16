@@ -58,6 +58,21 @@ class RuleBasedNewsAnalyzerTest {
         assertThat(result.score()).isGreaterThan(0);
     }
 
+    // Law-firm alerts quote the real deal terms verbatim ("$17 per share plus CVR"), so they score
+    // like a genuine announcement. They previously stayed below the alert threshold only by
+    // accident; keep them out explicitly.
+    @Test
+    void suppressesLawFirmClassActionAlertThatQuotesDealTerms() {
+        AnalysisResult result = analyzer.analyze(news(
+                "SHAREHOLDER ALERT: The M&A Class Action Firm Continues to Investigate the Merger "
+                        + "-- TBPH: Theravance Biopharma to Be Acquired for $17 Per Share Plus CVR",
+                ""
+        ));
+
+        assertThat(result.status()).isNotEqualTo(EventStatus.HIGH_PRIORITY_SIGNAL);
+        assertThat(result.status()).isNotEqualTo(EventStatus.IMPORTANT);
+    }
+
     @Test
     void lowersScoreForNonBindingTakePrivateRumor() {
         AnalysisResult result = analyzer.analyze(news(

@@ -330,6 +330,39 @@ public class DetectedEventEntity {
         this.alertEligible = false;
     }
 
+    /**
+     * Replaces the rule-derived analysis of a stored event after the rules themselves changed.
+     * Deliberately leaves {@code manualReviewStatus}, {@code validationStatus}, {@code reviewNotes}
+     * and alert/dispatch bookkeeping alone — those are human decisions and history, not rule output.
+     */
+    public void updateRuleAnalysis(
+            DetectedEventType eventType,
+            ReviewStatus reviewStatus,
+            int confidenceScore,
+            String targetTicker,
+            String acquirer,
+            String offerPrice,
+            String cashOrStock,
+            String premiumPercent,
+            String matchedPositiveKeywords,
+            String matchedNegativeKeywords,
+            String falsePositiveReasons,
+            String explanation
+    ) {
+        this.eventType = eventType;
+        this.reviewStatus = reviewStatus;
+        this.confidenceScore = confidenceScore;
+        this.targetTicker = normalizeBlank(targetTicker);
+        this.acquirer = normalizeBlank(acquirer);
+        this.offerPrice = normalizeBlank(offerPrice);
+        this.cashOrStock = normalizeBlank(cashOrStock);
+        this.premiumPercent = normalizeBlank(premiumPercent);
+        this.matchedPositiveKeywords = matchedPositiveKeywords;
+        this.matchedNegativeKeywords = matchedNegativeKeywords;
+        this.falsePositiveReasons = falsePositiveReasons;
+        this.explanation = explanation;
+    }
+
     public void updateCandidateScore(int candidateScore, CandidateStrength candidateStrength, String candidateReason) {
         this.candidateScore = candidateScore;
         this.candidateStrength = candidateStrength == null ? CandidateStrength.NONE : candidateStrength;

@@ -20,7 +20,9 @@ class RulesConfigLoaderTest {
                         "to acquire",
                         "acquisition"
                 );
-        assertThat(rules.negativeRules()).hasSize(12);
+        assertThat(rules.negativeRules())
+                .extracting(KeywordRule::keyword)
+                .contains("public offering", "rumor", "class action", "shareholder alert");
         assertThat(rules.statusThresholds().watchlist()).isEqualTo(31);
         assertThat(rules.statusThresholds().manualReview()).isEqualTo(56);
         assertThat(rules.statusThresholds().important()).isEqualTo(76);
