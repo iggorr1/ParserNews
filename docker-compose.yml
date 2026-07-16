@@ -30,7 +30,10 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "8080:8080"
+      # Host port is configurable because the host may already run something on 8080. The
+      # Cloudflare tunnel does not depend on this: it reaches the app over the compose network
+      # as http://parsernews:8080.
+      - "${APP_PORT:-8080}:8080"
     environment:
       SPRING_PROFILES_ACTIVE: live,postgres
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-parsernews}
