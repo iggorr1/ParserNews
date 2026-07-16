@@ -34,6 +34,15 @@ services:
       # Cloudflare tunnel does not depend on this: it reaches the app over the compose network
       # as http://parsernews:8080.
       - "${APP_PORT:-8080}:8080"
+    # restart: unless-stopped only reacts to a process that exits. If the app hangs — alive but
+    # not serving — nothing notices it, so publish a real HTTP check. /login.html is used because
+    # /actuator/health requires authentication; wget ships in the base image, curl does not.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/login.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
     environment:
       SPRING_PROFILES_ACTIVE: live,postgres
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-parsernews}
