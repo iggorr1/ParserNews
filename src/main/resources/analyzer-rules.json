@@ -12,6 +12,8 @@
     { "keyword": "investment firm", "score": 10 },
     { "keyword": "to be acquired by", "score": 20 },
     { "keyword": "all-cash merger", "score": 25 },
+    { "keyword": "file to combine", "score": 25 },
+    { "keyword": "merger of equals", "score": 25 },
     { "keyword": "all-cash deal", "score": 25 },
     { "keyword": "per-share", "score": 20 },
     { "keyword": "contingent value right", "score": 15 },

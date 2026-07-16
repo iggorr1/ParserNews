@@ -209,7 +209,12 @@ public class RuleBasedNewsAnalyzer {
                 "going private",
                 "take private",
                 "shareholders will receive",
-                "per share in cash");
+                "per share in cash",
+                // A regulatory filing to combine, and a merger of equals, are announced deals in
+                // their own right — they commit to the deal without ever saying "definitive
+                // agreement" (NextEra/Dominion "file to combine" said neither, and was ignored).
+                "file to combine",
+                "merger of equals");
         // Aggregator headlines are terse and carry no article body, so this gate only ever sees the
         // headline. It must therefore accept the compact spellings they actually use: a hyphenated
         // "$38.50-per-share", "all-cash merger" (not just "all-cash transaction"), and a CVR — all

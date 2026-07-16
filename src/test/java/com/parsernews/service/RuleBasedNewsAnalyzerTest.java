@@ -58,6 +58,22 @@ class RuleBasedNewsAnalyzerTest {
         assertThat(result.score()).isGreaterThan(0);
     }
 
+    // Real IGNORED article: a merger of two public companies announced as "file to combine".
+    // The vocabulary did not know that phrasing, and the release never says "definitive
+    // agreement", so nothing marked it as a committed deal and its score was forced to 0.
+    // The body mirrors the stored article: it mentions shareholders but states no cash terms.
+    @Test
+    void detectsMergerAnnouncedAsFileToCombine() {
+        AnalysisResult result = analyzer.analyze(news(
+                "NextEra Energy and Dominion Energy file to combine, building a stronger company "
+                        + "to meet growing power demand across four of America's fastest-growing states",
+                "The combined company will serve customers across four states. "
+                        + "The merger is subject to approval by shareholders and regulators."
+        ));
+
+        assertThat(result.status()).isNotEqualTo(EventStatus.IGNORED);
+    }
+
     // Law-firm alerts quote the real deal terms verbatim ("$17 per share plus CVR"), so they score
     // like a genuine announcement. They previously stayed below the alert threshold only by
     // accident; keep them out explicitly.
