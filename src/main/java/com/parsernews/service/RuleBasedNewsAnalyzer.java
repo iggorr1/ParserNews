@@ -210,11 +210,18 @@ public class RuleBasedNewsAnalyzer {
                 "take private",
                 "shareholders will receive",
                 "per share in cash");
+        // Aggregator headlines are terse and carry no article body, so this gate only ever sees the
+        // headline. It must therefore accept the compact spellings they actually use: a hyphenated
+        // "$38.50-per-share", "all-cash merger" (not just "all-cash transaction"), and a CVR — all
+        // of which state shareholder consideration just as plainly as the long forms.
         boolean shareholderConsideration = text.contains("per share")
+                || text.contains("per-share")
                 || text.contains("shareholders will receive")
                 || text.contains("stockholders will receive")
                 || text.contains("cash consideration")
-                || text.contains("all-cash transaction")
+                || text.contains("all-cash")
+                || text.contains("contingent value right")
+                || text.contains("cvr")
                 || text.contains("premium of")
                 || text.contains("outstanding shares")
                 || text.contains("common stock");

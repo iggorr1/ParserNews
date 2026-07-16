@@ -32,6 +32,32 @@ class RuleBasedNewsAnalyzerTest {
         assertThat(result.matchedNegativeKeywords()).isEmpty();
     }
 
+    // Real headlines that the live rules scored 0 and IGNORED. Aggregator headlines carry no
+    // article body, so the confirmation gate can only ever see the headline itself — and it
+    // missed these because the price is written "per-share" (hyphenated) rather than "per share",
+    // and "all-cash merger" rather than "all-cash transaction".
+    @Test
+    void detectsCashBuyoutWhenHeadlineHyphenatesPerShare() {
+        AnalysisResult result = analyzer.analyze(news(
+                "LiveRamp to Be Acquired by Publicis in $38.50-Per-Share All-Cash Merger",
+                ""
+        ));
+
+        assertThat(result.status()).isNotEqualTo(EventStatus.IGNORED);
+        assertThat(result.score()).isGreaterThan(0);
+    }
+
+    @Test
+    void detectsCashPlusCvrBuyoutHeadline() {
+        AnalysisResult result = analyzer.analyze(news(
+                "AtaiBeckley to Be Acquired by Eli Lilly for $6.75 Cash Plus Up to $2.50 CVR",
+                ""
+        ));
+
+        assertThat(result.status()).isNotEqualTo(EventStatus.IGNORED);
+        assertThat(result.score()).isGreaterThan(0);
+    }
+
     @Test
     void lowersScoreForNonBindingTakePrivateRumor() {
         AnalysisResult result = analyzer.analyze(news(
