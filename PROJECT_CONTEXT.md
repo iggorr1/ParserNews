@@ -242,10 +242,11 @@ AI verdict. `recheck` forces a fresh AI re-extraction for one deal.
 
 ## Local LLM host (Ollama)
 
-A local LLM runs on the Linux box `boba`, reachable **only over Tailscale at
-`http://100.77.228.28:11434`** (its LAN address `192.168.0.177` is not reachable from the dev
-machine, which sits on a different subnet). Ollama has no authentication, so it is bound to the
-Tailscale interface only — never `0.0.0.0`. GPU: RTX 2060 (6 GB VRAM).
+A local LLM (Ollama) runs on a separate GPU host on the private network. Its address is
+deployment config, not source: it lives in `.env` / the audit config, never here.
+
+Ollama has **no authentication**, so bind it to the private overlay interface only — never
+`0.0.0.0`, which would expose an open LLM API to the whole LAN.
 
 Models: `qwen2.5:7b` (use this) and `qwen2.5:3b`. Measured on real headlines from this project,
 7b scored 4/4 and 3b only 3/4 — 3b confused an *equity* tender offer with a *debt* tender offer,
