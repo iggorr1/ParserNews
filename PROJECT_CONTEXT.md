@@ -91,43 +91,70 @@ server yet.
 
 ## Auth
 
-HTTP Basic Auth protects the dashboard and API by default.
+Form login protects the dashboard and API (`SecurityConfig`). There is **no** HTTP Basic:
+unauthenticated `/api/**` and `/actuator/**` requests get `401` so `fetch()` can handle them,
+while browser navigation to HTML pages redirects (`302`) to `/login.html`.
 
 Credentials come from:
 
-- `APP_ADMIN_USERNAME`
-- `APP_ADMIN_PASSWORD`
+- `APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD` (role `ADMIN`)
+- `APP_VIEWER_USERNAME` / `APP_VIEWER_PASSWORD` (optional, role `VIEWER`)
 
-The older `PARSERNEWS_AUTH_USERNAME` / `PARSERNEWS_AUTH_PASSWORD` names still
-work as fallback.
+Toggle with `PARSERNEWS_AUTH_ENABLED`. Change the password before exposing the app outside
+localhost or a private network.
 
-Local H2 defaults are `admin` / `admin`. Docker Compose sets `admin` /
-`change-me`. Change the password before exposing the app outside localhost or a
-private network.
+`/api/export/**` is exempt from the session login (GET and POST) because it is gated by its own
+shared key in the `X-API-Key` header — see "Data export API" below.
 
 ## Core Task Logic
 
-Main flow:
+There are **two ingestion sources** that converge on one review/alert pipeline. Any task about
+classification must be clear which stage it targets.
 
-1. `StockScannerApplication`
+### 1. RSS ingestion (rule-based)
+
+1. `StockScannerApplication` / `NewsMonitoringScheduler` / `FullRefreshService`
 2. `NewsScannerService`
 3. `NewsSourceParser`
-4. `RuleBasedNewsAnalyzer`
-5. `FalsePositiveFilter`
-6. `EventPersistenceService`
-7. `AlertService`
-8. `ReportExportService`
+4. `RuleBasedNewsAnalyzer` + `FalsePositiveFilter`
+5. `EventPersistenceService` — saves **every** article and its `DetectedEventEntity`,
+   including `IGNORED` ones (the discard pile is retained, not thrown away)
+6. Only non-`IGNORED` events continue downstream
 
-Most classification behavior lives in:
+Most rule classification lives in `RuleBasedNewsAnalyzer`, `FalsePositiveFilter`, and
+`src/main/resources/analyzer-rules.json`.
 
-- `RuleBasedNewsAnalyzer`
-- `FalsePositiveFilter`
-- `src/main/resources/analyzer-rules.json`
+### 2. SEC ingestion (content-based)
 
-Stored event API lives in:
+- `SecDiscoveryService` — EDGAR `getcurrent` feed, by form type
+- SEC full-text search (EFTS) — finds early 8-K deal announcements **by content**, which the
+  keyword rules miss
+- `SecCompanyLookupService` — authoritative SEC company name -> ticker/CIK resolution
 
-- `EventController`
-- `ReportController`
+### 3. Shared downstream (grouping -> AI -> alert/export)
+
+1. `DealGroupingService` — groups related RSS + SEC signals into one deal group
+2. `DealGroupAiReviewService` (OpenAI) — **secondary** verdict/confidence/reason/risk flags;
+   identifies target vs acquirer (tickers resolved via SEC, not by the model); runs a second
+   price-verification pass (`verifyOfferPrice`) that confirms/corrects the per-share offer price
+   and grounds it in a quote, with a deterministic guard that the number appears in the source
+3. `StockPriceService` — freshest available price (pre/post-market aware) + `asOf` timestamp;
+   powers the merger-arb spread
+4. `AutoDealGroupDispatchService` -> Telegram (HIGH/MEDIUM, AI-gated, freshness-gated)
+5. `ExportController` — read-only feed for an external analytics consumer
+
+Rules remain the primary classifier for the RSS path and must stay explainable. The OpenAI
+layer judges grouped candidates; it does not replace the rules.
+
+Stored event API lives in `EventController` and `ReportController`.
+
+## Data export API
+
+`GET /api/export/deals` and `POST /api/export/deals/{groupKey}/recheck`, authenticated by the
+`X-API-Key` header (`EXPORT_API_KEY`, kept only in `.env`, never in git). Returns an
+analytics-ready shape: target/acquirer + SEC-resolved tickers, `tickerConfidence`, offer price
+with `priceStatus`/`priceQuote` from the AI check, `currentPrice` + `priceAsOf`, `spreadPct`,
+AI verdict. `recheck` forces a fresh AI re-extraction for one deal.
 
 ## Current Features
 
@@ -163,16 +190,32 @@ Stored event API lives in:
 - REST API for reports and saved events.
 - Browser UI for scan results, saved events, filtering, manual review, and extracted terms.
 - Optional full article text fetching for whitelisted RSS article hosts.
+- SEC EDGAR discovery (`getcurrent` by form type) and SEC full-text search (EFTS) that finds
+  early 8-K deal announcements by content rather than keywords.
+- SEC company -> ticker/CIK resolution (`SecCompanyLookupService`).
+- Deal grouping: related RSS + SEC signals collapse into one deal group.
+- OpenAI AI review of deal groups (secondary, never the primary classifier): verdict,
+  confidence, reason, risk flags, target/acquirer identification, offer price extraction.
+- AI price-check pass: verifies/corrects the per-share offer price, grounds it in an exact
+  quote, and downgrades to `UNVERIFIED` when the number is absent from the source.
+- Live price + merger-arb spread (`StockPriceService`), pre/post-market aware, with `priceAsOf`.
+- Telegram dispatch of HIGH/MEDIUM deal groups with AI verdict, price, spread, and inline
+  Useful/Ignore buttons.
+- Token-authenticated read-only export API for an external analytics consumer.
+- Feed health monitoring at `GET /api/feed-health`, latency metric at `GET /api/latency`.
 
 ## Current Limitations
 
 - Full article fetching is limited to whitelisted hosts and likely M&A candidate teasers.
-- Ticker can be `UNKNOWN` when RSS text does not include an exchange/ticker label.
-- Premium is only extracted when stated in the article. It is not yet calculated from market price.
-- No market data snapshots yet.
+- Ticker can still be `UNKNOWN` when neither the AI target name nor SEC lookup resolves it.
+- Prices come from Yahoo (unofficial, no SLA): near-real-time during the regular session,
+  otherwise the freshest pre/post-market bar; `priceAsOf` always states the moment, and a
+  5-minute cache applies. Not an exchange-grade real-time feed.
+- The real universe of tradable US-public-target deals is only ~1-5/day. Do not design for
+  "hundreds of deals a day" — that expectation is wrong and was measured.
+- The RSS `IGNORED` discard pile (~60-100 articles/day) is retained but nothing re-reads it,
+  so recall there is unmeasured.
 - No price charts yet.
-- No Telegram alerts yet.
-- No AI/Ollama/OpenAI analysis yet.
 - No production auth.
 - No trading, broker, wallet, or exchange integration.
 
@@ -197,11 +240,28 @@ Stored event API lives in:
 - Before editing, explain the minimal plan and list target files.
 - After editing, show the diff summary and commands/tests run.
 
+## Local LLM host (Ollama)
+
+A local LLM runs on the Linux box `boba`, reachable **only over Tailscale at
+`http://100.77.228.28:11434`** (its LAN address `192.168.0.177` is not reachable from the dev
+machine, which sits on a different subnet). Ollama has no authentication, so it is bound to the
+Tailscale interface only — never `0.0.0.0`. GPU: RTX 2060 (6 GB VRAM).
+
+Models: `qwen2.5:7b` (use this) and `qwen2.5:3b`. Measured on real headlines from this project,
+7b scored 4/4 and 3b only 3/4 — 3b confused an *equity* tender offer with a *debt* tender offer,
+the exact distinction that matters here. Ollama's JSON-Schema `format` enforces structure and
+types but **not** value ranges (`minimum`/`maximum` are ignored), so validate ranges in Java.
+
+Nothing in the app calls Ollama yet.
+
 ## Best Next Steps
 
-1. Fetch full article text for whitelisted sources after RSS discovery.
-2. Improve ticker extraction with source-specific article parsing or company-to-ticker lookup.
-3. Add market data snapshots around publication time.
-4. Add price charts after news events.
-5. Build a historical validation workflow for old articles.
-6. Add scheduled RSS polling.
+1. Recall net: run the local LLM over RSS articles the rules **rejected** (`IGNORED`), to catch
+   deals the keyword rules miss, then resolve the target via SEC to check it is public. This is
+   the stage that currently has no LLM at all — do **not** add a local "second opinion" on
+   already-flagged candidates, where the OpenAI review already gives an independent verdict
+   from a stronger model.
+2. Build a historical validation workflow for old articles (measure recall, not just precision).
+3. Add price charts after news events.
+4. Evaluate a real-time news wire (e.g. Oruk SSE) — measured as the biggest latency/coverage
+   lever, but needs their endpoint, auth, and a paid subscription.
