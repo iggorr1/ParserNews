@@ -1,0 +1,6 @@
+pandas
+yfinance
+requests
+alpaca-py
+pytz
+finnhub-python
