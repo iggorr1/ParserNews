@@ -94,6 +94,40 @@
         .breakdown .warn { color: var(--warning); }
         .breakdown .bad { color: var(--danger); }
 
+        /* ── Audit (rejected-by-rules) section ── */
+        .audit-section {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-left: 3px solid var(--warning);
+            border-radius: 10px;
+            padding: 16px 18px;
+            margin-bottom: 22px;
+        }
+        .audit-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+        .audit-head h2 { font-size: 16px; }
+        .audit-sub { color: var(--muted); font-size: 12.5px; margin-top: 3px; }
+        .audit-toggle { padding: 4px 12px; font-size: 12px; }
+        .audit-body { margin-top: 14px; display: grid; grid-template-columns: 300px 1fr; gap: 20px; }
+        .audit-chart-wrap { height: 150px; position: relative; }
+        .audit-hits { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; }
+        .audit-hit {
+            display: flex; gap: 10px; align-items: baseline;
+            padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+            background: var(--surface-2);
+        }
+        .audit-hit .tk {
+            color: var(--warning); font-weight: 600; font-size: 13px;
+            white-space: nowrap; min-width: 62px;
+        }
+        .audit-hit .body { min-width: 0; }
+        .audit-hit .co { font-size: 12px; color: var(--muted); }
+        .audit-hit .hl { font-size: 13px; }
+        .audit-hit a { color: var(--accent); text-decoration: none; font-size: 12px; }
+        .audit-hit a:hover { text-decoration: underline; }
+        .audit-hit .more { color: var(--muted); font-size: 11px; }
+        .audit-empty { color: var(--muted); font-size: 13px; padding: 6px 2px; }
+        @media (max-width: 780px) { .audit-body { grid-template-columns: 1fr; } }
+
         /* ── Grid ── */
         .grid {
             display: grid;
@@ -401,6 +435,21 @@
             <button id="refreshBtn">⟳ Refresh</button>
         </div>
     </div>
+
+    <section class="audit-section" id="auditSection" style="display:none;">
+        <div class="audit-head">
+            <div>
+                <h2>🔎 Rejected by rules — nightly audit</h2>
+                <div class="audit-sub" id="auditSub">Loading…</div>
+            </div>
+            <button class="audit-toggle" id="auditToggle">Hide</button>
+        </div>
+        <div class="audit-body" id="auditBody">
+            <div class="audit-chart-wrap"><canvas id="auditChart"></canvas></div>
+            <div class="audit-hits" id="auditHits"></div>
+        </div>
+    </section>
+
     <div class="grid" id="grid">
         <div class="loading">Loading pipeline...</div>
     </div>
@@ -445,7 +494,7 @@ document.getElementById('filterAll').addEventListener('click', () => setFilter('
 document.getElementById('filterUseful').addEventListener('click', () => setFilter('USEFUL'));
 document.getElementById('filterPending').addEventListener('click', () => setFilter('PENDING'));
 document.getElementById('filterIgnored').addEventListener('click', () => setFilter('IGNORED'));
-document.getElementById('refreshBtn').addEventListener('click', loadData);
+document.getElementById('refreshBtn').addEventListener('click', () => { loadData(); loadAudit(); });
 document.getElementById('panelClose').addEventListener('click', closePanel);
 document.getElementById('panelBackdrop').addEventListener('click', closePanel);
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
@@ -1120,12 +1169,108 @@ function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+// ── Discard-pile audit ─────────────────────────────────────────────────────────
+let auditChart = null;
+
+async function loadAudit() {
+    const section = document.getElementById('auditSection');
+    let data;
+    try {
+        data = await fetchJson('/api/discard-audit');
+    } catch (e) {
+        section.style.display = 'none';
+        return;
+    }
+    section.style.display = '';
+    const hits = data.hits || [];
+    const when = data.date ? ` · ${esc(data.date)}` : '';
+    if (data.available === false || (!data.date && hits.length === 0)) {
+        document.getElementById('auditSub').textContent =
+            data.message || 'No audit report yet — it runs nightly.';
+    } else {
+        document.getElementById('auditSub').innerHTML =
+            `Articles the keyword rules dropped, re-checked by a local LLM and matched to a real ` +
+            `SEC-listed company${when}. ` +
+            `<span class="badge">scanned ${data.scanned || 0}</span> ` +
+            `<span class="badge">flagged ${data.flagged || 0}</span> ` +
+            `<span class="badge">public targets ${data.publicHits || 0}</span>`;
+    }
+    renderAuditHits(hits);
+    renderAuditChart(data.history || []);
+}
+
+function renderAuditHits(hits) {
+    const box = document.getElementById('auditHits');
+    if (!hits.length) {
+        box.innerHTML = '<div class="audit-empty">No missed public targets in the latest run — rules look complete.</div>';
+        return;
+    }
+    box.innerHTML = hits.map(h => {
+        const more = h.count > 1 ? `<span class="more">+${h.count - 1} more</span>` : '';
+        const link = h.url ? `<a href="${esc(h.url)}" target="_blank" rel="noopener">open ↗</a>` : '';
+        return `<div class="audit-hit">
+            <div class="tk">$${esc(h.ticker)}</div>
+            <div class="body">
+                <div class="hl">${esc(truncate(h.headline, 130))}</div>
+                <div class="co">${esc(h.company)} ${more} ${link}</div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function renderAuditChart(history) {
+    const canvas = document.getElementById('auditChart');
+    if (auditChart) { auditChart.destroy(); auditChart = null; }
+    if (!history.length || typeof Chart === 'undefined') return;
+    auditChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: history.map(h => (h.date || '').slice(5)),
+            datasets: [{
+                label: 'public targets',
+                data: history.map(h => h.publicHits || 0),
+                backgroundColor: 'rgba(216,167,62,0.55)',
+                borderColor: '#d8a73e',
+                borderWidth: 1,
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        afterBody: (items) => {
+                            const h = history[items[0].dataIndex];
+                            return `scanned ${h.scanned || 0} · flagged ${h.flagged || 0}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#91a0b4', font: { size: 10 } } },
+                y: { beginAtZero: true, ticks: { precision: 0, color: '#91a0b4', font: { size: 10 } },
+                     grid: { color: 'rgba(36,50,68,0.5)' } }
+            }
+        }
+    });
+}
+
+document.getElementById('auditToggle').addEventListener('click', () => {
+    const body = document.getElementById('auditBody');
+    const btn = document.getElementById('auditToggle');
+    const hidden = body.style.display === 'none';
+    body.style.display = hidden ? '' : 'none';
+    btn.textContent = hidden ? 'Hide' : 'Show';
+});
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 fetch('/api/me', { credentials: 'same-origin' })
     .then(r => r.json())
     .then(me => { isAdmin = me.admin; })
     .catch(() => {})
-    .finally(() => loadData());
+    .finally(() => { loadData(); loadAudit(); });
 </script>
 </body>
 </html>
