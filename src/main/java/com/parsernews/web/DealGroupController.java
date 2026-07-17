@@ -159,12 +159,17 @@ public class DealGroupController {
     public List<DealGroupingService.DealGroupResponse> tgDispatchedDealGroups(
             @RequestParam(defaultValue = "50") int limit
     ) {
-        return reviewRepository.findByTgDispatchedAtIsNotNullOrderByTgDispatchedAtDesc()
+        // One grouping pass for all keys; group(key) per row rebuilt every group each time and
+        // made this endpoint take ~8s for 100 rows.
+        List<String> orderedKeys = reviewRepository.findByTgDispatchedAtIsNotNullOrderByTgDispatchedAtDesc()
                 .stream()
                 .limit(Math.min(limit, 200))
-                .map(r -> dealGroupingService.group(r.getGroupKey()))
-                .filter(java.util.Optional::isPresent)
-                .map(java.util.Optional::get)
+                .map(DealGroupReviewEntity::getGroupKey)
+                .toList();
+        var byKey = dealGroupingService.groupsByKeys(orderedKeys);
+        return orderedKeys.stream()
+                .map(byKey::get)
+                .filter(java.util.Objects::nonNull)
                 .toList();
     }
 

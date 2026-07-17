@@ -87,6 +87,10 @@ services:
       SEC_FTS_LOOKBACK_DAYS: ${SEC_FTS_LOOKBACK_DAYS:-3}
     volumes:
       - ./output:/app/output
+      # Read-only view of the discard-pile audit's output (see the nightly audit on the LLM host),
+      # so the app can surface audit-*.json / discard-audit.json without the audit writing into the
+      # app's own data. Absolute host path on the server; a local ./audit fallback for dev.
+      - ${AUDIT_DIR:-./audit}:/app/audit:ro
 
   cloudflared:
     image: cloudflare/cloudflared:latest
