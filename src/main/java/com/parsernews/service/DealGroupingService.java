@@ -31,8 +31,10 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class DealGroupingService {
@@ -87,6 +89,19 @@ public class DealGroupingService {
                 .map(this::toResponse)
                 .filter(group -> group.groupKey().equals(groupKey))
                 .findFirst();
+    }
+
+    /**
+     * Resolves many group keys against ONE grouping pass. {@link #group(String)} rebuilds every
+     * group from the database per call, so calling it in a loop is O(keys x groups) — the
+     * tg-dispatched endpoint did exactly that and took ~8s for 100 keys.
+     */
+    public Map<String, DealGroupResponse> groupsByKeys(java.util.Collection<String> groupKeys) {
+        java.util.Set<String> wanted = new java.util.HashSet<>(groupKeys);
+        return buildGroups().stream()
+                .map(this::toResponse)
+                .filter(group -> wanted.contains(group.groupKey()))
+                .collect(Collectors.toMap(DealGroupResponse::groupKey, Function.identity(), (a, b) -> a));
     }
 
     public String formatTelegramPreview(DealGroupResponse group) {
