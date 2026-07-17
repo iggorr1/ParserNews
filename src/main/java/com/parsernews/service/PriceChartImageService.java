@@ -137,22 +137,24 @@ public class PriceChartImageService {
                 g.drawString("offer " + fmt(offer), plotR - 84, yo - 5);
             }
 
-            // News marker (vertical line + price then)
+            // News marker (vertical line + price then). Clamp the moment into the visible range:
+            // news very often breaks after the last price bar (after the close, or because intraday
+            // data lags), which would otherwise drop the marker off the right edge entirely.
             if (newsInstant != null) {
-                long tn = newsInstant.getEpochSecond();
-                if (tn >= tMin && tn <= tMax) {
-                    int xn = xFor(tn, tMin, tMax, plotL, plotR);
-                    double closeAtNews = closestClose(pts, tn);
-                    int yn = yFor(closeAtNews, pMin, pMax, plotT, plotB);
-                    g.setColor(NEWS);
-                    g.setStroke(dashed());
-                    g.drawLine(xn, plotT, xn, plotB);
-                    g.setStroke(new BasicStroke(2f));
-                    g.fillOval(xn - 4, yn - 4, 8, 8);
-                    String lbl = "news " + fmt(closeAtNews);
-                    int lx = Math.min(xn + 6, plotR - g.getFontMetrics().stringWidth(lbl));
-                    g.drawString(lbl, lx, plotT + 12);
-                }
+                long tn = Math.max(tMin, Math.min(newsInstant.getEpochSecond(), tMax));
+                int xn = xFor(tn, tMin, tMax, plotL, plotR);
+                double closeAtNews = closestClose(pts, tn);
+                int yn = yFor(closeAtNews, pMin, pMax, plotT, plotB);
+                g.setColor(NEWS);
+                g.setStroke(dashed());
+                g.drawLine(xn, plotT, xn, plotB);
+                g.setStroke(new BasicStroke(2f));
+                g.fillOval(xn - 4, yn - 4, 8, 8);
+                String lbl = "news " + fmt(closeAtNews);
+                int w = g.getFontMetrics().stringWidth(lbl);
+                // Put the label on whichever side of the line has room (left when near the right edge).
+                int lx = (xn + 6 + w <= plotR) ? xn + 6 : xn - 6 - w;
+                g.drawString(lbl, Math.max(plotL, lx), plotT + 12);
             }
 
             // Current price dot + label
