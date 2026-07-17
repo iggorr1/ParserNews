@@ -30,7 +30,11 @@ import java.util.LinkedHashMap;
 })
 public class SecurityConfig {
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, ParserNewsAuthProperties authProperties) throws Exception {
+    SecurityFilterChain securityFilterChain(
+            HttpSecurity http,
+            ParserNewsAuthProperties authProperties,
+            @org.springframework.beans.factory.annotation.Value("${parsernews.remember-me.key:}") String rememberMeKey
+    ) throws Exception {
         if (!authProperties.enabled()) {
             return http
                     .csrf(csrf -> csrf.disable())
@@ -67,6 +71,19 @@ public class SecurityConfig {
                         .failureUrl("/login.html?error")
                         .permitAll()
                 )
+                // Persistent login: a signed cookie re-authenticates after the session expires or the
+                // app restarts (deploys drop in-memory sessions), so you stay logged in for 30 days
+                // instead of re-entering the password constantly. alwaysRemember means no checkbox is
+                // needed on the login form. The key must be stable across restarts or every cookie is
+                // invalidated on boot; it falls back to a value derived from the admin password (stable
+                // per deployment, not logged) when parsernews.remember-me.key is unset.
+                .rememberMe(remember -> remember
+                        .key(rememberMeKey == null || rememberMeKey.isBlank()
+                                ? "pn-rm-" + authProperties.password()
+                                : rememberMeKey)
+                        .alwaysRemember(true)
+                        .tokenValiditySeconds(60 * 60 * 24 * 30)
+                )
                 // API/XHR clients get 401 instead of a 302 redirect to the HTML login page,
                 // so front-end fetch() error handling can react correctly. Browser navigation
                 // to protected HTML pages falls through to the login-page redirect (the default).
@@ -75,7 +92,7 @@ public class SecurityConfig {
                         .logoutRequestMatcher(new AntPathRequestMatcher("/logout"))
                         .logoutSuccessUrl("/login.html?logout")
                         .invalidateHttpSession(true)
-                        .deleteCookies("JSESSIONID")
+                        .deleteCookies("JSESSIONID", "remember-me")
                         .permitAll()
                 )
                 .build();
