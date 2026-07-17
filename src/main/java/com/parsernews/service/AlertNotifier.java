@@ -9,6 +9,14 @@ public interface AlertNotifier {
         return send(message);
     }
 
+    /**
+     * Sends a photo with a caption and inline buttons. Implementations that cannot send a photo
+     * fall back to the text-only path so the alert still goes out.
+     */
+    default AlertNotificationResult sendPhotoWithButtons(byte[] png, String caption, List<InlineButton> buttons) {
+        return sendWithButtons(caption, buttons);
+    }
+
     record InlineButton(String text, String url, String callbackData) {
         public static InlineButton url(String text, String url) {
             return new InlineButton(text, url, null);

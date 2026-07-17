@@ -53,6 +53,7 @@ public class AutoDealGroupDispatchService {
     private final DealGroupReviewRepository reviewRepository;
     private final AlertNotifier alertNotifier;
     private final StockPriceService stockPriceService;
+    private final PriceChartImageService priceChartImageService;
     private final OpenAiRuntimeSettingsService openAiSettings;
     private final TelegramRuntimeSettingsService telegramSettings;
 
@@ -63,6 +64,7 @@ public class AutoDealGroupDispatchService {
             DealGroupReviewRepository reviewRepository,
             AlertNotifier alertNotifier,
             StockPriceService stockPriceService,
+            PriceChartImageService priceChartImageService,
             OpenAiRuntimeSettingsService openAiSettings,
             TelegramRuntimeSettingsService telegramSettings,
             @org.springframework.beans.factory.annotation.Value("${auto.dispatch.max-ai-per-run:5}") int maxAiPerRun,
@@ -76,6 +78,7 @@ public class AutoDealGroupDispatchService {
         this.reviewRepository = reviewRepository;
         this.alertNotifier = alertNotifier;
         this.stockPriceService = stockPriceService;
+        this.priceChartImageService = priceChartImageService;
         this.openAiSettings = openAiSettings;
         this.telegramSettings = telegramSettings;
     }
@@ -245,7 +248,10 @@ public class AutoDealGroupDispatchService {
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
                 AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
         );
-        AlertNotifier.AlertNotificationResult result = alertNotifier.sendWithButtons(message, buttons);
+        // A chart makes the spread obvious at a glance; sendPhotoWithButtons falls back to text when
+        // the chart can't be built (no ticker/history) or the caption is too long for a photo.
+        byte[] chart = renderChart(group, aiReview);
+        AlertNotifier.AlertNotificationResult result = alertNotifier.sendPhotoWithButtons(chart, message, buttons);
         // Always mark as dispatched to prevent infinite retry loops.
         // If send failed, log the reason — but don't keep retrying on every scan cycle.
         dealGroupReviewService.markTgDispatched(group.groupKey());
@@ -253,6 +259,34 @@ public class AutoDealGroupDispatchService {
             log.info("Dispatched to Telegram: {} ({})", group.groupKey(), group.targetTicker());
         } else {
             log.warn("Telegram send failed for {} [{}]: {}", group.groupKey(), result.status(), result.reason());
+        }
+    }
+
+    private byte[] renderChart(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse ai) {
+        try {
+            String ticker = group.targetTicker();
+            if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) {
+                return null;
+            }
+            java.math.BigDecimal offer;
+            String priceStatus = ai == null ? null : ai.priceStatus();
+            if (ai != null && ai.verifiedOfferPrice() != null
+                    && ("VERIFIED".equals(priceStatus) || "CORRECTED".equals(priceStatus))) {
+                offer = ai.verifiedOfferPrice();
+            } else {
+                offer = group.offerPrice() != null ? group.offerPrice() : (ai == null ? null : ai.offerPrice());
+            }
+            // Window the chart so the news moment is visible with room on both sides. Recent news
+            // gets an intraday view; older deals a daily one.
+            java.time.Instant news = group.sortInstant();
+            long ageDays = news == null ? 5 : Math.max(0, java.time.Duration.between(news, java.time.Instant.now()).toDays());
+            String range = ageDays <= 4 ? "5d" : ageDays <= 25 ? "1mo" : ageDays <= 80 ? "3mo" : "6mo";
+            String interval = ageDays <= 4 ? "30m" : "1d";
+            var history = stockPriceService.history(ticker, range, interval).orElse(null);
+            return priceChartImageService.render(ticker, group.targetCompany(), history, news, offer, group.offerCurrency());
+        } catch (RuntimeException exception) {
+            log.warn("Chart build failed for {}: {}", group.groupKey(), exception.getMessage());
+            return null;
         }
     }
 

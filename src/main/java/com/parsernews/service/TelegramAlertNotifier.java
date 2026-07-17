@@ -1,6 +1,11 @@
 package com.parsernews.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
@@ -11,12 +16,21 @@ import java.util.Map;
 
 @Service
 public class TelegramAlertNotifier implements AlertNotifier {
+    // Telegram hard-caps a photo caption at 1024 chars; a text message allows 4096.
+    private static final int CAPTION_LIMIT = 1024;
+
     private final TelegramRuntimeSettingsService settingsService;
     private final RestClient restClient;
+    private final ObjectMapper objectMapper;
 
-    public TelegramAlertNotifier(TelegramRuntimeSettingsService settingsService, RestClient.Builder restClientBuilder) {
+    public TelegramAlertNotifier(
+            TelegramRuntimeSettingsService settingsService,
+            RestClient.Builder restClientBuilder,
+            ObjectMapper objectMapper
+    ) {
         this.settingsService = settingsService;
         this.restClient = restClientBuilder.baseUrl("https://api.telegram.org").build();
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -64,6 +78,63 @@ public class TelegramAlertNotifier implements AlertNotifier {
         } catch (RestClientException exception) {
             return AlertNotificationResult.notSent("SEND_FAILED", "Telegram alert send failed: " + exception.getMessage());
         }
+    }
+
+    @Override
+    public AlertNotificationResult sendPhotoWithButtons(byte[] png, String caption, List<InlineButton> buttons) {
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
+        if (!settings.enabled()) {
+            return AlertNotificationResult.notSent("DISABLED", "Telegram is disabled; no external message was sent.");
+        }
+        if (isBlank(settings.botToken()) || isBlank(settings.chatId())) {
+            return AlertNotificationResult.notSent("CONFIG_MISSING", "Telegram is enabled but bot token or chat id is missing.");
+        }
+        // A caption that would overflow Telegram's 1024-char limit means detail would be lost, so
+        // send it as a full text message instead of silently truncating the analysis.
+        if (png == null || caption != null && caption.length() > CAPTION_LIMIT) {
+            return sendWithButtons(caption, buttons);
+        }
+        try {
+            MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+            form.add("chat_id", settings.chatId());
+            form.add("caption", caption);
+            form.add("parse_mode", "HTML");
+            form.add("photo", new ByteArrayResource(png) {
+                @Override
+                public String getFilename() {
+                    return "chart.png";
+                }
+            });
+            if (!buttons.isEmpty()) {
+                form.add("reply_markup", objectMapper.writeValueAsString(
+                        Map.of("inline_keyboard", List.of(buttonRow(buttons)))));
+            }
+            restClient.post()
+                    .uri("/bot{token}/sendPhoto", settings.botToken())
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(form)
+                    .retrieve()
+                    .toBodilessEntity();
+            return AlertNotificationResult.sent("SENT", "Telegram photo alert was sent.");
+        } catch (RestClientException | com.fasterxml.jackson.core.JsonProcessingException exception) {
+            // Network / API failure: still get the alert out as text rather than dropping it.
+            return sendWithButtons(caption, buttons);
+        }
+    }
+
+    private List<Map<String, String>> buttonRow(List<InlineButton> buttons) {
+        List<Map<String, String>> row = new ArrayList<>();
+        for (InlineButton button : buttons) {
+            Map<String, String> btn = new LinkedHashMap<>();
+            btn.put("text", button.text());
+            if (button.callbackData() != null) {
+                btn.put("callback_data", button.callbackData());
+            } else if (button.url() != null) {
+                btn.put("url", button.url());
+            }
+            row.add(btn);
+        }
+        return row;
     }
 
     private boolean isBlank(String value) {
