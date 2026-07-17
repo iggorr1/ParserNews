@@ -239,18 +239,53 @@ public class AutoDealGroupDispatchService {
                 .orElse(false);
     }
 
-    private void dispatchToTelegram(DealGroupingService.DealGroupResponse group) {
-        DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
+    /** Caption, chart image and inline buttons for a deal's Telegram alert. */
+    public record AlertContent(String caption, byte[] chart, List<AlertNotifier.InlineButton> buttons) {
+    }
+
+    private AlertContent buildAlert(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse aiReview) {
         String message = dealGroupingService.formatTelegramPreview(group)
                 + formatAiSection(aiReview)
                 + formatPriceSection(group, aiReview);
         List<AlertNotifier.InlineButton> buttons = List.of(
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
-                AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
+                AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey()),
+                AlertNotifier.InlineButton.callback("🔄 Price", "rp|" + group.groupKey())
         );
+        return new AlertContent(message, renderChart(group, aiReview), buttons);
+    }
+
+    /**
+     * Rebuilds a dispatched alert with a fresh price and edits the Telegram message in place, so the
+     * shown price and chart are current. Called from the callback poller when the "🔄 Price" button
+     * is pressed. Returns a short status for the callback toast.
+     */
+    @Transactional(readOnly = true)
+    public String refreshPriceMessage(String groupKey, String chatId, long messageId, boolean isPhoto) {
+        DealGroupingService.DealGroupResponse group = dealGroupingService.group(groupKey).orElse(null);
+        if (group == null) {
+            return "Deal not found";
+        }
+        AlertContent content = buildAlert(group, aiReviewService.latest(groupKey));
+        // A per-second stamp guarantees the caption differs, so Telegram never rejects the edit as
+        // "message is not modified" when the price hasn't moved.
+        String stamp = java.time.ZonedDateTime.now(java.time.ZoneId.of("Europe/Kyiv"))
+                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+        String caption = content.caption() + "\n\n🔄 <i>Обновлено " + stamp + "</i>";
+        AlertNotifier.AlertNotificationResult result = (isPhoto && content.chart() != null)
+                ? alertNotifier.editPhotoWithButtons(chatId, messageId, content.chart(), caption, content.buttons())
+                : alertNotifier.editTextWithButtons(chatId, messageId, caption, content.buttons());
+        return result.sent() ? "Цена обновлена ✓" : "Не удалось обновить";
+    }
+
+    private void dispatchToTelegram(DealGroupingService.DealGroupResponse group) {
+        DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
+        AlertContent content = buildAlert(group, aiReview);
+        String message = content.caption();
+        List<AlertNotifier.InlineButton> buttons = content.buttons();
         // A chart makes the spread obvious at a glance; sendPhotoWithButtons falls back to text when
         // the chart can't be built (no ticker/history) or the caption is too long for a photo.
-        byte[] chart = renderChart(group, aiReview);
+        byte[] chart = content.chart();
         AlertNotifier.AlertNotificationResult result = alertNotifier.sendPhotoWithButtons(chart, message, buttons);
         // Always mark as dispatched to prevent infinite retry loops.
         // If send failed, log the reason — but don't keep retrying on every scan cycle.

@@ -122,6 +122,78 @@ public class TelegramAlertNotifier implements AlertNotifier {
         }
     }
 
+    @Override
+    public AlertNotificationResult editPhotoWithButtons(
+            String chatId, long messageId, byte[] png, String caption, List<InlineButton> buttons) {
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
+        if (!settings.enabled() || isBlank(settings.botToken())) {
+            return AlertNotificationResult.notSent("DISABLED", "Telegram is disabled or misconfigured.");
+        }
+        // A caption over the photo limit can't be an edited photo caption; edit as text instead.
+        if (png == null || caption != null && caption.length() > CAPTION_LIMIT) {
+            return editTextWithButtons(chatId, messageId, caption, buttons);
+        }
+        try {
+            Map<String, Object> media = new LinkedHashMap<>();
+            media.put("type", "photo");
+            media.put("media", "attach://chart");
+            media.put("caption", caption);
+            media.put("parse_mode", "HTML");
+
+            MultiValueMap<String, Object> form = new LinkedMultiValueMap<>();
+            form.add("chat_id", chatId);
+            form.add("message_id", messageId);
+            form.add("media", objectMapper.writeValueAsString(media));
+            form.add("chart", new ByteArrayResource(png) {
+                @Override
+                public String getFilename() {
+                    return "chart.png";
+                }
+            });
+            if (!buttons.isEmpty()) {
+                form.add("reply_markup", objectMapper.writeValueAsString(
+                        Map.of("inline_keyboard", List.of(buttonRow(buttons)))));
+            }
+            restClient.post()
+                    .uri("/bot{token}/editMessageMedia", settings.botToken())
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .body(form)
+                    .retrieve()
+                    .toBodilessEntity();
+            return AlertNotificationResult.sent("EDITED", "Telegram photo message was updated.");
+        } catch (RestClientException | com.fasterxml.jackson.core.JsonProcessingException exception) {
+            return AlertNotificationResult.notSent("EDIT_FAILED", "Telegram edit failed: " + exception.getMessage());
+        }
+    }
+
+    @Override
+    public AlertNotificationResult editTextWithButtons(
+            String chatId, long messageId, String text, List<InlineButton> buttons) {
+        TelegramRuntimeSettingsService.EffectiveTelegramSettings settings = settingsService.effectiveSettings();
+        if (!settings.enabled() || isBlank(settings.botToken())) {
+            return AlertNotificationResult.notSent("DISABLED", "Telegram is disabled or misconfigured.");
+        }
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("chat_id", chatId);
+            body.put("message_id", messageId);
+            body.put("text", text);
+            body.put("parse_mode", "HTML");
+            body.put("disable_web_page_preview", true);
+            if (!buttons.isEmpty()) {
+                body.put("reply_markup", Map.of("inline_keyboard", List.of(buttonRow(buttons))));
+            }
+            restClient.post()
+                    .uri("/bot{token}/editMessageText", settings.botToken())
+                    .body(body)
+                    .retrieve()
+                    .toBodilessEntity();
+            return AlertNotificationResult.sent("EDITED", "Telegram text message was updated.");
+        } catch (RestClientException exception) {
+            return AlertNotificationResult.notSent("EDIT_FAILED", "Telegram edit failed: " + exception.getMessage());
+        }
+    }
+
     private List<Map<String, String>> buttonRow(List<InlineButton> buttons) {
         List<Map<String, String>> row = new ArrayList<>();
         for (InlineButton button : buttons) {
