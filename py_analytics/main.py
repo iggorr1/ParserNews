@@ -36,15 +36,15 @@ def main():
     deals = fetch_deals(config.DEALS_API_KEY, config.DEALS_API_URL)
 
     # --- FOCUSED TEST ON APH ---
-    print("\n[INFO] Running a focused test on a sample APH deal.")
-    aph_deal_data = {
-        "title": "TEST DEAL: Carlisle to Acquire Amphenol (APH)",
-        "target_company": "Amphenol Corporation",
-        "target_ticker": "APH",
-        "offer_price": 150.00,
-        "raw_data": {}
-    }
-    deals.append(Deal(**aph_deal_data))
+    # print("\n[INFO] Running a focused test on a sample APH deal.")
+    # aph_deal_data = {
+    #     "title": "TEST DEAL: Carlisle to Acquire Amphenol (APH)",
+    #     "target_company": "Amphenol Corporation",
+    #     "target_ticker": "APH",
+    #     "offer_price": 150.00,
+    #     "raw_data": {}
+    # }
+    # deals.append(Deal(**aph_deal_data))
     # --- END OF TEST ---
 
     if not deals:
@@ -58,11 +58,16 @@ def main():
         print("\n" + "-"*80)
         print(f"Analyzing Deal: {deal.title}")
         
-        # This single function now handles all market data enrichment
-        enrich_deal_with_market_data(deal, clients)
+        # --- Market Data Enrichment (Temporarily Disabled) ---
+        # print("\n  --- Running Market Data Enrichment ---")
+        # enrich_deal_with_market_data(deal, clients)
+        
+        # --- Regulatory Data Enrichment (Next Step) ---
+        print("\n  --- Running Regulatory Data Enrichment (Placeholder) ---")
+        # enrich_deal_with_regulatory_data(deal) # Placeholder for next phase
         
         # --- III. EXPORT RESULTS ---
-        export_deal_data(deal)
+        # export_deal_data(deal) # Also disabled as no new data is being added
 
     # --- IV. FINAL REPORTING ---
     print("\n" + "="*80)
