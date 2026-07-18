@@ -1,5 +1,6 @@
 package com.parsernews.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.parsernews.config.TelegramAlertSettings;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -12,7 +13,8 @@ class AlertNotifierContextTest {
             .withUserConfiguration(TelegramAlertNotifier.class)
             .withBean(TelegramAlertSettings.class, () -> new TelegramAlertSettings(false, "", ""))
             .withBean(TelegramRuntimeSettingsService.class, () -> new TelegramRuntimeSettingsService(new TelegramAlertSettings(false, "", "")))
-            .withBean(RestClient.Builder.class, RestClient::builder);
+            .withBean(RestClient.Builder.class, RestClient::builder)
+            .withBean(ObjectMapper.class, ObjectMapper::new);
 
     @Test
     void defaultConfigCreatesSafeTelegramNotifier() {

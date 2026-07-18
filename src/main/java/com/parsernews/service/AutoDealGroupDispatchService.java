@@ -53,6 +53,7 @@ public class AutoDealGroupDispatchService {
     private final DealGroupReviewRepository reviewRepository;
     private final AlertNotifier alertNotifier;
     private final StockPriceService stockPriceService;
+    private final PriceChartImageService priceChartImageService;
     private final OpenAiRuntimeSettingsService openAiSettings;
     private final TelegramRuntimeSettingsService telegramSettings;
 
@@ -63,6 +64,7 @@ public class AutoDealGroupDispatchService {
             DealGroupReviewRepository reviewRepository,
             AlertNotifier alertNotifier,
             StockPriceService stockPriceService,
+            PriceChartImageService priceChartImageService,
             OpenAiRuntimeSettingsService openAiSettings,
             TelegramRuntimeSettingsService telegramSettings,
             @org.springframework.beans.factory.annotation.Value("${auto.dispatch.max-ai-per-run:5}") int maxAiPerRun,
@@ -76,6 +78,7 @@ public class AutoDealGroupDispatchService {
         this.reviewRepository = reviewRepository;
         this.alertNotifier = alertNotifier;
         this.stockPriceService = stockPriceService;
+        this.priceChartImageService = priceChartImageService;
         this.openAiSettings = openAiSettings;
         this.telegramSettings = telegramSettings;
     }
@@ -236,16 +239,54 @@ public class AutoDealGroupDispatchService {
                 .orElse(false);
     }
 
-    private void dispatchToTelegram(DealGroupingService.DealGroupResponse group) {
-        DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
+    /** Caption, chart image and inline buttons for a deal's Telegram alert. */
+    public record AlertContent(String caption, byte[] chart, List<AlertNotifier.InlineButton> buttons) {
+    }
+
+    private AlertContent buildAlert(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse aiReview) {
         String message = dealGroupingService.formatTelegramPreview(group)
                 + formatAiSection(aiReview)
                 + formatPriceSection(group, aiReview);
         List<AlertNotifier.InlineButton> buttons = List.of(
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
-                AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey())
+                AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey()),
+                AlertNotifier.InlineButton.callback("🔄 Price", "rp|" + group.groupKey())
         );
-        AlertNotifier.AlertNotificationResult result = alertNotifier.sendWithButtons(message, buttons);
+        return new AlertContent(message, renderChart(group, aiReview), buttons);
+    }
+
+    /**
+     * Rebuilds a dispatched alert with a fresh price and edits the Telegram message in place, so the
+     * shown price and chart are current. Called from the callback poller when the "🔄 Price" button
+     * is pressed. Returns a short status for the callback toast.
+     */
+    @Transactional(readOnly = true)
+    public String refreshPriceMessage(String groupKey, String chatId, long messageId, boolean isPhoto) {
+        DealGroupingService.DealGroupResponse group = dealGroupingService.group(groupKey).orElse(null);
+        if (group == null) {
+            return "Deal not found";
+        }
+        AlertContent content = buildAlert(group, aiReviewService.latest(groupKey));
+        // A per-second stamp guarantees the caption differs, so Telegram never rejects the edit as
+        // "message is not modified" when the price hasn't moved.
+        String stamp = java.time.ZonedDateTime.now(java.time.ZoneId.of("Europe/Kyiv"))
+                .format(java.time.format.DateTimeFormatter.ofPattern("HH:mm:ss"));
+        String caption = content.caption() + "\n\n🔄 <i>Обновлено " + stamp + "</i>";
+        AlertNotifier.AlertNotificationResult result = (isPhoto && content.chart() != null)
+                ? alertNotifier.editPhotoWithButtons(chatId, messageId, content.chart(), caption, content.buttons())
+                : alertNotifier.editTextWithButtons(chatId, messageId, caption, content.buttons());
+        return result.sent() ? "Цена обновлена ✓" : "Не удалось обновить";
+    }
+
+    private void dispatchToTelegram(DealGroupingService.DealGroupResponse group) {
+        DealGroupAiReviewService.AiReviewResponse aiReview = aiReviewService.latest(group.groupKey());
+        AlertContent content = buildAlert(group, aiReview);
+        String message = content.caption();
+        List<AlertNotifier.InlineButton> buttons = content.buttons();
+        // A chart makes the spread obvious at a glance; sendPhotoWithButtons falls back to text when
+        // the chart can't be built (no ticker/history) or the caption is too long for a photo.
+        byte[] chart = content.chart();
+        AlertNotifier.AlertNotificationResult result = alertNotifier.sendPhotoWithButtons(chart, message, buttons);
         // Always mark as dispatched to prevent infinite retry loops.
         // If send failed, log the reason — but don't keep retrying on every scan cycle.
         dealGroupReviewService.markTgDispatched(group.groupKey());
@@ -253,6 +294,34 @@ public class AutoDealGroupDispatchService {
             log.info("Dispatched to Telegram: {} ({})", group.groupKey(), group.targetTicker());
         } else {
             log.warn("Telegram send failed for {} [{}]: {}", group.groupKey(), result.status(), result.reason());
+        }
+    }
+
+    private byte[] renderChart(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse ai) {
+        try {
+            String ticker = group.targetTicker();
+            if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) {
+                return null;
+            }
+            java.math.BigDecimal offer;
+            String priceStatus = ai == null ? null : ai.priceStatus();
+            if (ai != null && ai.verifiedOfferPrice() != null
+                    && ("VERIFIED".equals(priceStatus) || "CORRECTED".equals(priceStatus))) {
+                offer = ai.verifiedOfferPrice();
+            } else {
+                offer = group.offerPrice() != null ? group.offerPrice() : (ai == null ? null : ai.offerPrice());
+            }
+            // Window the chart so the news moment is visible with room on both sides. Recent news
+            // gets an intraday view; older deals a daily one.
+            java.time.Instant news = group.sortInstant();
+            long ageDays = news == null ? 5 : Math.max(0, java.time.Duration.between(news, java.time.Instant.now()).toDays());
+            String range = ageDays <= 4 ? "5d" : ageDays <= 25 ? "1mo" : ageDays <= 80 ? "3mo" : "6mo";
+            String interval = ageDays <= 4 ? "30m" : "1d";
+            var history = stockPriceService.history(ticker, range, interval).orElse(null);
+            return priceChartImageService.render(ticker, group.targetCompany(), history, news, offer, group.offerCurrency());
+        } catch (RuntimeException exception) {
+            log.warn("Chart build failed for {}: {}", group.groupKey(), exception.getMessage());
+            return null;
         }
     }
 

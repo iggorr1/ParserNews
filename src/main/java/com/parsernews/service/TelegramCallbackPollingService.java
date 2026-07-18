@@ -21,8 +21,9 @@ import java.util.concurrent.atomic.AtomicLong;
 public class TelegramCallbackPollingService {
     private static final String TELEGRAM_BASE = "https://api.telegram.org";
     private static final int POLL_TIMEOUT_SECONDS = 10;
-    // callback_data format: "qr|STATUS|groupKey"
+    // review buttons: "qr|STATUS|groupKey" ; refresh-price button: "rp|groupKey"
     private static final String CB_PREFIX = "qr|";
+    private static final String RP_PREFIX = "rp|";
 
     private final AtomicLong offset = new AtomicLong(0);
     private final AtomicBoolean webhookDeleted = new AtomicBoolean(false);
@@ -31,12 +32,14 @@ public class TelegramCallbackPollingService {
     private final TelegramRuntimeSettingsService settingsService;
     private final DealGroupReviewService dealGroupReviewService;
     private final DealGroupingService dealGroupingService;
+    private final AutoDealGroupDispatchService dispatchService;
 
     public TelegramCallbackPollingService(
             ObjectMapper objectMapper,
             TelegramRuntimeSettingsService settingsService,
             DealGroupReviewService dealGroupReviewService,
-            DealGroupingService dealGroupingService
+            DealGroupingService dealGroupingService,
+            AutoDealGroupDispatchService dispatchService
     ) {
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
@@ -45,6 +48,7 @@ public class TelegramCallbackPollingService {
         this.settingsService = settingsService;
         this.dealGroupReviewService = dealGroupReviewService;
         this.dealGroupingService = dealGroupingService;
+        this.dispatchService = dispatchService;
     }
 
     @PostConstruct
@@ -100,11 +104,15 @@ public class TelegramCallbackPollingService {
 
             String callbackId = callback.path("id").asText();
             String data = callback.path("data").asText("");
-            processCallback(data, callbackId, token);
+            processCallback(data, callbackId, callback.path("message"), token);
         }
     }
 
-    private void processCallback(String data, String callbackId, String token) {
+    private void processCallback(String data, String callbackId, JsonNode message, String token) {
+        if (data.startsWith(RP_PREFIX)) {
+            processRefresh(data.substring(RP_PREFIX.length()), callbackId, message, token);
+            return;
+        }
         if (!data.startsWith(CB_PREFIX)) return;
 
         String[] parts = data.substring(CB_PREFIX.length()).split("\\|", 2);
@@ -129,6 +137,23 @@ public class TelegramCallbackPollingService {
         dealGroupReviewService.update(groupKey, status, null, null);
         String text = status == ManualReviewStatus.USEFUL ? "✓ Marked as Useful" : "✗ Marked as Ignored";
         answerCallback(callbackId, token, text);
+    }
+
+    private void processRefresh(String groupKey, String callbackId, JsonNode message, String token) {
+        String chatId = message.path("chat").path("id").asText("");
+        long messageId = message.path("message_id").asLong(0);
+        boolean isPhoto = message.has("photo");
+        if (chatId.isEmpty() || messageId == 0) {
+            answerCallback(callbackId, token, "Can't refresh this message");
+            return;
+        }
+        String result;
+        try {
+            result = dispatchService.refreshPriceMessage(groupKey, chatId, messageId, isPhoto);
+        } catch (RuntimeException exception) {
+            result = "Refresh failed";
+        }
+        answerCallback(callbackId, token, result);
     }
 
     private void tryDeleteWebhook(String token) {
