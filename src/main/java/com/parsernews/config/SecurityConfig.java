@@ -13,6 +13,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.authentication.rememberme.TokenBasedRememberMeServices;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.DelegatingAuthenticationEntryPoint;
@@ -74,15 +75,10 @@ public class SecurityConfig {
                 // Persistent login: a signed cookie re-authenticates after the session expires or the
                 // app restarts (deploys drop in-memory sessions), so you stay logged in for 30 days
                 // instead of re-entering the password constantly. alwaysRemember means no checkbox is
-                // needed on the login form. The key must be stable across restarts or every cookie is
-                // invalidated on boot; it falls back to a value derived from the admin password (stable
-                // per deployment, not logged) when parsernews.remember-me.key is unset.
+                // needed on the login form.
                 .rememberMe(remember -> remember
-                        .key(rememberMeKey == null || rememberMeKey.isBlank()
-                                ? "pn-rm-" + authProperties.password()
-                                : rememberMeKey)
-                        .alwaysRemember(true)
-                        .tokenValiditySeconds(60 * 60 * 24 * 30)
+                        .key(rememberMeKey(authProperties, rememberMeKey))
+                        .rememberMeServices(rememberMeServices(authProperties, rememberMeKey))
                 )
                 // API/XHR clients get 401 instead of a 302 redirect to the HTML login page,
                 // so front-end fetch() error handling can react correctly. Browser navigation
@@ -96,6 +92,46 @@ public class SecurityConfig {
                         .permitAll()
                 )
                 .build();
+    }
+
+    /**
+     * The key signing remember-me cookies. It must be stable across restarts or every cookie is
+     * invalidated on boot; it derives from the admin password (stable per deployment, never logged)
+     * unless {@code parsernews.remember-me.key} is set.
+     */
+    private static String rememberMeKey(ParserNewsAuthProperties authProperties, String configuredKey) {
+        return configuredKey == null || configuredKey.isBlank()
+                ? "pn-rm-" + authProperties.password()
+                : configuredKey;
+    }
+
+    /**
+     * Remember-me backed by a user store holding the <em>configured</em> passwords rather than the
+     * BCrypt-encoded ones.
+     *
+     * <p>The token signature includes the user's password. The login user store re-encodes with
+     * BCrypt at every startup, and BCrypt salts randomly, so that hash differs on each boot — which
+     * silently invalidated every remember-me cookie on every deploy. The configured password is
+     * stable, so cookies survive restarts. Login itself still authenticates against the BCrypt store.
+     */
+    private static TokenBasedRememberMeServices rememberMeServices(
+            ParserNewsAuthProperties authProperties, String configuredKey) {
+        InMemoryUserDetailsManager stableStore = new InMemoryUserDetailsManager(
+                User.withUsername(authProperties.username())
+                        .password(authProperties.password())
+                        .roles("ADMIN", "VIEWER")
+                        .build());
+        if (authProperties.viewerUsername() != null && authProperties.viewerPassword() != null) {
+            stableStore.createUser(User.withUsername(authProperties.viewerUsername())
+                    .password(authProperties.viewerPassword())
+                    .roles("VIEWER")
+                    .build());
+        }
+        TokenBasedRememberMeServices services =
+                new TokenBasedRememberMeServices(rememberMeKey(authProperties, configuredKey), stableStore);
+        services.setAlwaysRemember(true);
+        services.setTokenValiditySeconds(60 * 60 * 24 * 30);
+        return services;
     }
 
     /**
