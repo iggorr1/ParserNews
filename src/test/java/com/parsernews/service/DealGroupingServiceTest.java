@@ -268,6 +268,21 @@ class DealGroupingServiceTest {
         assertThat(preview).contains("Triggered by");
     }
 
+    // SEC-sourced groups usually carry no ticker (the EDGAR feed omits it), so the alert showed no
+    // ticker, price or chart even when the AI review had resolved one against SEC's company list.
+    @Test
+    void telegramPreviewUsesTheResolvedTickerWhenTheGroupHasNone() {
+        SecFilingEntity sec = secFiling(10L, "0001806201", "OPEN LENDING CORP", "SC 14D9", "Tender offer statement");
+        when(eventRepository.findTop200ByOrderByDetectedAtDesc()).thenReturn(List.of());
+        when(secFilingRepository.findTop100ByOrderByFilingDateDescProcessedAtDesc()).thenReturn(List.of(sec));
+
+        DealGroupingService.DealGroupResponse group = service.groups(null, null, 50).getFirst();
+
+        assertThat(group.targetTicker()).isNull();
+        assertThat(service.formatTelegramPreview(group)).doesNotContain("$LPRO");
+        assertThat(service.formatTelegramPreview(group, "LPRO")).contains("$LPRO");
+    }
+
     private DetectedEventEntity rssEvent(
             Long id,
             String headline,
