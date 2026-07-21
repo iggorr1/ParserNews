@@ -91,7 +91,7 @@ public class TelegramAlertNotifier implements AlertNotifier {
         }
         // A caption that would overflow Telegram's 1024-char limit means detail would be lost, so
         // send it as a full text message instead of silently truncating the analysis.
-        if (png == null || caption != null && caption.length() > CAPTION_LIMIT) {
+        if (png == null || AlertNotifier.visibleLength(caption) > CAPTION_LIMIT) {
             return sendWithButtons(caption, buttons);
         }
         try {
@@ -130,7 +130,7 @@ public class TelegramAlertNotifier implements AlertNotifier {
             return AlertNotificationResult.notSent("DISABLED", "Telegram is disabled or misconfigured.");
         }
         // A caption over the photo limit can't be an edited photo caption; edit as text instead.
-        if (png == null || caption != null && caption.length() > CAPTION_LIMIT) {
+        if (png == null || AlertNotifier.visibleLength(caption) > CAPTION_LIMIT) {
             return editTextWithButtons(chatId, messageId, caption, buttons);
         }
         try {

@@ -29,6 +29,20 @@ public interface AlertNotifier {
         return AlertNotificationResult.notSent("UNSUPPORTED", "This notifier cannot edit messages.");
     }
 
+    /**
+     * Length Telegram applies its caption/text limits to: the caption is measured "after entities
+     * parsing", so HTML markup does not count. Measuring the raw string instead over-counts by the
+     * size of all the tags and needlessly drops the photo.
+     */
+    static int visibleLength(String html) {
+        if (html == null || html.isEmpty()) {
+            return 0;
+        }
+        String text = html.replaceAll("<[^>]+>", "");
+        text = text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"");
+        return text.length();
+    }
+
     record InlineButton(String text, String url, String callbackData) {
         public static InlineButton url(String text, String url) {
             return new InlineButton(text, url, null);

@@ -254,8 +254,12 @@ public class AutoDealGroupDispatchService {
         byte[] chart = renderChart(group, aiReview);
         // With a chart, an over-long caption would drop the whole photo. The AI reasoning is the
         // only elastic part (and is shown in full on the dashboard), so shrink it to keep the chart.
-        if (chart != null && message.length() > CAPTION_BUDGET) {
-            int reasonBudget = CAPTION_BUDGET - preview.length() - price.length() - 80;
+        // Lengths are measured the way Telegram measures them — markup excluded.
+        if (chart != null && AlertNotifier.visibleLength(message) > CAPTION_BUDGET) {
+            int reasonBudget = CAPTION_BUDGET
+                    - AlertNotifier.visibleLength(preview)
+                    - AlertNotifier.visibleLength(price)
+                    - 80;
             message = preview + formatAiSection(aiReview, reasonBudget) + price;
         }
         List<AlertNotifier.InlineButton> buttons = List.of(
