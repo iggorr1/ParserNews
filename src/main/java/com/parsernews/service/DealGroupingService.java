@@ -105,10 +105,22 @@ public class DealGroupingService {
     }
 
     public String formatTelegramPreview(DealGroupResponse group) {
+        return formatTelegramPreview(group, null);
+    }
+
+    /**
+     * @param resolvedTargetTicker a ticker resolved downstream (AI-identified target name looked up
+     *                             in SEC's company list). It wins over the grouping's own ticker,
+     *                             which is frequently absent for SEC-sourced groups because the
+     *                             EDGAR feed does not carry one.
+     */
+    public String formatTelegramPreview(DealGroupResponse group, String resolvedTargetTicker) {
         StringBuilder b = new StringBuilder();
 
+        String targetTicker = firstNonBlank(resolvedTargetTicker, group.targetTicker());
+
         // ── Header ──────────────────────────────────────────────────────────
-        String ticker = firstNonBlank(group.targetTicker(), group.buyerTicker(), null);
+        String ticker = firstNonBlank(targetTicker, group.buyerTicker(), null);
         String tickerLabel = (ticker != null && !"UNKNOWN".equalsIgnoreCase(ticker)) ? " <b>$" + ticker + "</b>" : "";
         b.append("📊 <b>M&amp;A Signal</b>").append(tickerLabel).append('\n');
 
@@ -117,8 +129,8 @@ public class DealGroupingService {
         String buyerName  = firstNonBlank(group.buyerCompany(), null);
         if (targetName != null) {
             b.append("<b>Target:</b> ").append(escapeHtml(targetName));
-            if (!isBlank(group.targetTicker()) && !"UNKNOWN".equalsIgnoreCase(group.targetTicker())) {
-                b.append(" ($").append(group.targetTicker()).append(")");
+            if (!isBlank(targetTicker) && !"UNKNOWN".equalsIgnoreCase(targetTicker)) {
+                b.append(" ($").append(targetTicker).append(")");
             }
             if (!isBlank(group.targetCik())) {
                 b.append("  <i>CIK ").append(group.targetCik()).append("</i>");

@@ -247,8 +247,26 @@ public class AutoDealGroupDispatchService {
     // stamp the refresh button appends, so a refreshed alert still fits as a photo.
     private static final int CAPTION_BUDGET = 960;
 
+    /**
+     * The ticker to alert on. The AI review resolves the target name against SEC's company list,
+     * which is often the only source: SEC-sourced groups usually carry no ticker at all because the
+     * EDGAR feed omits it, so relying on the group alone loses the chart and the price.
+     */
+    private static String effectiveTicker(
+            DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse ai) {
+        String aiTicker = ai == null ? null : ai.targetTicker();
+        if (aiTicker != null && !aiTicker.isBlank() && !"UNKNOWN".equalsIgnoreCase(aiTicker)) {
+            return aiTicker;
+        }
+        String groupTicker = group.targetTicker();
+        return groupTicker == null || groupTicker.isBlank() || "UNKNOWN".equalsIgnoreCase(groupTicker)
+                ? null
+                : groupTicker;
+    }
+
     private AlertContent buildAlert(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse aiReview) {
-        String preview = dealGroupingService.formatTelegramPreview(group);
+        String ticker = effectiveTicker(group, aiReview);
+        String preview = dealGroupingService.formatTelegramPreview(group, ticker);
         String price = formatPriceSection(group, aiReview);
         String message = preview + formatAiSection(aiReview) + price;
         byte[] chart = renderChart(group, aiReview);
@@ -314,8 +332,8 @@ public class AutoDealGroupDispatchService {
 
     private byte[] renderChart(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse ai) {
         try {
-            String ticker = group.targetTicker();
-            if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) {
+            String ticker = effectiveTicker(group, ai);
+            if (ticker == null) {
                 return null;
             }
             java.math.BigDecimal offer;
@@ -380,8 +398,8 @@ public class AutoDealGroupDispatchService {
     }
 
     private String formatPriceSection(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse ai) {
-        String ticker = group.targetTicker();
-        if (ticker == null || ticker.isBlank() || "UNKNOWN".equalsIgnoreCase(ticker)) return "";
+        String ticker = effectiveTicker(group, ai);
+        if (ticker == null) return "";
         String priceStatus = ai == null ? null : ai.priceStatus();
         // Prefer the AI-check verified/corrected price; else the deterministic deal-terms price; else
         // the first-pass AI-extracted price (SEC-sourced deals carry the price in the filing).
