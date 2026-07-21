@@ -243,16 +243,27 @@ public class AutoDealGroupDispatchService {
     public record AlertContent(String caption, byte[] chart, List<AlertNotifier.InlineButton> buttons) {
     }
 
+    // Telegram allows 1024 chars on a photo caption. Stay under it with room for the "Обновлено"
+    // stamp the refresh button appends, so a refreshed alert still fits as a photo.
+    private static final int CAPTION_BUDGET = 960;
+
     private AlertContent buildAlert(DealGroupingService.DealGroupResponse group, DealGroupAiReviewService.AiReviewResponse aiReview) {
-        String message = dealGroupingService.formatTelegramPreview(group)
-                + formatAiSection(aiReview)
-                + formatPriceSection(group, aiReview);
+        String preview = dealGroupingService.formatTelegramPreview(group);
+        String price = formatPriceSection(group, aiReview);
+        String message = preview + formatAiSection(aiReview) + price;
+        byte[] chart = renderChart(group, aiReview);
+        // With a chart, an over-long caption would drop the whole photo. The AI reasoning is the
+        // only elastic part (and is shown in full on the dashboard), so shrink it to keep the chart.
+        if (chart != null && message.length() > CAPTION_BUDGET) {
+            int reasonBudget = CAPTION_BUDGET - preview.length() - price.length() - 80;
+            message = preview + formatAiSection(aiReview, reasonBudget) + price;
+        }
         List<AlertNotifier.InlineButton> buttons = List.of(
                 AlertNotifier.InlineButton.callback("✓ Useful", "qr|USEFUL|" + group.groupKey()),
                 AlertNotifier.InlineButton.callback("✗ Ignore", "qr|IGNORED|" + group.groupKey()),
                 AlertNotifier.InlineButton.callback("🔄 Price", "rp|" + group.groupKey())
         );
-        return new AlertContent(message, renderChart(group, aiReview), buttons);
+        return new AlertContent(message, chart, buttons);
     }
 
     /**
@@ -326,11 +337,18 @@ public class AutoDealGroupDispatchService {
     }
 
     private String formatAiSection(DealGroupAiReviewService.AiReviewResponse ai) {
+        return formatAiSection(ai, 300);
+    }
+
+    /** {@code maxReasonChars <= 0} omits the reasoning line entirely (used to fit a photo caption). */
+    private String formatAiSection(DealGroupAiReviewService.AiReviewResponse ai, int maxReasonChars) {
         if (ai == null || ai.verdict() == null) return "";
         StringBuilder b = new StringBuilder("\n\n🤖 <b>AI:</b> ").append(ai.verdict());
         if (ai.confidence() != null) b.append(" · ").append(ai.confidence()).append(" confidence");
-        if (ai.reason() != null && !ai.reason().isBlank()) {
-            String reason = ai.reason().length() > 300 ? ai.reason().substring(0, 297) + "…" : ai.reason();
+        if (maxReasonChars > 0 && ai.reason() != null && !ai.reason().isBlank()) {
+            String reason = ai.reason().length() > maxReasonChars
+                    ? ai.reason().substring(0, Math.max(1, maxReasonChars - 1)) + "…"
+                    : ai.reason();
             b.append('\n').append("<i>").append(esc(reason)).append("</i>");
         }
         if (ai.riskFlags() != null && !ai.riskFlags().isEmpty()) {
