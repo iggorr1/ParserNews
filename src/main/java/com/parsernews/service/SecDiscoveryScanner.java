@@ -91,7 +91,11 @@ public class SecDiscoveryScanner {
         int skipped = 0;
         List<String> errors = new ArrayList<>();
         Set<String> seenAccessions = new LinkedHashSet<>();
-        int maxPerForm = Math.max(1, settings.maxFilingsPerRun());
+        int newlyProcessed = 0;
+        // Ask each form's feed for a modest window rather than the whole per-run budget. At a ~20s
+        // poll even the busiest form (8-K) produces a handful of filings, so a hundred entries per
+        // form is 13x the data and parsing for nothing.
+        int maxPerForm = Math.min(Math.max(1, settings.maxFilingsPerRun()), MAX_ENTRIES_PER_FORM_FETCH);
 
         try {
             // Phase 1: fetch every form's current-filings feed concurrently (bounded, no DB work).
@@ -125,8 +129,13 @@ public class SecDiscoveryScanner {
                     : filingRepository.findExistingAccessionNumbers(candidateAccessions);
 
             // Phase 2c: persist new filings, honoring the total per-run cap.
+            // The budget counts filings we actually process, not ones we have already stored.
+            // Counting duplicates against it starved every form after the first: 8-K alone fills a
+            // hundred already-seen entries within seconds during market hours, so the loop broke
+            // before ever reaching SC TO-T / DEFM14A / SC 14D9 — the forms that matter most —
+            // and those were only discovered at night when the 8-K feed happened to be empty.
             for (String form : settings.formList()) {
-                if (scanned >= settings.maxFilingsPerRun()) {
+                if (newlyProcessed >= settings.maxFilingsPerRun()) {
                     break;
                 }
                 List<DiscoveredSecFiling> filings = parsedByForm.get(form);
@@ -134,7 +143,7 @@ public class SecDiscoveryScanner {
                     continue;
                 }
                 for (DiscoveredSecFiling filing : filings) {
-                    if (scanned >= settings.maxFilingsPerRun()) {
+                    if (newlyProcessed >= settings.maxFilingsPerRun()) {
                         break;
                     }
                     if (!isFormAllowed(filing.form())) {
@@ -150,6 +159,7 @@ public class SecDiscoveryScanner {
                         duplicates++;
                         continue;
                     }
+                    newlyProcessed++;
                     SecMetadataSignal signal = detectMetadataSignal(filing);
                     SecFilingEntity entity = toEntity(filing, signal);
                     entity.updateSecSignal(signal.type(), signal.priority(), signal.summary(), signal.warning());
@@ -217,6 +227,8 @@ public class SecDiscoveryScanner {
 
     // Bounded so we stay well under SEC's ~10 requests/second fair-access limit.
     private static final int SEC_FETCH_CONCURRENCY = 5;
+    /** Entries requested per form feed. See where it is used for why this is not the run budget. */
+    private static final int MAX_ENTRIES_PER_FORM_FETCH = 40;
 
     /**
      * Fetches each form's current-filings atom feed in parallel. Returns a map of form -> atom XML

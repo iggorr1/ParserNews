@@ -66,6 +66,41 @@ class SecDiscoveryScannerTest {
         ));
     }
 
+    // The per-run budget must count filings we actually process, not ones already stored. Counting
+    // duplicates against it let a busy first form (8-K) exhaust the budget with already-seen entries
+    // and starve every later form — in production SC TO-T / DEFM14A were only ever discovered at
+    // night, when the 8-K feed happened to be empty.
+    @Test
+    void alreadyStoredFilingsDoNotStarveLaterForms() {
+        SecCurrentFilingsClient client = (form, count) -> "8-K".equals(form)
+                ? atom(
+                entry("8-K - Alpha Corp (1000001)", "2026-06-24T12:00:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/1000001/000100000126000001/a.htm"),
+                entry("8-K - Beta Corp (1000001)", "2026-06-24T12:01:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/1000001/000100000126000002/b.htm"),
+                entry("8-K - Gamma Corp (1000001)", "2026-06-24T12:02:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/1000001/000100000126000003/c.htm"))
+                : atom(
+                entry("SC TO-T - Target Inc (1000009)", "2026-06-24T12:05:00-04:00",
+                        "https://www.sec.gov/Archives/edgar/data/1000009/000100000126000009/t.htm"));
+
+        SecFilingRepository filingRepository = mock(SecFilingRepository.class);
+        // Every 8-K is already stored; only the tender offer is new.
+        when(filingRepository.findExistingAccessionNumbers(any())).thenReturn(java.util.Set.of(
+                "0001000001-26-000001", "0001000001-26-000002", "0001000001-26-000003"));
+        when(filingRepository.save(any(SecFilingEntity.class))).thenAnswer(i -> i.getArgument(0));
+
+        // Budget of 2 is smaller than the three duplicate 8-Ks ahead of the tender offer.
+        SecDiscoverySettings settings = new SecDiscoverySettings(
+                true, 2, "8-K,SC TO-T", false, 0,
+                new SecDiscoverySettings.Scheduler(false, 120000, 300000));
+
+        scanner(settings, client, filingRepository, runRepository()).scan();
+
+        verify(filingRepository).save(org.mockito.ArgumentMatchers.argThat(
+                filing -> "SC TO-T".equals(filing.getForm())));
+    }
+
     @Test
     void skipsUnconfiguredFormsFromParsedFeed() {
         SecDiscoveryScanner scanner = scanner(
